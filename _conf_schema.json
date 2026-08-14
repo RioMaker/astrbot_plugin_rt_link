@@ -1,0 +1,26 @@
+{
+  "base_url": {
+    "description": "菌菌控制台公开 API Base URL",
+    "type": "text",
+    "hint": "默认 https://kinoko.zorua.cn/api/v1",
+    "default": "https://kinoko.zorua.cn/api/v1"
+  },
+  "default_server": {
+    "description": "默认服务器（查询时未显式指定则使用）",
+    "type": "text",
+    "hint": "cn / jp / custom",
+    "default": "cn"
+  },
+  "score_style": {
+    "description": "默认成绩风格",
+    "type": "text",
+    "hint": "hiroba（按谱面最新有效成绩）或 kinoko（全历史）",
+    "default": "hiroba"
+  },
+  "request_timeout": {
+    "description": "请求超时（秒）",
+    "type": "int",
+    "hint": "建议 10~60",
+    "default": 30
+  }
+}
