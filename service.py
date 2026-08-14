@@ -13,7 +13,11 @@ import os
 import time
 from collections import defaultdict
 
-from api_client import KinokoClient, KinokoAPIError
+# 包加载（AstrBot）时用相对导入；本地直接运行 service.py 时回退到绝对导入。
+if __package__:
+    from .api_client import KinokoClient, KinokoAPIError
+else:
+    from api_client import KinokoClient, KinokoAPIError
 
 
 class BindingsStore:

@@ -13,8 +13,14 @@ from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger
 
-from api_client import KinokoClient
-from service import BindingsStore, ScoreService
+# AstrBot 以包形式加载插件（如 data.plugins.<name>.main），此时需用相对导入；
+# 本地直接运行/测试 main.py 时（__package__ 为空），回退到同目录绝对导入。
+if __package__:
+    from .api_client import KinokoClient
+    from .service import BindingsStore, ScoreService
+else:
+    from api_client import KinokoClient
+    from service import BindingsStore, ScoreService
 
 PLUGIN_NAME = "rt_link"
 PLUGIN_AUTHOR = "Rio"
