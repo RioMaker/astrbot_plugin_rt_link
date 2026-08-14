@@ -65,10 +65,10 @@ async def run_demo():
 
     # 2. 绑定
     ok, msg = await svc.bind(FAKE_QQ, apikey, DEMO_PLAYER_ID, "cn")
-    show("模拟发送：/rt_link bind <apikey> 30053354 cn", msg)
+    show("模拟发送：/rtlink bind <apikey> 30053354 cn", msg)
 
     # 3. 查询
-    show("模拟发送：/rt_link score 夏祭り", await svc.query_score_text(FAKE_QQ, "夏祭り"))
+    show("模拟发送：/rtlink score 夏祭り", await svc.query_score_text(FAKE_QQ, "夏祭り"))
     show(
         "模拟发送：LLM 工具 query_taiko_score(song_name='Tokyo')",
         await svc.query_score_text(FAKE_QQ, "Tokyo"),
@@ -76,16 +76,16 @@ async def run_demo():
 
     # 4. 未命中
     show(
-        "模拟发送：/rt_link score 不存在的曲子xyz",
+        "模拟发送：/rtlink score 不存在的曲子xyz",
         await svc.query_score_text(FAKE_QQ, "不存在的曲子xyz"),
     )
 
     # 5. 列表
-    show("模拟发送：/rt_link list（管理员）", await svc.list_bindings())
+    show("模拟发送：/rtlink list（管理员）", await svc.list_bindings())
 
     # 6. 解绑
     ok, msg = await svc.unbind(FAKE_QQ)
-    show("模拟发送：/rt_link unbind", msg)
+    show("模拟发送：/rtlink unbind", msg)
 
     out = "\n".join(transcript) + "\n"
     with open(OUTPUT_PATH, "w", encoding="utf-8") as f:

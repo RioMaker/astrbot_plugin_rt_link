@@ -3,6 +3,8 @@ __pycache__/
 # 敏感凭据（个人 API Key 等），切勿提交
 apikey.key
 *.key
+# 本地缓存的数据快照，不入 git
+cache/
 # 测试产生的数据落盘
 _api_dump.json
 test/bindings.json

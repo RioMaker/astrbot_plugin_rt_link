@@ -19,6 +19,22 @@ if __package__:
 else:
     from api_client import KinokoClient, KinokoAPIError
 
+# 太鼓达人难度等级映射（从低到高）。
+# 后续返回给 agent / LLM 的成绩文本中，一律用「难度N·名称」注明。
+DIFFICULTY_NAMES = {
+    1: "梅（简单）",
+    2: "竹（一般）",
+    3: "松（困难）",
+    4: "魔王",
+    5: "里魔王",
+}
+
+
+def difficulty_label(level) -> str:
+    """返回带太鼓难度名的标签，如「难度4·魔王」。"""
+    name = DIFFICULTY_NAMES.get(level)
+    return f"难度{level}·{name}" if name else f"难度{level}"
+
 
 class BindingsStore:
     """绑定存储抽象接口。"""
@@ -103,8 +119,8 @@ def format_records(records: list) -> str:
         lines.append(title)
         for r in recs:
             lines.append(
-                "  难度{}：{} 评分{}｜良{} 可{} 不可{}｜全连{} 咚大福{}".format(
-                    r.get("level"),
+                "  {}：{} 评分{}｜良{} 可{} 不可{}｜全连{} 咚大福{}".format(
+                    difficulty_label(r.get("level")),
                     r.get("high_score"),
                     r.get("best_score_rank"),
                     r.get("good_cnt"),
@@ -189,7 +205,7 @@ class ScoreService:
             return "无法识别你的 QQ 号。"
         b = (await self.store.load()).get(qq)
         if not b:
-            return "你还没有绑定菌菌账号。请先发送：/rt_link bind <apikey> <player_id> [server]"
+            return "你还没有绑定菌菌账号。请先发送：/rtlink bind <apikey> <player_id> [server]"
         try:
             data = await self._fetch_scores(
                 b["apikey"],

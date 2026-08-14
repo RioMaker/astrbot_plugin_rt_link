@@ -4,7 +4,7 @@ rt_link 插件：将 QQ 号绑定到「菌菌控制台」apikey，查询太鼓�
 
 - 持久化：使用 AstrBot 的 PluginKVStore（put_kv_data / get_kv_data）
 - 成绩查询：菌菌公开 API（api_client.py + service.py）
-- 交互：命令（/rt_link ...）+ LLM 工具（query_taiko_score，模型可自动调用）
+- 交互：命令（/rtlink ...）+ LLM 工具（query_taiko_score，模型可自动调用）
 """
 
 import re
@@ -26,6 +26,9 @@ PLUGIN_NAME = "rt_link"
 PLUGIN_AUTHOR = "Rio"
 PLUGIN_DESC = "将 QQ 绑定到菌菌控制台 apikey，查询太鼓达人指定曲目成绩"
 PLUGIN_VERSION = "v0.2.0"
+
+# 用户输入的指令前缀（/rtlink），与插件内部名 PLUGIN_NAME 解耦
+COMMAND_NAME = "rtlink"
 
 BINDINGS_KEY = "bindings"
 
@@ -63,26 +66,26 @@ class RTLinkPlugin(Star):
         )
 
     # ------------------------------------------------------------------
-    # 命令组：/rt_link <子命令>
+    # 命令组：/rtlink <子命令>
     # ------------------------------------------------------------------
-    @filter.command_group(PLUGIN_NAME)
-    def rt_link(self):
-        """rt_link 命令组入口。"""
+    @filter.command_group(COMMAND_NAME)
+    def rtlink(self):
+        """rtlink 命令组入口。"""
 
-    @rt_link.command("help")
+    @rtlink.command("help")
     async def help(self, event: AstrMessageEvent):
         yield event.plain_result(
-            "rt_link 命令：\n"
-            "/rt_link bind <apikey> <player_id> [server]  绑定当前 QQ\n"
-            "/rt_link unbind                             解绑当前 QQ\n"
-            "/rt_link score <曲名>                       查询指定曲目成绩\n"
-            "/rt_link list                               查看全部绑定（管理员）\n"
-            "/rt_link about                              查看插件信息\n"
+            "rtlink 命令：\n"
+            "/rtlink bind <apikey> <player_id> [server]  绑定当前 QQ\n"
+            "/rtlink unbind                             解绑当前 QQ\n"
+            "/rtlink score <曲名>                       查询指定曲目成绩\n"
+            "/rtlink list                               查看全部绑定（管理员）\n"
+            "/rtlink about                              查看插件信息\n"
             "也可以直接用自然语言问我，例如「我的《夏祭り》成绩是多少」\n"
             "注意：apikey 仅用于服务端绑定与查询，不会发送给大模型；请在私聊中绑定。"
         )
 
-    @rt_link.command("bind")
+    @rtlink.command("bind")
     async def bind(
         self, event: AstrMessageEvent, apikey: str, player_id: str, server: str = ""
     ):
@@ -95,29 +98,29 @@ class RTLinkPlugin(Star):
         )
         yield event.plain_result(msg)
 
-    @rt_link.command("unbind")
+    @rtlink.command("unbind")
     async def unbind(self, event: AstrMessageEvent):
         ok, msg = await self.service.unbind(event.get_sender_id())
         yield event.plain_result(msg)
 
-    @rt_link.command("list")
+    @rtlink.command("list")
     async def list_bindings(self, event: AstrMessageEvent):
         if not event.is_admin():
             yield event.plain_result("无权限：仅管理员可查看全部绑定。")
             return
         yield event.plain_result(await self.service.list_bindings())
 
-    @rt_link.command("score")
+    @rtlink.command("score")
     async def score(self, event: AstrMessageEvent):
         song_name = self._parse_score_query(event.get_message_str())
         if not song_name:
-            yield event.plain_result("用法：/rt_link score <曲名>")
+            yield event.plain_result("用法：/rtlink score <曲名>")
             return
         yield event.plain_result(
             await self.service.query_score_text(event.get_sender_id(), song_name)
         )
 
-    @rt_link.command("about")
+    @rtlink.command("about")
     async def about(self, event: AstrMessageEvent):
         yield event.plain_result(f"{PLUGIN_NAME} v{PLUGIN_VERSION}\n{PLUGIN_DESC}")
 
@@ -133,6 +136,7 @@ class RTLinkPlugin(Star):
     @filter.llm_tool(name="query_taiko_score")
     async def query_taiko_score(self, event: AstrMessageEvent, song_name: str) -> str:
         """查询当前 QQ 用户绑定的太鼓达人账号中，指定歌曲的成绩。
+        难度等级 1-5 从低到高为：梅（简单）、竹（一般）、松（困难）、魔王、里魔王。
 
         Args:
             song_name(string): 歌曲名称，支持中文/日文/英文的模糊匹配

@@ -49,7 +49,7 @@ async def invoke(fn, plugin, event, *args):
 async def run() -> list[str]:
     out = []
     plugin = make_plugin()
-    group = main.RTLinkPlugin.rt_link  # 命令组 _Group
+    group = main.RTLinkPlugin.rtlink  # 命令组 _Group
     bind_fn = group.commands["bind"]
     score_fn = group.commands["score"]
     unbind_fn = group.commands["unbind"]
@@ -63,23 +63,23 @@ async def run() -> list[str]:
 
     # 1) 群聊绑定 → 应被拒绝
     grp = mock.AstrMessageEvent(qq, private=False, is_admin=False,
-                                message_str=f"/rt_link bind {APIKEY} {PLAYER_ID} cn")
-    add("群聊 /rt_link bind", (await invoke(bind_fn, plugin, grp, APIKEY, PLAYER_ID, "cn"))[0])
+                                message_str=f"/rtlink bind {APIKEY} {PLAYER_ID} cn")
+    add("群聊 /rtlink bind", (await invoke(bind_fn, plugin, grp, APIKEY, PLAYER_ID, "cn"))[0])
 
     # 2) 私聊绑定 → 成功
     priv = mock.AstrMessageEvent(qq, private=True, is_admin=False,
-                                 message_str=f"/rt_link bind {APIKEY} {PLAYER_ID} cn")
-    add("私聊 /rt_link bind", (await invoke(bind_fn, plugin, priv, APIKEY, PLAYER_ID, "cn"))[0])
+                                 message_str=f"/rtlink bind {APIKEY} {PLAYER_ID} cn")
+    add("私聊 /rtlink bind", (await invoke(bind_fn, plugin, priv, APIKEY, PLAYER_ID, "cn"))[0])
 
     # 3) 私聊查分
     score_evt = mock.AstrMessageEvent(qq, private=True, is_admin=False,
-                                      message_str="/rt_link score 夏祭り")
-    add("私聊 /rt_link score 夏祭り", (await invoke(score_fn, plugin, score_evt))[0])
+                                      message_str="/rtlink score 夏祭り")
+    add("私聊 /rtlink score 夏祭り", (await invoke(score_fn, plugin, score_evt))[0])
 
     # 4) 私聊解绑
     unbind_evt = mock.AstrMessageEvent(qq, private=True, is_admin=False,
-                                       message_str="/rt_link unbind")
-    add("私聊 /rt_link unbind", (await invoke(unbind_fn, plugin, unbind_evt))[0])
+                                       message_str="/rtlink unbind")
+    add("私聊 /rtlink unbind", (await invoke(unbind_fn, plugin, unbind_evt))[0])
 
     return out
 

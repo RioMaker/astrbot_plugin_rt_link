@@ -40,7 +40,7 @@
 | --- | --- | --- | --- |
 | T0-1 | 目录与元数据 | `metadata.yaml` 信息完整，`name/desc/version/author` 可用 | ✅ |
 | T0-2 | 插件入口 | `main.py` 使用 `@register` + `Star`，可被 AstrBot 加载 | ✅ |
-| T0-3 | 命令组骨架 | `/rt_link help\|ping\|about` 可正常响应 | ✅ |
+| T0-3 | 命令组骨架 | `/rtlink help\|ping\|about` 可正常响应 | ✅ |
 | T0-4 | 配置 schema | `_conf_schema.json` 结构合法，`get_config()` 可读取 | ✅ |
 | T0-5 | 仓库基础 | `.gitignore`、`README.md` 就绪 | ✅ |
 

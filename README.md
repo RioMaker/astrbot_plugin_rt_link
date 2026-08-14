@@ -12,12 +12,12 @@
 ## 命令
 
 ```
-/rt_link bind <apikey> <player_id> [server]  绑定当前 QQ（server 默认 cn）
-/rt_link unbind                              解绑当前 QQ
-/rt_link score <曲名>                        查询指定曲目成绩
-/rt_link list                                查看全部绑定（管理员）
-/rt_link help                                查看帮助
-/rt_link about                               查看插件信息
+/rtlink bind <apikey> <player_id> [server]  绑定当前 QQ（server 默认 cn）
+/rtlink unbind                              解绑当前 QQ
+/rtlink score <曲名>                        查询指定曲目成绩
+/rtlink list                                查看全部绑定（管理员）
+/rtlink help                                查看帮助
+/rtlink about                               查看插件信息
 ```
 
 也可以直接自然语言询问，例如：「我的《夏祭り》成绩是多少」。
