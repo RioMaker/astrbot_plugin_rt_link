@@ -11,16 +11,28 @@
     "hint": "cn / jp / custom",
     "default": "cn"
   },
-  "score_style": {
-    "description": "默认成绩风格",
-    "type": "text",
-    "hint": "hiroba（按谱面最新有效成绩）或 kinoko（全历史）",
-    "default": "hiroba"
-  },
   "request_timeout": {
     "description": "请求超时（秒）",
     "type": "int",
     "hint": "建议 10~60",
     "default": 30
+  },
+  "sync_ttl": {
+    "description": "成绩同步缓存有效期（秒），过期后重新拉取菌菌 API",
+    "type": "int",
+    "hint": "建议 300~3600",
+    "default": 300
+  },
+  "storage_quota_mb": {
+    "description": "本地存储配额（MiB），用于空间监管",
+    "type": "int",
+    "hint": "默认 256 MiB",
+    "default": 256
+  },
+  "storage_warn_ratio": {
+    "description": "存储告警阈值（占用比例，0~1），超过则提醒管理员",
+    "type": "float",
+    "hint": "默认 0.8（80%）",
+    "default": 0.8
   }
 }

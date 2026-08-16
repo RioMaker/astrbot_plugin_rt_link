@@ -7,6 +7,7 @@ Star 基类（含 KV 存储）、Context、AstrMessageEvent、logger。
 
 import sys
 import types
+import os
 
 
 class AstrMessageEvent:
@@ -40,6 +41,18 @@ class Context:
 
     def get_config(self) -> dict:
         return self._config
+
+
+class StarTools:
+    """模拟 StarTools.get_data_dir，返回项目下 test/tmp/data/<name>。"""
+
+    @staticmethod
+    def get_data_dir(name: str) -> str:
+        base = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "test", "tmp", "data")
+        os.makedirs(base, exist_ok=True)
+        target = os.path.join(base, name)
+        os.makedirs(target, exist_ok=True)
+        return target
 
 
 class Star:
@@ -122,6 +135,7 @@ def install() -> None:
     m_event.AstrMessageEvent = AstrMessageEvent
     m_star.Context = Context
     m_star.Star = Star
+    m_star.StarTools = StarTools
     m_star.register = register
 
     sys.modules["astrbot"] = m_astrbot

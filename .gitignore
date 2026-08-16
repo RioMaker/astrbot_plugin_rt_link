@@ -10,6 +10,7 @@ _api_dump.json
 test/bindings.json
 test/sim_output.txt
 test/cmd_output.txt
+test/tmp/
 *$py.class
 .venv/
 venv/

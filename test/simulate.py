@@ -25,10 +25,13 @@ sys.path.insert(0, _PROJECT_ROOT)
 
 from api_client import KinokoClient  # noqa: E402
 from service import JsonFileBindingsStore, ScoreService  # noqa: E402
+from storage import ScoreDatabase, load_charts  # noqa: E402
 
 APIKEY_PATH = os.path.join(_PROJECT_ROOT, "apikey.key")
 BINDINGS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bindings.json")
 OUTPUT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sim_output.txt")
+CHARTS_PATH = os.path.join(_PROJECT_ROOT, "resource", "charts.v1.json.gz")
+DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tmp", "sim.db")
 
 FAKE_QQ = "123456789"  # 模拟的 QQ 号
 DEMO_PLAYER_ID = "30053354"  # apikey.key 对应账号的玩家 ID（国服）
@@ -40,9 +43,14 @@ def load_apikey() -> str:
 
 
 def make_service() -> ScoreService:
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    charts = load_charts(CHARTS_PATH)
+    db = ScoreDatabase(DB_PATH)
     return ScoreService(
         store=JsonFileBindingsStore(BINDINGS_PATH),
         client_factory=lambda apikey: KinokoClient(apikey),
+        charts=charts,
+        score_db=db,
         default_server="cn",
     )
 
@@ -73,6 +81,9 @@ async def run_demo():
         "模拟发送：LLM 工具 query_taiko_score(song_name='Tokyo')",
         await svc.query_score_text(FAKE_QQ, "Tokyo"),
     )
+    show("模拟发送：/rtlink rating", await svc.get_rating_text(FAKE_QQ))
+    show("模拟发送：/rtlink profile", await svc.get_profile_text(FAKE_QQ))
+    show("模拟发送：/rtlink weakness", await svc.get_rhythm_weakness_text(FAKE_QQ))
 
     # 4. 未命中
     show(
@@ -80,10 +91,11 @@ async def run_demo():
         await svc.query_score_text(FAKE_QQ, "不存在的曲子xyz"),
     )
 
-    # 5. 列表
+    # 6. 列表 + 存储用量
     show("模拟发送：/rtlink list（管理员）", await svc.list_bindings())
+    show("模拟发送：/rtlink storage", await svc.storage_status_text())
 
-    # 6. 解绑
+    # 7. 解绑
     ok, msg = await svc.unbind(FAKE_QQ)
     show("模拟发送：/rtlink unbind", msg)
 

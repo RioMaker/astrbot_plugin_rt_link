@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 2,
+  "modelId": "taiko-signal-rhythm-v2-2026-08-05",
+  "chartCount": 1393,
+  "source": "..\\taiko-star-rating-system-cal-by-ai\\public\\data\\charts.v1.json",
+  "trimmedFields": [
+    "constant",
+    "composite",
+    "avgDensity",
+    "instDensity",
+    "separation",
+    "bpmChange",
+    "hsChange",
+    "feature.aiConstant",
+    "feature.specializations",
+    "feature.proportions",
+    "feature.rhythmProfile"
+  ],
+  "compressedBytes": 512669,
+  "rawBytes": 4734401
+}

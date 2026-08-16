@@ -1,5 +1,5 @@
 name: rt_link
-desc: 将 QQ 绑定到菌菌控制台 apikey，查询太鼓达人指定曲目成绩
-version: v0.2.0
+desc: 将 QQ 绑定到菌菌控制台 apikey，查询太鼓达人成绩并以 AI v2 Rating 评估玩家实力
+version: v0.3.0
 author: Rio
 repo: https://github.com/your_name/astrbot_plugin_rt_link
