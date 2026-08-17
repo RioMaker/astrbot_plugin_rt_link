@@ -622,7 +622,9 @@ class ScoreService:
             out_dir = os.path.dirname(os.path.abspath(self.db.db_path))
         if not out_dir:
             out_dir = os.path.dirname(os.path.abspath(__file__))
-        path = os.path.join(out_dir, f"report_{qq}.png")
+        # Use a fresh path for every export so AstrBot/QQ cannot reuse a stale
+        # image generated before the report template or font was fixed.
+        path = os.path.join(out_dir, f"report_{qq}_{time.time_ns()}.png")
         try:
             await asyncio.to_thread(render_report_image, analysis, path)
         except Exception as e:
