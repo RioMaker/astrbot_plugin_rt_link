@@ -19,11 +19,11 @@ from astrbot.api.star import Context, Star, StarTools, register
 # 本地直接运行/测试 main.py 时（__package__ 为空），回退到同目录绝对导入。
 if __package__:
     from .api_client import KinokoClient
-    from .service import BindingsStore, ScoreService
+    from .service import BindingsStore, ScoreService, parse_difficulty
     from .storage import ScoreDatabase, load_charts
 else:
     from api_client import KinokoClient
-    from service import BindingsStore, ScoreService
+    from service import BindingsStore, ScoreService, parse_difficulty
     from storage import ScoreDatabase, load_charts
 
 PLUGIN_NAME = "rt_link"
@@ -85,6 +85,7 @@ class RTLinkPlugin(Star):
             sync_ttl=int(self.cfg.get("sync_ttl", 300) or 300),
             quota_mb=int(self.cfg.get("storage_quota_mb", 256) or 256),
             warn_ratio=float(self.cfg.get("storage_warn_ratio", 0.8) or 0.8),
+            report_dir=str(self.data_dir),
             logger=logger,
         )
 
@@ -115,13 +116,12 @@ class RTLinkPlugin(Star):
             "rtlink 命令：\n"
             "/rtlink bind <apikey> <player_id> [server]  绑定当前 QQ\n"
             "/rtlink unbind                             解绑当前 QQ\n"
-            "/rtlink score <曲名>                       查询指定曲目成绩\n"
-            "/rtlink rating                             查看我的综合 Rating 与七维能力\n"
+            "/rtlink score <曲名>                       查询指定曲目成绩（可加难度前缀如「鬼夏祭」）\n"
+            "/rtlink rating                             生成实力画像图片\n"
             "/rtlink profile                            查看我的强项/弱项画像\n"
             "/rtlink weakness                           查看节奏型弱项与参考曲目\n"
-            "/rtlink list                               查看全部绑定（管理员）\n"
-            "/rtlink storage                            查看存储用量（管理员）\n"
-            "/rtlink cleanup                            回收数据库空页（管理员）\n"
+            "/rtlink alias <ID或曲名> <别名>             申请歌曲别名（待审核）\n"
+            "/rtlink help                               查看帮助\n"
             "/rtlink about                              查看插件信息\n"
             "也可以直接用自然语言问我，例如「我的实力怎么样」「我该练什么」\n"
             "注意：apikey 仅用于服务端绑定与查询，不会发送给大模型；请在私聊中绑定。"
@@ -158,7 +158,11 @@ class RTLinkPlugin(Star):
 
     @rtlink.command("rating")
     async def rating_cmd(self, event: AstrMessageEvent):
-        yield event.plain_result(await self.service.get_rating_text(event.get_sender_id()))
+        ok, result = await self.service.generate_report_image(event.get_sender_id())
+        if not ok:
+            yield event.plain_result(result)
+            return
+        yield event.image_result(result)
 
     @rtlink.command("profile")
     async def profile_cmd(self, event: AstrMessageEvent):
@@ -182,6 +186,32 @@ class RTLinkPlugin(Star):
             return
         yield event.plain_result(await self.service.cleanup())
 
+    @rtlink.command("alias")
+    async def alias_cmd(self, event: AstrMessageEvent):
+        args = self._parse_alias_args(event.get_message_str())
+        if not args:
+            yield event.plain_result("用法：/rtlink alias <精准ID或曲名> <别名>")
+            return
+        target, alias = args
+        yield event.plain_result(
+            await self.service.request_alias(event.get_sender_id(), target, alias)
+        )
+
+    @rtlink.command("aliaslist")
+    async def aliaslist_cmd(self, event: AstrMessageEvent):
+        if not event.is_admin():
+            yield event.plain_result("无权限：仅管理员可查看待审批别名。")
+            return
+        yield event.plain_result(await self.service.list_pending_aliases_text())
+
+    @rtlink.command("aliasapprove")
+    async def aliasapprove_cmd(self, event: AstrMessageEvent):
+        if not event.is_admin():
+            yield event.plain_result("无权限：仅管理员可审批别名。")
+            return
+        args = self._parse_rest(event.get_message_str(), "aliasapprove")
+        yield event.plain_result(await self.service.approve_aliases_text(args))
+
     @rtlink.command("about")
     async def about(self, event: AstrMessageEvent):
         yield event.plain_result(f"{PLUGIN_NAME} v{PLUGIN_VERSION}\n{PLUGIN_DESC}")
@@ -192,6 +222,22 @@ class RTLinkPlugin(Star):
         return m.group(1).strip() if m else ""
 
     @staticmethod
+    def _parse_alias_args(msg: str):
+        """解析「alias <target> <别名>」，别名可含空格；返回 (target, alias) 或 None。"""
+        m = re.search(r"alias\s+(.+)$", msg or "", re.IGNORECASE)
+        if not m:
+            return None
+        parts = m.group(1).strip().split(None, 1)
+        if len(parts) != 2 or not parts[0].strip() or not parts[1].strip():
+            return None
+        return parts[0].strip(), parts[1].strip()
+
+    @staticmethod
+    def _parse_rest(msg: str, command: str) -> str:
+        m = re.search(re.escape(command) + r"\s+(.+)$", msg or "", re.IGNORECASE)
+        return m.group(1).strip() if m else ""
+
+    @staticmethod
     def _level_arg(level: int) -> int | None:
         return level if level in RATED_LEVELS else (None if level == 0 else level)
 
@@ -199,13 +245,16 @@ class RTLinkPlugin(Star):
     # LLM 工具：允许模型在对话中直接调用（安全约定：只返回成绩/画像文本，绝不返回 apikey）
     # ------------------------------------------------------------------
     @filter.llm_tool(name="query_taiko_score")
-    async def query_taiko_score(self, event: AstrMessageEvent, song_name: str) -> str:
-        """查询当前 QQ 用户绑定账号中，指定歌曲的成绩与 Rating。
+    async def query_taiko_score(self, event: AstrMessageEvent, song_name: str, level: str = "") -> str:
+        """查询当前 QQ 用户绑定账号中，指定歌曲的成绩与 Rating。支持别名与「鬼夏祭」这类难度前缀组合名。
 
         Args:
-            song_name(string): 歌曲名称，支持中文/日文/英文模糊匹配
+            song_name(string): 歌曲名称或别名，支持中文/日文/英文模糊匹配；可加难度前缀如「鬼夏祭」「里夏祭」
+            level(string): 难度筛选，可省略。可选：4/鬼/魔王、5/里/里魔王、3/松/困难、2/竹/一般、1/梅/简单
         """
-        return await self.service.query_score_text(event.get_sender_id(), song_name)
+        return await self.service.query_score_text(
+            event.get_sender_id(), song_name, parse_difficulty(level) if level else None
+        )
 
     @filter.llm_tool(name="get_player_rating")
     async def get_player_rating(self, event: AstrMessageEvent) -> str:
@@ -266,14 +315,14 @@ class RTLinkPlugin(Star):
 
     @filter.llm_tool(name="search_scores")
     async def search_scores(
-        self, event: AstrMessageEvent, query: str = "", level: int = 0,
+        self, event: AstrMessageEvent, query: str = "", level: str = "",
         constant_min: float = 0.0, constant_max: float = 0.0, rank_min: int = 0,
     ) -> str:
-        """按条件检索成绩：曲名模糊匹配、难度、定数范围、评价下限。
+        """按条件检索成绩：曲名/别名模糊匹配、难度、定数范围、评价下限。
 
         Args:
-            query(string): 曲名关键词，可省略
-            level(int): 4=鬼，5=里鬼；0 或省略=全部
+            query(string): 曲名关键词或别名，可省略；可加难度前缀如「鬼夏祭」
+            level(string): 难度筛选，可省略。可选：4/鬼/魔王、5/里/里魔王、3/松/困难、2/竹/一般、1/梅/简单
             constant_min(float): 最低定数，0 表示不限
             constant_max(float): 最高定数，0 表示不限
             rank_min(int): 最低评价等级，0 表示不限
@@ -281,7 +330,7 @@ class RTLinkPlugin(Star):
         return await self.service.search_scores_text(
             event.get_sender_id(),
             query=query or None,
-            level=self._level_arg(level),
+            level=parse_difficulty(level) if level else None,
             constant_min=constant_min or None,
             constant_max=constant_max or None,
             rank_min=rank_min or None,
@@ -322,3 +371,25 @@ class RTLinkPlugin(Star):
             level(int): 4=鬼，5=里鬼；0 或省略=鬼/里合计。
         """
         return await self.service.get_improvement_candidates_text(event.get_sender_id(), self._level_arg(level))
+
+    @filter.llm_tool(name="set_song_alias")
+    async def set_song_alias(self, event: AstrMessageEvent, song: str, alias: str) -> str:
+        """为指定歌曲设置别名（需管理员审核通过后生效）。设置前会返回歌曲 ID/名称等信息供确认。
+
+        Args:
+            song(string): 歌曲的精准 ID 或曲名（曲名建议用全名，避免多首匹配）
+            alias(string): 要设置的别名
+        """
+        return await self.service.request_alias(event.get_sender_id(), song, alias)
+
+    @filter.llm_tool(name="generate_rating_image")
+    async def generate_rating_image(self, event: AstrMessageEvent):
+        """生成当前 QQ 用户的鼓点画像评价图片（Rating 环 + 七维能力 + 强弱项 + 表现证据），并直接发送给用户。
+
+        当用户想看「实力画像 / 评级报告 / 能力图 / 我的评价」时调用此工具。
+        """
+        ok, result = await self.service.generate_report_image(event.get_sender_id())
+        if not ok:
+            yield event.plain_result(result)
+            return
+        yield event.image_result(result)

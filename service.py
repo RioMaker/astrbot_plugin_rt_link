@@ -11,15 +11,18 @@ import json
 import os
 import time
 from collections import defaultdict
+from datetime import datetime
 
 # 包加载（AstrBot）时用相对导入；本地直接运行 service.py 时回退到绝对导入。
 if __package__:
     from . import rating as rating_mod
     from .api_client import KinokoClient, KinokoAPIError
+    from .report_image import render_report_image
     from .storage import ScoreDatabase, load_charts
 else:
     import rating as rating_mod
     from api_client import KinokoClient, KinokoAPIError
+    from report_image import render_report_image
     from storage import ScoreDatabase, load_charts
 
 DIFFICULTY_NAMES = {
@@ -54,6 +57,54 @@ def _rank_text(rank) -> str:
         return "-"
     hint = RANK_HINT.get(int(rank))
     return f"{rank}" + (f"（{hint}）" if hint else "")
+
+
+# 难度别名（用户输入 / LLM 传参都归一化到这里）
+DIFFICULTY_ALIASES = {
+    1: {"1", "梅", "简单", "easy", "かんたん"},
+    2: {"2", "竹", "一般", "普通", "normal", "ふつう"},
+    3: {"3", "松", "困难", "hard", "むずかしい"},
+    4: {"4", "鬼", "魔王", "oni", "mania", "おに"},
+    5: {"5", "里", "里鬼", "里魔王", "ura", "うら"},
+}
+
+# 组合名前缀（长前缀优先）：如「鬼夏祭」「里夏祭」→ (难度, 曲名关键词)
+DIFFICULTY_PREFIXES = [
+    ("里魔王", 5), ("里鬼", 5), ("魔王", 4),
+    ("里", 5), ("鬼", 4),
+    ("困难", 3), ("松", 3),
+    ("一般", 2), ("普通", 2), ("竹", 2),
+    ("简单", 1), ("梅", 1),
+]
+
+
+def parse_difficulty(text) -> int | None:
+    """把难度别名/数字解析为 1-5；0/空/全部/不限 → None（表示不筛选）。"""
+    if text is None:
+        return None
+    s = str(text).strip().lower()
+    if s in ("", "0", "全部", "不限", "all"):
+        return None
+    for level, names in DIFFICULTY_ALIASES.items():
+        if s in names:
+            return level
+    if s.isdigit():
+        lvl = int(s)
+        return lvl if 1 <= lvl <= 5 else None
+    return None
+
+
+def parse_song_query(text) -> tuple[int | None, str]:
+    """从「鬼夏祭」「里夏祭」「夏祭」中拆出 (难度, 曲名关键词)。"""
+    t = (text or "").strip()
+    if not t:
+        return None, ""
+    for prefix, level in DIFFICULTY_PREFIXES:
+        if t.startswith(prefix):
+            rest = t[len(prefix):].strip()
+            if rest:
+                return level, rest
+    return None, t
 
 
 class BindingsStore:
@@ -209,6 +260,7 @@ class ScoreService:
         sync_ttl: int = 300,
         quota_mb: int = 256,
         warn_ratio: float = 0.8,
+        report_dir: str | None = None,
         logger=None,
     ):
         self.store = store
@@ -219,6 +271,7 @@ class ScoreService:
         self.sync_ttl = sync_ttl
         self.quota_mb = quota_mb
         self.warn_ratio = warn_ratio
+        self.report_dir = report_dir
         self._logger = logger or _NullLogger()
 
     def _client(self, apikey: str) -> KinokoClient:
@@ -427,13 +480,71 @@ class ScoreService:
     # ------------------------------------------------------------------
     # 查询：单曲（沿用 /rtlink score 语义）
     # ------------------------------------------------------------------
-    async def query_score_text(self, qq, song_name) -> str:
+    async def _get_alias_map(self) -> dict:
+        if self.db is None:
+            return {}
+        return await asyncio.to_thread(self.db.get_approved_aliases)
+
+    def _song_index(self) -> dict:
+        """{song_no: {title, titleJa, genre}}，来自谱面数据。"""
+        idx = {}
+        for (song_no, _level), chart in self.charts.items():
+            if song_no not in idx:
+                idx[song_no] = {
+                    "title": chart.get("title"),
+                    "titleJa": chart.get("titleJa"),
+                    "genre": chart.get("genre"),
+                }
+        return idx
+
+    def _resolve_song(self, target: str) -> tuple[dict | None, str | None]:
+        """按精准 ID 或曲名解析歌曲；返回 (song, 提示)。song 为 None 时提示非空。"""
+        idx = self._song_index()
+        t = (target or "").strip()
+        if t.isdigit():
+            song_no = int(t)
+            info = idx.get(song_no)
+            if info is None:
+                return None, f"歌曲 ID {song_no} 不在谱面库中。"
+            return {"id": song_no, "title": info.get("title") or f"Song {song_no}", "titleJa": info.get("titleJa")}, None
+        q = t.lower()
+        matches = []
+        for song_no, info in idx.items():
+            hay = " | ".join(str(x or "") for x in (info.get("title"), info.get("titleJa"))).lower()
+            if q in hay:
+                matches.append({"id": song_no, "title": info.get("title") or f"Song {song_no}", "titleJa": info.get("titleJa")})
+        if not matches:
+            return None, f"未找到与「{target}」匹配的歌曲，请用更精确的名称或歌曲 ID。"
+        if len(matches) == 1:
+            return matches[0], None
+        options = "、".join(f"《{m['title']}》(ID {m['id']})" for m in matches[:8])
+        return None, f"「{target}」匹配到多首歌曲：{options}。请用更精确的名称或 ID 重新提交。"
+
+    async def _resolve_query_to_records(self, records: list, query: str) -> list:
+        """别名优先，其次按 title/titleJa 模糊匹配。"""
+        q = (query or "").strip()
+        if not q:
+            return []
+        alias_map = await self._get_alias_map()
+        song_no = alias_map.get(q.lower())
+        if song_no is not None:
+            return [r for r in records if r.get("id") == song_no]
+        return self._match_records(records, q)
+
+    async def query_score_text(self, qq, song_name, level=None) -> str:
         analysis, err = await self._get_analysis(qq)
         if err:
             return err
-        matched = self._match_records(self._records(analysis), song_name)
+        prefix_level, clean = parse_song_query(song_name)
+        lvl = level if level is not None else prefix_level
+        records = self._records(analysis)
+        matched = await self._resolve_query_to_records(records, clean)
+        if lvl is not None:
+            if lvl not in (4, 5):
+                return f"{difficulty_label(lvl)} 不在评级范围内（本系统仅评估鬼/里）。"
+            matched = [r for r in matched if r.get("level") == lvl]
         if not matched:
-            return f"未找到与「{song_name}」匹配的曲目，试试更精确的曲名。"
+            return f"未找到与「{clean or song_name}」匹配的曲目，试试更精确的曲名或别名。"
         return self._format_song_rows(matched)
 
     @staticmethod
@@ -500,6 +611,24 @@ class ScoreService:
             "说明：本 Rating 仅评估鬼/里（魔王/里魔王）谱面，1–3 难度不参与评级。",
         ]
         return "\n".join(lines)
+
+    async def generate_report_image(self, qq) -> tuple[bool, str]:
+        """生成鼓点画像图片，返回 (成功, 图片路径 或 错误信息)。"""
+        analysis, err = await self._get_analysis(qq)
+        if err:
+            return False, err
+        out_dir = self.report_dir
+        if not out_dir and self.db is not None:
+            out_dir = os.path.dirname(os.path.abspath(self.db.db_path))
+        if not out_dir:
+            out_dir = os.path.dirname(os.path.abspath(__file__))
+        path = os.path.join(out_dir, f"report_{qq}.png")
+        try:
+            await asyncio.to_thread(render_report_image, analysis, path)
+        except Exception as e:
+            self._logger.error(f"生成报告图片失败：{e}")
+            return False, f"生成报告图片失败：{e}"
+        return True, path
 
     async def get_profile_text(self, qq) -> str:
         analysis, err = await self._get_analysis(qq)
@@ -655,25 +784,40 @@ class ScoreService:
             return err
         if level is not None and level not in (4, 5):
             return f"{difficulty_label(level)} 不在评级范围内（本系统仅评估鬼/里）。"
-        filtered = self._filter_records(
-            self._records(analysis), level=level, query=query,
-            constant_min=constant_min, constant_max=constant_max, rank_min=rank_min,
-        )
-        if not filtered:
+        records = self._records(analysis)
+        # 组合名（如「鬼夏祭」）+ 别名解析
+        prefix_level, clean = parse_song_query(query or "")
+        eff_level = level if level is not None else prefix_level
+        if clean:
+            records = await self._resolve_query_to_records(records, clean)
+        if eff_level is not None:
+            if eff_level not in (4, 5):
+                return f"{difficulty_label(eff_level)} 不在评级范围内（本系统仅评估鬼/里）。"
+            records = [r for r in records if r.get("level") == eff_level]
+        if constant_min is not None:
+            records = [r for r in records if (r.get("constant") or 0) >= constant_min]
+        if constant_max is not None:
+            records = [r for r in records if (r.get("constant") or 0) <= constant_max]
+        if rank_min is not None:
+            records = [r for r in records if (r.get("bestScoreRank") or 0) >= rank_min]
+        if not records:
             return "没有符合条件的结果。"
-        filtered = sorted(filtered, key=lambda r: -(r.get("rating") or 0))
-        if len(filtered) > 30:
-            head = filtered[:30]
-            return self._format_song_rows(head) + f"\n（共 {len(filtered)} 条，仅显示前 30，可缩小筛选范围）"
-        return self._format_song_rows(filtered)
+        records = sorted(records, key=lambda r: -(r.get("rating") or 0))
+        if len(records) > 30:
+            head = records[:30]
+            return self._format_song_rows(head) + f"\n（共 {len(records)} 条，仅显示前 30，可缩小筛选范围）"
+        return self._format_song_rows(records)
 
     async def get_song_full_text(self, qq, song_name) -> str:
         analysis, err = await self._get_analysis(qq)
         if err:
             return err
-        matched = self._match_records(self._records(analysis), song_name)
+        prefix_level, clean = parse_song_query(song_name)
+        matched = await self._resolve_query_to_records(self._records(analysis), clean)
+        if prefix_level is not None:
+            matched = [r for r in matched if r.get("level") == prefix_level]
         if not matched:
-            return f"未找到与「{song_name}」匹配的曲目。"
+            return f"未找到与「{clean or song_name}」匹配的曲目。"
         # 取匹配到的全部难度（鬼/里）
         by_id = defaultdict(list)
         for r in matched:
@@ -697,15 +841,26 @@ class ScoreService:
                 lines.append(f"      七维：{dims}")
         return "\n".join(lines)
 
+    @staticmethod
+    def _updated_ts(record: dict) -> float:
+        s = str(record.get("updatedAt") or "").replace(" ", "T")
+        try:
+            return datetime.strptime(s[:19], "%Y-%m-%dT%H:%M:%S").timestamp()
+        except Exception:
+            return 0.0
+
     async def get_recent_scores_text(self, qq, days=1) -> str:
         analysis, err = await self._get_analysis(qq)
         if err:
             return err
-        # recent 依赖 kinoko 全历史的最新 update_datetime；此处用本地记录中时间最靠前的 top N
-        records = sorted(self._records(analysis), key=lambda r: r.get("updatedAt") or "", reverse=True)
+        records = self._records(analysis)
         if not records:
             return "暂无成绩记录。"
-        recent = records[:10]
+        cutoff = time.time() - int(days or 1) * 86400
+        recent = [r for r in records if self._updated_ts(r) >= cutoff]
+        if not recent:
+            recent = records
+        recent = sorted(recent, key=self._updated_ts, reverse=True)[:10]
         return self._format_song_rows(recent)
 
     async def get_growth_trend_text(self, qq, song_name=None) -> str:
@@ -767,3 +922,73 @@ class ScoreService:
         if not lines:
             return "当前没有明显「差一点」的谱面，继续保持。"
         return "\n".join(lines)
+
+    # ------------------------------------------------------------------
+    # 歌曲别名（两步确认 + 管理员审批）
+    # ------------------------------------------------------------------
+    async def request_alias(self, qq, target, alias) -> str:
+        if not qq:
+            return "无法识别你的 QQ 号。"
+        if not await self._binding(qq):
+            return "你还没有绑定菌菌账号。请先发送：/rtlink bind <apikey> <player_id> [server]"
+        if self.db is None:
+            return "本地存储未启用，无法设置别名。"
+        target = (target or "").strip()
+        alias = (alias or "").strip()
+        if not target or not alias:
+            return "用法：/rtlink alias <精准ID或曲名> <别名>"
+
+        song, hint = self._resolve_song(target)
+        if song is None:
+            return hint or "未找到歌曲。"
+
+        rid = await asyncio.to_thread(
+            self.db.add_alias_request,
+            song["id"], alias, song["title"], song.get("titleJa"), qq,
+        )
+        if rid is None:
+            return f"别名「{alias}」已被使用（待审或已通过），请换一个。"
+        head = f"《{song['title']}》" + (f"（{song['titleJa']}）" if song.get("titleJa") else "")
+        return (
+            "已收到别名设置请求，待管理员审核：\n"
+            f"歌曲：{head}｜ID {song['id']}\n"
+            f"别名：{alias}\n"
+            "审核通过后即可用该别名查询。"
+        )
+
+    async def list_pending_aliases_text(self) -> str:
+        if self.db is None:
+            return "本地存储未启用。"
+        pending = await asyncio.to_thread(self.db.list_pending_aliases)
+        if not pending:
+            return "当前没有待审批的别名。"
+        lines = [f"待审批别名（{len(pending)} 条）："]
+        for a in pending:
+            head = f"《{a['song_title']}》" + (f"（{a['song_title_ja']}）" if a.get("song_title_ja") else "")
+            lines.append(f"  #{a['id']} {head}（ID {a['song_no']}）→ 别名「{a['alias']}」由 {a['created_by']} 提出")
+        lines.append("批量通过：/rtlink aliasapprove all  或  /rtlink aliasapprove 1 2 3")
+        return "\n".join(lines)
+
+    async def approve_aliases_text(self, args) -> str:
+        if self.db is None:
+            return "本地存储未启用。"
+        arg = (args or "").strip()
+        if not arg:
+            return "用法：/rtlink aliasapprove all  或  /rtlink aliasapprove <编号> [编号...]"
+        if arg.lower() == "all":
+            pending = await asyncio.to_thread(self.db.list_pending_aliases)
+            ids = [a["id"] for a in pending]
+        else:
+            ids = []
+            for tok in arg.split():
+                if tok.isdigit():
+                    ids.append(int(tok))
+                else:
+                    return f"「{tok}」不是有效的审批编号。"
+        if not ids:
+            return "没有可审批的编号。"
+        approved = await asyncio.to_thread(self.db.approve_aliases, ids)
+        if not approved:
+            return "没有成功通过的条目（可能已处理或编号不存在）。"
+        return f"已通过 {len(approved)} 条别名审批（编号：{'、'.join(str(i) for i in approved)}）。现在可用别名查询。"
+

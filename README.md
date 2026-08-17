@@ -5,8 +5,11 @@
 ## 功能
 
 - 绑定管理：`bind` / `unbind` / `list`（管理员）
-- 成绩查询：按曲名模糊匹配（中文/日文/英文）
+- 成绩查询：按曲名/别名模糊匹配（中文/日文/英文）
+- **难度筛选**：支持难度别名（鬼/魔王/里/里魔王/松/困难/竹/一般/梅/简单）与组合名（如「鬼夏祭」「里夏祭」）
+- **歌曲别名**：两步确认（发起 → 管理员审核），审核通过后可用别名查询
 - **玩家实力评级**：综合 Rating + 七维能力（谱面底力/持续耐力/爆发手速/击打精度/配置处理/节奏适应/读谱）+ 强项/弱项
+- **实力画像图片**：`/rtlink rating` 或 AI 工具 `generate_rating_image` 生成 PNG 报告（Rating 环 + 七维雷达 + 强弱项 + 表现证据）
 - **节奏型弱项**：按「节奏型 × BPM 档」给出短板与参考曲目
 - LLM 工具：注册多个查询工具，模型可在自然对话中自动调用
 - 本地存储：SQLite 持久化菌菌 hiroba/kinoko 同步数据（转义落库，关键信息不缺失）
@@ -17,18 +20,25 @@
 ```
 /rtlink bind <apikey> <player_id> [server]  绑定当前 QQ（server 默认 cn，仅私聊）
 /rtlink unbind                              解绑当前 QQ
-/rtlink score <曲名>                        查询指定曲目成绩
-/rtlink rating                              查看综合 Rating 与七维能力
+/rtlink score <曲名|别名|鬼夏祭>             查询指定曲目成绩（支持难度前缀组合名）
+/rtlink rating                              生成实力画像图片
 /rtlink profile                             查看强项/弱项画像
 /rtlink weakness                            查看节奏型弱项与参考曲目
-/rtlink list                                查看全部绑定（管理员）
-/rtlink storage                             查看存储用量（管理员）
-/rtlink cleanup                             回收数据库空页 VACUUM（管理员）
+/rtlink alias <ID或曲名> <别名>              申请歌曲别名（待管理员审核）
 /rtlink help                                查看帮助
 /rtlink about                               查看插件信息
+
+管理员指令不在此列出，完整指令（含管理员）见 [docs/commands.md](docs/commands.md)。
 ```
 
 也可以直接自然语言询问，例如：「我的实力怎么样」「我该练什么」「我的《夏祭り》成绩是多少」。
+
+## 难度筛选与别名
+
+- 难度别名：`鬼/魔王/4`、`里/里鬼/里魔王/5`、`松/困难/3`、`竹/一般/2`、`梅/简单/1`（仅鬼/里参与评级）。
+- 组合名：查询时可用「鬼夏祭」「里夏祭」这类「难度前缀 + 曲名」写法。
+- 歌曲别名：`/rtlink alias <ID或曲名> <别名>` 发起（返回歌曲 ID/名称等信息供确认），管理员用 `/rtlink aliaslist` 查看、`/rtlink aliasapprove` 批量通过；通过后即可用别名查询。
+- LLM 工具 `set_song_alias` 支持让模型代用户发起别名设置；查询工具 `query_taiko_score` / `search_scores` 支持 `level` 难度参数与别名。
 
 ## 评级说明
 

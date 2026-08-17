@@ -34,6 +34,9 @@ class AstrMessageEvent:
     def plain_result(self, text: str):
         return text
 
+    def image_result(self, url_or_path: str):
+        return url_or_path
+
 
 class Context:
     def __init__(self, config: dict | None = None):

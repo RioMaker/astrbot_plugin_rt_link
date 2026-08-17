@@ -5,6 +5,8 @@ apikey.key
 *.key
 # 本地缓存的数据快照，不入 git
 cache/
+# 本地运行时数据库 / 数据目录，不入 git
+data/
 # 测试产生的数据落盘
 _api_dump.json
 test/bindings.json

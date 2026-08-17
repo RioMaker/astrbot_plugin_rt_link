@@ -76,6 +76,19 @@ CREATE TABLE IF NOT EXISTS kv (
     value_json TEXT,
     updated_at TEXT
 );
+
+CREATE TABLE IF NOT EXISTS song_aliases (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    song_no INTEGER NOT NULL,
+    alias TEXT NOT NULL,
+    song_title TEXT NOT NULL,
+    song_title_ja TEXT,
+    created_by TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_at TEXT NOT NULL,
+    reviewed_at TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_alias_name ON song_aliases(alias COLLATE NOCASE);
 """
 
 
@@ -221,6 +234,58 @@ class ScoreDatabase:
                 (key, json.dumps(value, ensure_ascii=False), now_iso()),
             )
             self._conn.commit()
+
+    # -- 歌曲别名（两步确认 + 管理员审批） ---------------------------------
+    def add_alias_request(self, song_no: int, alias: str, song_title: str, song_title_ja: str | None, created_by: str) -> int | None:
+        """插入待审批别名；别名已存在（pending/approved，大小写不敏感）时返回 None。"""
+        alias = (alias or "").strip()
+        with self._lock:
+            exists = self._conn.execute(
+                "SELECT id FROM song_aliases WHERE alias=? COLLATE NOCASE", (alias,)
+            ).fetchone()
+            if exists:
+                return None
+            try:
+                cur = self._conn.execute(
+                    "INSERT INTO song_aliases "
+                    "(song_no, alias, song_title, song_title_ja, created_by, status, created_at) "
+                    "VALUES (?,?,?,?,?, 'pending', ?)",
+                    (song_no, alias, song_title, song_title_ja, created_by, now_iso()),
+                )
+                self._conn.commit()
+                return cur.lastrowid
+            except sqlite3.IntegrityError:
+                return None
+
+    def list_pending_aliases(self) -> list:
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT * FROM song_aliases WHERE status='pending' ORDER BY id"
+            )
+            return [dict(r) for r in cur.fetchall()]
+
+    def approve_aliases(self, ids: list[int]) -> list[int]:
+        """批量通过审批，返回实际通过的 id 列表。"""
+        approved = []
+        with self._lock:
+            for i in ids:
+                cur = self._conn.execute(
+                    "UPDATE song_aliases SET status='approved', reviewed_at=? "
+                    "WHERE id=? AND status='pending'",
+                    (now_iso(), i),
+                )
+                if cur.rowcount:
+                    approved.append(i)
+            self._conn.commit()
+        return approved
+
+    def get_approved_aliases(self) -> dict:
+        """返回 {alias_lower: song_no}，用于查询时别名解析。"""
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT alias, song_no FROM song_aliases WHERE status='approved'"
+            )
+            return {r["alias"].strip().lower(): r["song_no"] for r in cur.fetchall()}
 
     # -- 空间计量 ----------------------------------------------------------
     def storage_stats(self) -> dict:
