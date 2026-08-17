@@ -106,15 +106,40 @@ def _text(ax, value, x, y, size, color=INK, weight="normal", align="left", famil
             fontproperties=font_properties, zorder=z)
 
 
-def _wrap(value, width, limit=3):
-    lines = textwrap.wrap(str(value or ""), width=width, break_long_words=False,
-                          break_on_hyphens=False) or [""]
-    return lines[:limit]
+def _wrap(value, max_width, size, limit=3):
+    """Wrap by estimated rendered width, not character count.
+
+    CJK glyphs are close to one em while Latin text is narrower. Character
+    count alone was the source of the long lines escaping the fixed cards.
+    """
+    lines, current, current_width = [], "", 0.0
+    for char in str(value or ""):
+        char_width = size * (1.02 if ord(char) > 127 else 0.58)
+        if current and current_width + char_width > max_width:
+            lines.append(current)
+            current, current_width = char, char_width
+            if len(lines) == limit:
+                break
+        else:
+            current += char
+            current_width += char_width
+    if len(lines) < limit and current:
+        lines.append(current)
+    if not lines:
+        lines = [""]
+    if len(lines) == limit and sum(1 for _ in str(value or "")) > len("".join(lines)):
+        lines[-1] = lines[-1][:-1] + "…"
+    return lines
 
 
 def _wrapped(ax, value, x, y, width, size, line_height, color=MUTED, weight="normal", limit=3):
-    for index, line in enumerate(_wrap(value, width, limit)):
+    for index, line in enumerate(_wrap(value, width, size, limit)):
         _text(ax, line, x, y + index * line_height, size, color, weight)
+
+
+def _truncate(value, max_width, size):
+    text = str(value or "")
+    return _wrap(text, max_width, size, 1)[0]
 
 
 def _level(level):
@@ -163,17 +188,19 @@ def _draw_hero(ax, analysis, families):
     _box(ax, 480, 148, 890, 340, SURFACE, LINE, radius=24)
     _text(ax, "本次关键结论", 528, 190, 17, ACCENT_DARK, "bold", family="monospace")
     headline = f"{DIM_NAME.get(strongest['key'], strongest['key'])}最突出，{DIM_NAME.get(weakest['key'], weakest['key'])}是当前突破口" if strongest and weakest else "有效成绩已生成，能力证据仍待补充"
-    _wrapped(ax, headline, 528, 228, 18, 41, 52, INK, "bold", 2)
+    _wrapped(ax, headline, 528, 228, 790, 41, 52, INK, "bold", 2)
     summary = (f"七类能力最大差距为 {_fixed(strongest['score'] - weakest['score'])}。保持{DIM_NAME.get(strongest['key'], strongest['key'])}优势；下一轮优先处理{DIM_NAME.get(weakest['key'], weakest['key'])}。" if strongest and weakest else "当前数据不足以稳定比较七类能力，请继续积累鬼或里难度成绩。")
-    _wrapped(ax, summary, 528, 340, 41, 20, 32, MUTED, limit=2)
+    _wrapped(ax, summary, 528, 340, 790, 20, 32, MUTED, limit=2)
     tags = []
     if strongest: tags.append(f"优势 · {DIM_NAME.get(strongest['key'], strongest['key'])} {_fixed(strongest['score'])}")
     if weakest: tags.append(f"补强 · {DIM_NAME.get(weakest['key'], weakest['key'])} {_fixed(weakest['score'])}")
     x = 528
     for tag in tags[:2]:
-        _box(ax, x, 422, 250, 32, SURFACE_SOFT, radius=16)
+        tag = _truncate(tag, 220, 15)
+        tag_width = min(250, max(150, len(tag) * 11 + 30))
+        _box(ax, x, 422, tag_width, 32, SURFACE_SOFT, radius=16)
         _text(ax, tag, x + 15, 429, 15, INK_SOFT, "bold")
-        x += 262
+        x += tag_width + 12
     return ranked
 
 
@@ -186,7 +213,7 @@ def _draw_galaxy(ax, analysis, families):
     _text(ax, "能力星系数据", 78, 560, 34, INK, "bold")
     _box(ax, 70, 620, 1300, 615, "#050911", "#263345", radius=24)
     _text(ax, headline, 106, 655, 25, "white", "bold")
-    _wrapped(ax, f"恒星阶段：{stage}。七颗能力行星以同一 15.50 标尺呈现。", 106, 693, 55, 15, 24, "#9caaba", limit=2)
+    _wrapped(ax, f"恒星阶段：{stage}。七颗能力行星以同一 15.50 标尺呈现。", 106, 693, 570, 15, 24, "#9caaba", limit=2)
     cx, cy = 382, 945
     for index, item in enumerate(RADAR_DIMS):
         key, _label, color, _planet = item
@@ -237,11 +264,11 @@ def _draw_actions(ax, analysis, families):
         x = 70 + index * (width + gap)
         _box(ax, x, 1358, width, 332, "#f8ddd6" if index == 0 else SURFACE, LINE, radius=20)
         _text(ax, category, x + 28, 1386, 14, ACCENT_DARK if index == 0 else MUTED, "bold", family="monospace")
-        _wrapped(ax, title, x + 28, 1420, 24, 23, 30, INK, "bold", 2)
+        _wrapped(ax, title, x + 28, 1420, 322, 23, 30, INK, "bold", 2)
         _text(ax, f"{_fixed(score)} · {evidence}", x + 28, 1486, 14, MUTED, "bold", family="monospace")
         ax.plot([x + 28, x + width - 28], [1592, 1592], color=LINE)
         _text(ax, "建议动作", x + 28, 1610, 12, ACCENT_DARK if index == 0 else MINT_DARK, "bold", family="monospace")
-        _wrapped(ax, method, x + 28, 1633, 13, 15, 22, INK_SOFT, limit=2)
+        _wrapped(ax, method, x + 28, 1633, 322, 15, 22, INK_SOFT, limit=2)
 
 
 def _draw_evidence(ax, analysis):
@@ -257,7 +284,8 @@ def _draw_evidence(ax, analysis):
         _text(ax, f"{index + 1:02d}", 102, y + 2, 13, QUIET, "bold", family="monospace")
         _box(ax, 148, y - 3, 162, 28, "#ebe7dd", radius=14)
         _text(ax, "综合上限", 229, y + 3, 12, MINT_DARK, "bold", "center")
-        _text(ax, (row.get("title") or f"谱面 {row.get('id')}")[:28], 340, y, 16, INK, "bold")
+        title = _truncate(row.get("title") or f"谱面 {row.get('id')}", 570, 16)
+        _text(ax, title, 340, y, 16, INK, "bold")
         _text(ax, _level(row.get("level")), 950, y + 2, 14, MUTED, "bold")
         _text(ax, _fixed(row.get("aiConstant") or row.get("constant"), 1), 1040, y + 2, 14, INK_SOFT, "bold", family="monospace")
         _text(ax, f"{_number(row.get('accuracy')) * 100:.2f}%", 1162, y + 2, 14, INK_SOFT, "bold", family="monospace")
