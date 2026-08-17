@@ -43,7 +43,9 @@ def _setup_fonts():
     if _fonts_ready:
         return
     _fonts_ready = True
+    plugin_font = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resource", "NotoSansCJKsc-Regular.otf")
     paths = [
+        plugin_font,
         r"C:\Windows\Fonts\msyh.ttc", r"C:\Windows\Fonts\msyhl.ttc",
         r"C:\Windows\Fonts\simhei.ttf", r"C:\Windows\Fonts\simsun.ttc",
         "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
