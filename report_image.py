@@ -43,8 +43,14 @@ def _setup_fonts():
     if _fonts_ready:
         return
     _fonts_ready = True
-    paths = [r"C:\Windows\Fonts\msyh.ttc", r"C:\Windows\Fonts\msyhbd.ttc",
-             r"C:\Windows\Fonts\simhei.ttf", r"C:\Windows\Fonts\simsun.ttc"]
+    paths = [
+        r"C:\Windows\Fonts\msyh.ttc", r"C:\Windows\Fonts\msyhl.ttc",
+        r"C:\Windows\Fonts\simhei.ttf", r"C:\Windows\Fonts\simsun.ttc",
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/opentype/noto/NotoSansCJKsc-Regular.otf",
+        "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+    ]
     names = []
     for path in paths:
         if os.path.exists(path):
@@ -55,7 +61,9 @@ def _setup_fonts():
                     _cjk_font = fm.FontProperties(fname=path)
             except Exception:
                 pass
-    plt.rcParams["font.sans-serif"] = names + ["Microsoft YaHei", "Noto Sans CJK SC", "DejaVu Sans"]
+    if _cjk_font is None:
+        raise RuntimeError("未找到可显示中文的 CJK 字体，请安装 Microsoft YaHei、Noto Sans CJK 或文泉驿字体")
+    plt.rcParams["font.sans-serif"] = names
     plt.rcParams["font.family"] = "sans-serif"
     plt.rcParams["axes.unicode_minus"] = False
 
@@ -92,7 +100,8 @@ def _text(ax, value, x, y, size, color=INK, weight="normal", align="left", famil
     elif font_properties is not None:
         family = "sans-serif"
     ax.text(x, y, str(value), fontsize=size, color=color, fontweight=weight,
-            ha=align, va="top", family=family, fontproperties=font_properties, zorder=z)
+            ha=align, va="top", family=family if font_properties is None else None,
+            fontproperties=font_properties, zorder=z)
 
 
 def _wrap(value, width, limit=3):
