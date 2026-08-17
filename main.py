@@ -29,7 +29,7 @@ else:
 PLUGIN_NAME = "rt_link"
 PLUGIN_AUTHOR = "Rio"
 PLUGIN_DESC = "将 QQ 绑定到菌菌控制台 apikey，查询太鼓达人成绩并评估玩家实力"
-PLUGIN_VERSION = "v0.3.0"
+PLUGIN_VERSION = "v0.3.1"
 
 COMMAND_NAME = "rtlink"
 BINDINGS_KEY = "bindings"
@@ -221,7 +221,7 @@ class RTLinkPlugin(Star):
 
     @filter.command(f"{COMMAND_NAME} about")
     async def about(self, event: AstrMessageEvent):
-        yield event.plain_result(f"{PLUGIN_NAME} v{PLUGIN_VERSION}\n{PLUGIN_DESC}")
+        yield event.plain_result(f"{PLUGIN_NAME} {PLUGIN_VERSION}\n{PLUGIN_DESC}")
 
     @staticmethod
     def _bare_rest(msg: str) -> str:
