@@ -28,6 +28,8 @@
 /rtlink help                                查看帮助
 /rtlink about                               查看插件信息
 
+裸 `/rtlink`（不带子命令）默认返回实力画像图片，等价于 `/rtlink rating`。
+
 管理员指令不在此列出，完整指令（含管理员）见 [docs/commands.md](docs/commands.md)。
 ```
 

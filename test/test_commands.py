@@ -49,10 +49,9 @@ async def invoke(fn, plugin, event, *args):
 async def run() -> list[str]:
     out = []
     plugin = make_plugin()
-    group = main.RTLinkPlugin.rtlink  # 命令组 _Group
-    bind_fn = group.commands["bind"]
-    score_fn = group.commands["score"]
-    unbind_fn = group.commands["unbind"]
+    bind_fn = main.RTLinkPlugin.bind
+    score_fn = main.RTLinkPlugin.score
+    unbind_fn = main.RTLinkPlugin.unbind
 
     qq = "123456789"
 

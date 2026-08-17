@@ -12,13 +12,41 @@ import os
 import matplotlib
 
 matplotlib.use("Agg")
+import matplotlib.font_manager as fm
 import matplotlib.pyplot as plt
 from matplotlib.patches import FancyBboxPatch, Rectangle, Wedge
 
-plt.rcParams["font.sans-serif"] = [
-    "Microsoft YaHei", "SimHei", "Noto Sans CJK SC", "PingFang SC", "DejaVu Sans",
-]
 plt.rcParams["axes.unicode_minus"] = False
+
+_fonts_ready = False
+
+
+def _setup_fonts() -> None:
+    """显式注册系统中文字体，避免中文显示为方块。"""
+    global _fonts_ready
+    if _fonts_ready:
+        return
+    _fonts_ready = True
+    font_files = [
+        r"C:\Windows\Fonts\msyh.ttc",    # 微软雅黑
+        r"C:\Windows\Fonts\msyhbd.ttc",  # 微软雅黑粗体
+        r"C:\Windows\Fonts\simhei.ttf",  # 黑体
+        r"C:\Windows\Fonts\simsun.ttc",  # 宋体
+    ]
+    names = []
+    for fp in font_files:
+        if os.path.exists(fp):
+            try:
+                fm.fontManager.addfont(fp)
+                names.append(fm.FontProperties(fname=fp).get_name())
+            except Exception:
+                continue
+    names += [
+        "Microsoft YaHei", "SimHei", "Noto Sans CJK SC", "PingFang SC",
+        "WenQuanYi Micro Hei", "DejaVu Sans",
+    ]
+    plt.rcParams["font.sans-serif"] = names
+    plt.rcParams["font.family"] = "sans-serif"
 
 # 与前端一致的配色
 INK = "#17202a"
@@ -73,6 +101,7 @@ def _level_label(level):
 
 def render_report_image(analysis: dict, out_path: str) -> str:
     """把分析结果渲染为 PNG，写到 out_path 并返回路径。"""
+    _setup_fonts()
     summary = analysis.get("summary") or {}
     fa = analysis.get("featureAbility") or {}
     meta = analysis.get("meta") or {}
