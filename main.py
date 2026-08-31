@@ -29,7 +29,7 @@ else:
 PLUGIN_NAME = "rt_link"
 PLUGIN_AUTHOR = "Rio"
 PLUGIN_DESC = "将 QQ 绑定到菌菌控制台 apikey，查询太鼓达人成绩并评估玩家实力"
-PLUGIN_VERSION = "v0.3.2"
+PLUGIN_VERSION = "v0.3.3"
 
 COMMAND_NAME = "rtlink"
 BINDINGS_KEY = "bindings"
@@ -104,20 +104,65 @@ class RTLinkPlugin(Star):
         logger.info("rt_link 插件已卸载")
 
     # ------------------------------------------------------------------
-    # 命令（扁平化注册，避免裸 /rtlink 触发指令组「参数不足」提示）
+    # 命令入口
+    #
+    # AstrBot 的普通指令名不能包含空格；/rtlink score ... 中的 score
+    # 会被解析成根指令的第一个参数。所有子指令因此统一由这个合法的
+    # rtlink 根指令分发，同时保留裸 /rtlink 直接生成画像的行为。
     # ------------------------------------------------------------------
     @filter.command(COMMAND_NAME)
-    async def rtlink(self, event: AstrMessageEvent):
-        """裸 /rtlink：默认返回实力画像图片。"""
-        if self._bare_rest(event.get_message_str()):
-            return  # 带子命令，交给对应子命令处理
+    async def rtlink(self, event: AstrMessageEvent, subcommand: str = ""):
+        """太鼓成绩、Rating 画像与绑定管理；不带子指令时生成实力画像。"""
+        rest = self._bare_rest(event.get_message_str()) or (subcommand or "").strip()
+        if rest:
+            async for result in self._dispatch_command(event, rest):
+                yield result
+            return
         ok, result = await self.service.generate_report_image(event.get_sender_id())
         if not ok:
             yield event.plain_result(result)
             return
         yield event.image_result(result)
 
-    @filter.command(f"{COMMAND_NAME} help")
+    async def _dispatch_command(self, event: AstrMessageEvent, rest: str):
+        """分发 /rtlink <子指令> ...，保证未知或参数错误时也有明确回复。"""
+        command = rest.split(None, 1)[0].lower()
+
+        if command == "bind":
+            parts = rest.split()
+            if len(parts) not in (3, 4):
+                yield event.plain_result(
+                    "用法：/rtlink bind <apikey> <player_id> [server]"
+                )
+                return
+            async for result in self.bind(event, *parts[1:]):
+                yield result
+            return
+
+        handlers = {
+            "help": self.help,
+            "unbind": self.unbind,
+            "list": self.list_bindings,
+            "score": self.score,
+            "rating": self.rating_cmd,
+            "profile": self.profile_cmd,
+            "weakness": self.weakness_cmd,
+            "storage": self.storage_cmd,
+            "cleanup": self.cleanup_cmd,
+            "alias": self.alias_cmd,
+            "aliaslist": self.aliaslist_cmd,
+            "aliasapprove": self.aliasapprove_cmd,
+            "about": self.about,
+        }
+        handler = handlers.get(command)
+        if handler is None:
+            yield event.plain_result(
+                f"未知子指令：{command}。发送 /rtlink help 查看可用指令。"
+            )
+            return
+        async for result in handler(event):
+            yield result
+
     async def help(self, event: AstrMessageEvent):
         yield event.plain_result(
             "rtlink 命令：\n"
@@ -134,7 +179,6 @@ class RTLinkPlugin(Star):
             "注意：apikey 仅用于服务端绑定与查询，不会发送给大模型；请在私聊中绑定。"
         )
 
-    @filter.command(f"{COMMAND_NAME} bind")
     async def bind(self, event: AstrMessageEvent, apikey: str, player_id: str, server: str = ""):
         if not event.is_private_chat():
             yield event.plain_result("请在私聊中发送绑定命令，避免 apikey 泄露到群聊。")
@@ -142,12 +186,10 @@ class RTLinkPlugin(Star):
         ok, msg = await self.service.bind(event.get_sender_id(), apikey, player_id, server)
         yield event.plain_result(msg)
 
-    @filter.command(f"{COMMAND_NAME} unbind")
     async def unbind(self, event: AstrMessageEvent):
         ok, msg = await self.service.unbind(event.get_sender_id())
         yield event.plain_result(msg)
 
-    @filter.command(f"{COMMAND_NAME} list")
     async def list_bindings(self, event: AstrMessageEvent):
         if not event.is_admin():
             yield event.plain_result("无权限：仅管理员可查看全部绑定。")
@@ -155,7 +197,6 @@ class RTLinkPlugin(Star):
         warning = await self.service.low_space_warning_text()
         yield event.plain_result(warning + await self.service.list_bindings())
 
-    @filter.command(f"{COMMAND_NAME} score")
     async def score(self, event: AstrMessageEvent):
         song_name = self._parse_score_query(event.get_message_str())
         if not song_name:
@@ -163,7 +204,6 @@ class RTLinkPlugin(Star):
             return
         yield event.plain_result(await self.service.query_score_text(event.get_sender_id(), song_name))
 
-    @filter.command(f"{COMMAND_NAME} rating")
     async def rating_cmd(self, event: AstrMessageEvent):
         ok, result = await self.service.generate_report_image(event.get_sender_id())
         if not ok:
@@ -171,29 +211,24 @@ class RTLinkPlugin(Star):
             return
         yield event.image_result(result)
 
-    @filter.command(f"{COMMAND_NAME} profile")
     async def profile_cmd(self, event: AstrMessageEvent):
         yield event.plain_result(await self.service.get_profile_text(event.get_sender_id()))
 
-    @filter.command(f"{COMMAND_NAME} weakness")
     async def weakness_cmd(self, event: AstrMessageEvent):
         yield event.plain_result(await self.service.get_rhythm_weakness_text(event.get_sender_id()))
 
-    @filter.command(f"{COMMAND_NAME} storage")
     async def storage_cmd(self, event: AstrMessageEvent):
         if not event.is_admin():
             yield event.plain_result("无权限：仅管理员可查看存储用量。")
             return
         yield event.plain_result(await self.service.storage_status_text())
 
-    @filter.command(f"{COMMAND_NAME} cleanup")
     async def cleanup_cmd(self, event: AstrMessageEvent):
         if not event.is_admin():
             yield event.plain_result("无权限：仅管理员可回收空间。")
             return
         yield event.plain_result(await self.service.cleanup())
 
-    @filter.command(f"{COMMAND_NAME} alias")
     async def alias_cmd(self, event: AstrMessageEvent):
         args = self._parse_alias_args(event.get_message_str())
         if not args:
@@ -204,14 +239,12 @@ class RTLinkPlugin(Star):
             await self.service.request_alias(event.get_sender_id(), target, alias)
         )
 
-    @filter.command(f"{COMMAND_NAME} aliaslist")
     async def aliaslist_cmd(self, event: AstrMessageEvent):
         if not event.is_admin():
             yield event.plain_result("无权限：仅管理员可查看待审批别名。")
             return
         yield event.plain_result(await self.service.list_pending_aliases_text())
 
-    @filter.command(f"{COMMAND_NAME} aliasapprove")
     async def aliasapprove_cmd(self, event: AstrMessageEvent):
         if not event.is_admin():
             yield event.plain_result("无权限：仅管理员可审批别名。")
@@ -219,7 +252,6 @@ class RTLinkPlugin(Star):
         args = self._parse_rest(event.get_message_str(), "aliasapprove")
         yield event.plain_result(await self.service.approve_aliases_text(args))
 
-    @filter.command(f"{COMMAND_NAME} about")
     async def about(self, event: AstrMessageEvent):
         yield event.plain_result(f"{PLUGIN_NAME} {PLUGIN_VERSION}\n{PLUGIN_DESC}")
 
@@ -227,6 +259,8 @@ class RTLinkPlugin(Star):
     def _bare_rest(msg: str) -> str:
         """裸命令判定：返回 rtlink 之后的内容；空串表示裸 /rtlink。"""
         s = (msg or "").strip()
+        if s.startswith("/"):
+            s = s[1:].lstrip()
         if s == COMMAND_NAME:
             return ""
         if s.startswith(COMMAND_NAME + " "):
