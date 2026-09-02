@@ -33,6 +33,10 @@ DIFFICULTY_NAMES = {
     5: "里鬼（里魔王）",
 }
 
+# 精简画像缓存的数据契约版本。字段新增后提升版本，避免继续读取旧缓存
+# 中缺少准确率/AI 定数的证据行。
+RATING_CACHE_SCHEMA = 2
+
 
 def difficulty_label(level) -> str:
     name = DIFFICULTY_NAMES.get(level)
@@ -169,6 +173,9 @@ def _slim_song(row: dict) -> dict:
         "level": row.get("level"),
         "title": row.get("title"),
         "rating": round(row.get("rating") or 0, 2),
+        "accuracy": row.get("accuracy"),
+        "constant": row.get("constant"),
+        "aiConstant": row.get("aiConstant"),
     }
 
 
@@ -235,6 +242,7 @@ def _slim_result(result: dict) -> dict:
     }
 
     return {
+        "_cacheSchema": RATING_CACHE_SCHEMA,
         "_ts": time.time(),
         "summary": {k: round(v, 2) for k, v in result["summary"].items()},
         "ourTaikoV1": {
@@ -412,7 +420,11 @@ class ScoreService:
             return None, "你还没有绑定菌菌账号。请先发送：/rtlink bind <apikey> <player_id> [server]"
         if self.db is not None:
             cache = await asyncio.to_thread(self.db.get_rating_cache, qq)
-            if cache and time.time() - float(cache.get("_ts") or 0) < self.sync_ttl:
+            if (
+                cache
+                and cache.get("_cacheSchema") == RATING_CACHE_SCHEMA
+                and time.time() - float(cache.get("_ts") or 0) < self.sync_ttl
+            ):
                 return cache, ""
         ok, msg, slim = await self._sync(qq)
         if not ok:

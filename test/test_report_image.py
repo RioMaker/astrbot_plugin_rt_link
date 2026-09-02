@@ -2,9 +2,50 @@
 
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
-from report_image import build_report_data, render_report_image
+from report_image import _lines, build_report_data, render_report_image
+from service import RATING_CACHE_SCHEMA, _slim_result, _slim_song
+
+
+def test_slim_evidence_keeps_image_metrics():
+    row = {
+        "id": 101,
+        "level": 4,
+        "title": "证据谱面",
+        "rating": 10.25,
+        "accuracy": 0.9876,
+        "constant": 10.1,
+        "aiConstant": 10.3,
+    }
+    slim = _slim_song(row)
+    assert slim["accuracy"] == 0.9876
+    assert slim["constant"] == 10.1
+    assert slim["aiConstant"] == 10.3
+
+
+def test_slim_result_marks_current_cache_schema():
+    result = {
+        "summary": {"rating": 10},
+        "ourTaikoV1": {"summary": {"rating": 9.8}, "chartCount": 1},
+        "counts": {},
+        "meta": {},
+        "records": [],
+        "featureAbility": {"families": [], "strengths": [], "weaknesses": [], "matchedCharts": 0},
+        "rhythmAbility": {"cells": [], "best": [], "weakest": [], "visual": {}},
+    }
+    assert _slim_result(result)["_cacheSchema"] == RATING_CACHE_SCHEMA
+
+
+def test_chinese_punctuation_does_not_start_a_wrapped_line():
+    image = Image.new("RGB", (400, 200), "white")
+    lines = _lines(
+        ImageDraw.Draw(image),
+        "选择已经稳定通过的同类谱面，把目标改为减少可，保持落点一致。",
+        180,
+        15,
+    )
+    assert not any(line.startswith(tuple("，。；：！？、）」》】〕〉”’…")) for line in lines)
 
 
 def test_report_image_keeps_template_sections_in_bounds(tmp_path: Path):

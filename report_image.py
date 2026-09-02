@@ -242,7 +242,10 @@ def _text(draw, value, x, y, size, color=INK, bold=False, align="left"):
     font = _font(size, bold)
     anchor = {"left": "lt", "center": "mt", "right": "rt"}[align]
     draw.text((x, y), str(value), font=font, fill=color, anchor=anchor,
-              stroke_width=1 if bold and size >= 15 else 0, stroke_fill=color)
+              # The bundled font is Regular. A 1 px stroke is useful for large
+              # display headings, but on labels/table rows it makes Chinese
+              # glyphs merge and look much heavier than the website.
+              stroke_width=1 if bold and size >= 28 else 0, stroke_fill=color)
 
 
 def _measure(draw, value, size, bold=False):
@@ -251,13 +254,22 @@ def _measure(draw, value, size, bold=False):
 
 def _lines(draw, value, max_width, size, bold=False):
     result = []
+    closing_punctuation = "，。；：！？、）」》】〕〉”’…"
     for paragraph in str(value or "").split("\n"):
         current = ""
         for char in paragraph:
             candidate = current + char
             if current and _measure(draw, candidate, size, bold) > max_width:
-                result.append(current.rstrip())
-                current = char.lstrip()
+                # Chinese closing punctuation must not start a new line. Keep
+                # it with the preceding glyph even if that line grows by one
+                # punctuation width; this matches browser line breaking and
+                # avoids visually dangling commas in action cards.
+                if char in closing_punctuation:
+                    result.append(candidate.rstrip())
+                    current = ""
+                else:
+                    result.append(current.rstrip())
+                    current = char.lstrip()
             else:
                 current = candidate
         if current or not paragraph:
