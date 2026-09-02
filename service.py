@@ -219,6 +219,7 @@ def _slim_result(result: dict) -> dict:
         return {
             "key": c.get("key"), "pattern": c.get("pattern"), "bpmBand": c.get("bpmBand"),
             "score": round(c.get("score") or 0, 2), "charts": c.get("charts"),
+            "exposure": round(c.get("exposure") or 0, 3),
             "compoundRatio": round(c.get("compoundRatio") or 0, 3),
             "averageBpm": round(c.get("averageBpm") or 0, 1),
             "best": [_slim_song(b) for b in c.get("best", [])],
@@ -226,6 +227,7 @@ def _slim_result(result: dict) -> dict:
 
     rhythm_ability = {
         "cells": [slim_cell(c) for c in result["rhythmAbility"]["cells"]],
+        "best": [slim_cell(c) for c in result["rhythmAbility"]["best"]],
         "weakest": [slim_cell(c) for c in result["rhythmAbility"]["weakest"]],
         "visual": {
             k: slim_cell(v) for k, v in result["rhythmAbility"]["visual"].items()

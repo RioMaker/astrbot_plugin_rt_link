@@ -1,21 +1,21 @@
 # -*- coding: utf-8 -*-
-"""Fixed 1440x2400 PNG export matching the rating-analysis report template."""
+"""Deterministic 1440x2400 report renderer shared with the Taiko Trace design.
+
+The browser report uses a fixed Canvas layout.  This module mirrors that data
+summary and those pixel coordinates with Pillow so AstrBot can generate the
+same report without a browser, Node.js, Matplotlib, or a remote backend.
+"""
 
 from __future__ import annotations
 
 import math
 import os
-import textwrap
+from datetime import datetime
+from functools import lru_cache
+from statistics import median
 
-import matplotlib
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-matplotlib.use("Agg")
-import matplotlib.font_manager as fm
-import matplotlib.pyplot as plt
-from matplotlib.patches import Ellipse, FancyBboxPatch, Rectangle, Wedge
-
-_fonts_ready = False
-_cjk_font = None
 WIDTH, HEIGHT = 1440, 2400
 MAX_RATING = 15.5
 INK, INK_SOFT = "#17202a", "#26313d"
@@ -25,49 +25,47 @@ MUTED, QUIET = "#69727a", "#8c928f"
 ACCENT, ACCENT_DARK = "#ee6547", "#b9422e"
 MINT, MINT_DARK = "#87c9b8", "#2a7f72"
 
-RADAR_DIMS = [
-    ("chartPower", "谱面底力", "#ff6b4a", "攻关星"),
-    ("sustainedEndurance", "持续耐力", "#f1ba3e", "耐力星"),
-    ("burstSpeed", "爆发手速", "#a879e0", "爆发星"),
-    ("hitPrecision", "击打精度", "#55c9a9", "精度星"),
-    ("patternControl", "配置处理", "#66a5ef", "复合星"),
-    ("timingAdaptation", "节奏适应", "#ee78ad", "节奏星"),
-    ("visualReading", "读谱", "#a4b4bd", "目视星"),
-]
-DIM_NAME = {key: label for key, label, _color, _planet in RADAR_DIMS}
-DIM_COLOR = {key: color for key, _label, color, _planet in RADAR_DIMS}
-
-
-def _setup_fonts():
-    global _fonts_ready, _cjk_font
-    if _fonts_ready:
-        return
-    _fonts_ready = True
-    plugin_font = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resource", "NotoSansCJKsc-Regular.otf")
-    paths = [
-        plugin_font,
-        r"C:\Windows\Fonts\msyh.ttc", r"C:\Windows\Fonts\msyhl.ttc",
-        r"C:\Windows\Fonts\simhei.ttf", r"C:\Windows\Fonts\simsun.ttc",
-        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-        "/usr/share/fonts/opentype/noto/NotoSansCJKsc-Regular.otf",
-        "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
-        "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
-    ]
-    names = []
-    for path in paths:
-        if os.path.exists(path):
-            try:
-                fm.fontManager.addfont(path)
-                names.append(fm.FontProperties(fname=path).get_name())
-                if _cjk_font is None:
-                    _cjk_font = fm.FontProperties(fname=path)
-            except Exception:
-                pass
-    if _cjk_font is None:
-        raise RuntimeError("未找到可显示中文的 CJK 字体，请安装 Microsoft YaHei、Noto Sans CJK 或文泉驿字体")
-    plt.rcParams["font.sans-serif"] = names
-    plt.rcParams["font.family"] = "sans-serif"
-    plt.rcParams["axes.unicode_minus"] = False
+FAMILY_META = {
+    "chartPower": {"label": "基础攻关", "color": "#e85e47", "planet": "攻关星", "planetColor": "#ff6b4a", "description": "AI 定数与成绩准确率共同体现的基础难度处理"},
+    "sustainedEndurance": {"label": "持续耐力", "color": "#c89b31", "planet": "耐力星", "planetColor": "#f1ba3e", "description": "相对同难度谱面的持续密度、长串和体力负荷"},
+    "burstSpeed": {"label": "爆发速度", "color": "#8565b3", "planet": "爆发星", "planetColor": "#a879e0", "description": "相对同难度谱面的瞬时密度、24/32 分与短串峰值"},
+    "hitPrecision": {"label": "精度兑现", "color": "#2f9584", "planet": "精度星", "planetColor": "#55c9a9", "description": "当前难度上的良率和全良兑现表现"},
+    "patternControl": {"label": "复合控制", "color": "#4e80bd", "planet": "复合星", "planetColor": "#66a5ef", "description": "相对同难度谱面的配色、换手和复合句型要求"},
+    "timingAdaptation": {"label": "节奏适应", "color": "#bd6088", "planet": "节奏星", "planetColor": "#ee78ad", "description": "相对同难度谱面的叩击区分、细分与 BPM 变化要求"},
+    "visualReading": {"label": "目视读谱", "color": "#66727c", "planet": "目视星", "planetColor": "#a4b4bd", "description": "相对同难度谱面的 HS、超车、逆向和滚动模式要求"},
+}
+FAMILY_ORDER = tuple(FAMILY_META)
+FAMILY_PRACTICE = {
+    "chartPower": "选择 AI 定数略低一档的谱面稳定精度，再逐步回到当前攻关区间。",
+    "sustainedEndurance": "选择密度相近但更短的长串，分段练习放松与续力，避免全程紧绷。",
+    "burstSpeed": "从目标速度下调一个 BPM 档，保持动作小而均匀；稳定后再逐步回到目标速度。",
+    "hitPrecision": "选择已能稳定通过的同类谱面，把目标改为减少“可”，保持落点一致。",
+    "patternControl": "先口读并固定换手，再用低速重复同类配色；定位具体换色点。",
+    "timingAdaptation": "先脱离谱面确认拍点和细分，再回到低压谱面，优先保证落点稳定。",
+    "visualReading": "降低击打压力，主动观察视线落点、HS 和超车，先练看懂再练跟上。",
+}
+RHYTHM_META = {
+    "quarter_scatter": "4 分散音", "quarter_stream": "4 分连续",
+    "8-scatter": "8 分散音", "8-stream": "8 分连续",
+    "12-triplet": "12 分跳音", "12-fish": "12 分鱼蛋",
+    "sixteenth_2": "16 分二连", "16-3": "16 分三连", "16-4": "16 分四连",
+    "16-5": "16 分五连", "16-6": "16 分六连", "16-7": "16 分七连", "16-fish": "16 分鱼蛋",
+    "twentyfourth_burst": "24 分短串", "twentyfourth_compound": "24 分复合", "24-fish": "24 分鱼蛋",
+    "thirtysecond_burst": "32 分爆发", "32-fish": "32 分鱼蛋",
+}
+BPM_META = {"lt120": "< 120", "120_149": "120-149", "150_179": "150-179", "180_209": "180-209", "210_239": "210-239", "gte240": ">= 240"}
+VISUAL_META = {
+    "overtake": ("超车", "不同视觉速度的音符在击打前交换前后关系"),
+    "scrollChange": ("滚速变化", "HS 变化时重新判断视觉速度"),
+    "reverse": ("逆向", "负 HS 音符从相反方向接近判定点"),
+    "verticalReverse": ("纵向逆向", "复数 HS 的负虚部让音符沿相反纵向移动"),
+    "complexScroll": ("复数滚动", "复数 HS 让音符沿二维斜向轨迹接近判定点"),
+    "stopped": ("停止", "HS 为零时失去正常移动提示"),
+    "compressed": ("视觉压缩", "低 HS 让视觉间距比实际节奏更密"),
+    "expanded": ("视觉拉伸", "高 HS 让视觉间距比实际节奏更疏"),
+    "bmScroll": ("BM 滚动", "忽略 HS 与 BPM 绝对值、按有符号拍位显示"),
+    "hbScroll": ("HB 滚动", "保留 HS、按有符号拍位而非时间距离显示"),
+}
 
 
 def _number(value, fallback=0.0):
@@ -78,257 +76,387 @@ def _number(value, fallback=0.0):
         return fallback
 
 
-def _score(value):
-    return max(0.0, min(MAX_RATING, _number(value)))
-
-
 def _fixed(value, digits=2):
     return f"{_number(value):.{digits}f}"
 
 
-def _box(ax, x, y, width, height, color, edge=None, radius=24, z=1):
-    ax.add_patch(FancyBboxPatch((x, y), width, height,
-                                boxstyle=f"round,pad=0,rounding_size={radius}",
-                                facecolor=color, edgecolor=edge or "none",
-                                linewidth=1.5, zorder=z))
-
-
-def _text(ax, value, x, y, size, color=INK, weight="normal", align="left", family=None, z=5):
-    font_properties = None
-    if any(ord(char) > 127 for char in str(value)):
-        font_properties = _cjk_font
-    if family == "monospace" and font_properties is None:
-        family = "monospace"
-    elif font_properties is not None:
-        family = "sans-serif"
-    ax.text(x, y, str(value), fontsize=size, color=color, fontweight=weight,
-            ha=align, va="top", family=family if font_properties is None else None,
-            fontproperties=font_properties, zorder=z)
-
-
-def _wrap(value, max_width, size, limit=3):
-    """Wrap by estimated rendered width, not character count.
-
-    CJK glyphs are close to one em while Latin text is narrower. Character
-    count alone was the source of the long lines escaping the fixed cards.
-    """
-    lines, current, current_width = [], "", 0.0
-    for char in str(value or ""):
-        char_width = size * (1.02 if ord(char) > 127 else 0.58)
-        if current and current_width + char_width > max_width:
-            lines.append(current)
-            current, current_width = char, char_width
-            if len(lines) == limit:
-                break
-        else:
-            current += char
-            current_width += char_width
-    if len(lines) < limit and current:
-        lines.append(current)
-    if not lines:
-        lines = [""]
-    if len(lines) == limit and sum(1 for _ in str(value or "")) > len("".join(lines)):
-        lines[-1] = lines[-1][:-1] + "…"
-    return lines
-
-
-def _wrapped(ax, value, x, y, width, size, line_height, color=MUTED, weight="normal", limit=3):
-    for index, line in enumerate(_wrap(value, width, size, limit)):
-        _text(ax, line, x, y + index * line_height, size, color, weight)
-
-
-def _truncate(value, max_width, size):
-    text = str(value or "")
-    return _wrap(text, max_width, size, 1)[0]
-
-
-def _level(level):
-    return {4: "鬼", 5: "里"}.get(level, f"Lv.{level}")
-
-
 def _stage(rating):
-    if rating < 1: return ("冰冻石核", "你的 Rating 正孕育一颗冰冻星核", "#8bb8cf")
-    if rating < 5: return ("逐步解冻", "你的 Rating 正在解冻一颗沉睡星核", "#b7c3bf")
-    if rating < 7: return ("岩浆混合体", "你的 Rating 正在唤醒一颗岩浆星", "#ef7044")
-    if rating < 9: return ("日冕成长期", "你的 Rating 正在点燃一颗恒星", "#ffb13c")
-    if rating < 10: return ("类太阳体", "你的 Rating 正在稳定一颗类太阳体", "#ffd45a")
-    if rating < 13: return ("超新星前兆", "你的 Rating 正推动恒星走向爆发", "#fff0a3")
-    return ("极亮超新星", "你的 Rating 正照亮一颗极亮超新星", "#f7fbff")
+    if rating < 1: return {"key": "frozen", "label": "冰冻石核", "detail": "核心尚未点燃，表面被冰层与岩石覆盖。", "headline": "你的 Rating 正孕育一颗冰冻星核", "color": "#8bb8cf"}
+    if rating < 5: return {"key": "thawing", "label": "逐步解冻", "detail": "内部热量上升，冰层裂开并出现微弱熔光。", "headline": "你的 Rating 正在解冻一颗沉睡星核", "color": "#b7c3bf"}
+    if rating < 7: return {"key": "magma", "label": "岩浆混合体", "detail": "岩石地壳与岩浆共存，裂隙开始持续喷发。", "headline": "你的 Rating 正在唤醒一颗岩浆星", "color": "#ef7044"}
+    if rating < 9: return {"key": "corona", "label": "日冕成长期", "detail": "恒星点燃，日冕和表面喷流随 Rating 增强。", "headline": "你的 Rating 正在点燃一颗恒星", "color": "#ffb13c"}
+    if rating < 10: return {"key": "solar", "label": "类太阳体", "detail": "稳定恒星状态，表面对流和耀斑活动明显。", "headline": "你的 Rating 正在稳定一颗类太阳体", "color": "#ffd45a"}
+    if rating < 13: return {"key": "nova", "label": "超新星前兆", "detail": "能量持续积聚，冲击波和高温喷流环绕核心。", "headline": "你的 Rating 正推动恒星走向爆发", "color": "#fff0a3"}
+    return {"key": "supernova", "label": "极亮超新星", "detail": "能力核心进入极亮阶段，强烈日冕与冲击波持续爆发。", "headline": "你的 Rating 正照亮一颗极亮超新星", "color": "#f7fbff"}
 
 
-def _families(analysis):
-    raw = (analysis.get("featureAbility") or {}).get("families") or []
-    return [{**item, "key": item.get("key"), "score": _score(item.get("score")),
-             "charts": int(_number(item.get("charts")))} for item in raw if item.get("key")]
+def _orbit_period(score):
+    normalized = max(0.0, min(1.0, score / 14.0))
+    return 10 + 590 * (1 - normalized) ** 3
 
 
-def _draw_header(ax, analysis):
-    meta = analysis.get("meta") or {}
-    _text(ax, "鼓迹", 70, 58, 34, INK, "bold")
-    _text(ax, "TAIKO TRACE", 160, 70, 15, ACCENT, "bold", family="monospace")
-    _text(ax, f"PLAYER {meta.get('playerId') or '--'}", 1370, 56, 15, INK, "bold", "right", "monospace")
-    _text(ax, f"{meta.get('server') or '--'} · AI v2", 1370, 82, 13, MUTED, align="right")
-    ax.plot([70, 1370], [120, 120], color=LINE, lw=1)
+def _format_period(period):
+    if period >= 60:
+        minutes = period / 60
+        return f"{minutes:.0f}m" if minutes >= 10 else f"{minutes:.1f}m"
+    return f"{period:.1f}s"
 
 
-def _draw_hero(ax, analysis, families):
-    rating = _score((analysis.get("summary") or {}).get("rating"))
-    ranked = sorted((f for f in families if f["charts"] >= 3), key=lambda item: item["score"], reverse=True)
-    strongest, weakest = (ranked[0] if ranked else None), (ranked[-1] if ranked else None)
-    stage, _headline, stage_color = _stage(rating)
-    _box(ax, 70, 148, 390, 340, INK, radius=24)
-    _text(ax, "AI 综合 RATING", 108, 192, 18, MINT, "bold", family="monospace")
-    center = (265, 321)
-    ax.add_patch(Wedge(center, 96, 0, 360, width=18, facecolor="white", alpha=.12, zorder=3))
-    ax.add_patch(Wedge(center, 96, 90, 90 - rating / MAX_RATING * 360, width=18, facecolor=ACCENT, zorder=4))
-    _text(ax, _fixed(rating), 265, 290, 54, "white", "bold", "center", "monospace")
-    _text(ax, "/ 15.50", 265, 355, 16, "#8f9ca8", align="center", family="monospace")
-    _box(ax, 108, 426, 314, 36, "#26313d", radius=18)
-    _text(ax, f"恒星阶段 · {stage}", 265, 434, 14, stage_color, "bold", "center")
-    _box(ax, 480, 148, 890, 340, SURFACE, LINE, radius=24)
-    _text(ax, "本次关键结论", 528, 190, 17, ACCENT_DARK, "bold", family="monospace")
-    headline = f"{DIM_NAME.get(strongest['key'], strongest['key'])}最突出，{DIM_NAME.get(weakest['key'], weakest['key'])}是当前突破口" if strongest and weakest else "有效成绩已生成，能力证据仍待补充"
-    _wrapped(ax, headline, 528, 228, 790, 41, 52, INK, "bold", 2)
-    summary = (f"七类能力最大差距为 {_fixed(strongest['score'] - weakest['score'])}。保持{DIM_NAME.get(strongest['key'], strongest['key'])}优势；下一轮优先处理{DIM_NAME.get(weakest['key'], weakest['key'])}。" if strongest and weakest else "当前数据不足以稳定比较七类能力，请继续积累鬼或里难度成绩。")
-    _wrapped(ax, summary, 528, 340, 790, 20, 32, MUTED, limit=2)
-    tags = []
-    if strongest: tags.append(f"优势 · {DIM_NAME.get(strongest['key'], strongest['key'])} {_fixed(strongest['score'])}")
-    if weakest: tags.append(f"补强 · {DIM_NAME.get(weakest['key'], weakest['key'])} {_fixed(weakest['score'])}")
-    x = 528
-    for tag in tags[:2]:
-        tag = _truncate(tag, 220, 15)
-        tag_width = min(250, max(150, len(tag) * 11 + 30))
-        _box(ax, x, 422, tag_width, 32, SURFACE_SOFT, radius=16)
-        _text(ax, tag, x + 15, 429, 15, INK_SOFT, "bold")
-        x += tag_width + 12
-    return ranked
+def _rhythm_label(pattern):
+    return RHYTHM_META.get(pattern, str(pattern or "").replace("_", " "))
 
 
-def _draw_galaxy(ax, analysis, families):
-    rating = _score((analysis.get("summary") or {}).get("rating"))
-    stage, headline, stage_color = _stage(rating)
-    ranked = sorted((f for f in families if f["charts"] >= 3), key=lambda item: item["score"], reverse=True)
-    center = sum(item["score"] for item in ranked) / len(ranked) if ranked else 0
-    _text(ax, "01 / GALAXY", 78, 530, 17, ACCENT_DARK, "bold", family="monospace")
-    _text(ax, "能力星系数据", 78, 560, 34, INK, "bold")
-    _box(ax, 70, 620, 1300, 615, "#050911", "#263345", radius=24)
-    _text(ax, headline, 106, 655, 25, "white", "bold")
-    _wrapped(ax, f"恒星阶段：{stage}。七颗能力行星以同一 15.50 标尺呈现。", 106, 693, 570, 15, 24, "#9caaba", limit=2)
-    cx, cy = 382, 945
-    for index, item in enumerate(RADAR_DIMS):
-        key, _label, color, _planet = item
-        score = next((f["score"] for f in families if f["key"] == key), 0)
-        rx, ry = 72 + index * 38, 30 + index * 15
-        ax.add_patch(Ellipse((cx, cy), rx * 2, ry * 2, angle=-7,
-                             fill=False, edgecolor="#97b8e2", alpha=.12 + index * .012))
-        angle = -.7 + index * .91
-        px, py = cx + math.cos(angle) * rx, cy + math.sin(angle) * ry
-        ax.scatter([px], [py], s=50 + score / MAX_RATING * 120, color=color, alpha=.95, zorder=4)
-    ax.scatter([cx], [cy], s=350, color=stage_color, alpha=.85, zorder=3)
-    _text(ax, _fixed(rating), cx, cy - 15, 22, INK, "bold", "center", "monospace", 6)
-    _box(ax, 106, 1142, 570, 58, "#101722", "#36475c", radius=14)
-    _text(ax, f"阶段 {stage}", 128, 1158, 14, stage_color, "bold")
-    spread = ranked[0]["score"] - ranked[-1]["score"] if len(ranked) > 1 else 0
-    _text(ax, f"中位 {_fixed(center)} · 最大差 {_fixed(spread)}", 650, 1158, 14, "#c4ced9", "bold", "right", "monospace")
-    ax.plot([735, 735], [650, 1200], color="#263345")
-    _text(ax, "七颗能力行星", 778, 654, 18, "white", "bold")
-    _text(ax, "分数 / 证据 / 相对中位", 1328, 658, 12, "#93a3b5", align="right", family="monospace")
-    for index, (key, label, color, planet) in enumerate(RADAR_DIMS):
-        item = next((f for f in families if f["key"] == key), {"score": 0, "charts": 0})
-        y = 706 + index * 68
-        if index: ax.plot([778, 1328], [y - 10, y - 10], color="#97b8e2", alpha=.12)
-        ax.scatter([791], [y + 13], s=50, color=color)
-        _text(ax, planet, 812, y, 15, "white", "bold")
-        _text(ax, label, 920, y + 1, 14, "#9caaba")
-        _text(ax, _fixed(item.get("score")), 1160, y - 3, 23, color, "bold", "right", "monospace")
-        _text(ax, f"{item.get('charts', 0)} 张 · {item.get('score', 0) - center:+.2f}", 1183, y + 2, 12, "#c4ced9", family="monospace")
-        _box(ax, 812, y + 32, 348, 7, "#263345", radius=4)
-        _box(ax, 812, y + 32, max(5, item.get("score", 0) / MAX_RATING * 348), 7, color, radius=4)
+def _bpm_label(band):
+    return BPM_META.get(band, str(band or "--"))
 
 
-def _draw_actions(ax, analysis, families):
-    ranked = sorted((f for f in families if f["charts"] >= 3), key=lambda item: item["score"])
-    rhythm = (analysis.get("rhythmAbility") or {}).get("weakest") or []
-    weakest = ranked[0] if ranked else None
+def _rhythm_practice(item):
+    cue = "先降低一个 BPM 档" if item.get("bpmBand") in ("gte240", "210_239") else "先在同 BPM 的低压谱面中"
+    pattern = str(item.get("pattern") or "")
+    if "fish" in pattern: return f"{cue}分段练连续放松与换手，稳定后再延长。"
+    if any(token in pattern for token in ("24", "32", "twentyfourth", "thirtysecond")): return f"{cue}练短串爆发，动作保持小而均匀。"
+    if any(token in pattern for token in ("16-3", "16-4", "16-5", "16-6", "16-7", "sixteenth")): return f"{cue}固定起手与配色，连续稳定后再提高压力。"
+    if "12" in pattern: return f"{cue}口读三等分拍点，再回谱面确认落点。"
+    return f"{cue}跟随节拍口读并击打，确认空拍与落点。"
+
+
+def _append_evidence(target, seen, rows, focus, color, limit):
+    for row in (rows or [])[:limit]:
+        key = f"{row.get('id')}-{row.get('level')}"
+        if key in seen or len(target) >= 5:
+            continue
+        seen.add(key)
+        target.append({
+            "focus": focus, "color": color, "title": row.get("title") or f"谱面 {row.get('id')}",
+            "level": "里" if row.get("level") == 5 else "鬼" if row.get("level") == 4 else f"Lv.{row.get('level')}",
+            "rating": _number(row.get("rating")), "accuracy": _number(row.get("accuracy")),
+            "constant": _number(row.get("aiConstant") if row.get("aiConstant") is not None else row.get("constant")),
+        })
+
+
+def build_report_data(analysis: dict, generated_at: datetime | None = None) -> dict:
+    """Build the same compact summary consumed by the website Canvas renderer."""
+    generated_at = generated_at or datetime.now()
+    rating = _number((analysis.get("summary") or {}).get("rating"))
+    raw_families = (analysis.get("featureAbility") or {}).get("families") or []
+    families = []
+    for raw in raw_families:
+        if _number(raw.get("charts")) < 3:
+            continue
+        key = raw.get("key")
+        meta = FAMILY_META.get(key, {})
+        families.append({**raw, "key": key, "label": meta.get("label", key), "color": meta.get("color", ACCENT),
+                         "description": meta.get("description", ""), "score": _number(raw.get("score")), "charts": int(_number(raw.get("charts")))})
+    families.sort(key=lambda item: item["score"], reverse=True)
+    center = median([item["score"] for item in families]) if families else 0.0
+    strongest = families[0] if families else None
+    weakest = families[-1] if families else None
+    rhythm = analysis.get("rhythmAbility") or {}
+    best_rhythm = (rhythm.get("best") or [None])[0]
+    weak_rhythm = (rhythm.get("weakest") or [None])[0]
+    visuals = [item for item in (rhythm.get("visual") or {}).values() if _number(item.get("charts")) >= 3]
+    weakest_visual = min(visuals, key=lambda item: _number(item.get("score")), default=None)
+    unique = int(_number((analysis.get("meta") or {}).get("uniqueCharts")))
+    matched = int(_number((analysis.get("featureAbility") or {}).get("matchedCharts")))
+    public_rating = _number(((analysis.get("ourTaikoV1") or {}).get("summary") or {}).get("rating"), math.nan)
+    stage = _stage(rating)
+
+    planets = []
+    family_map = {item["key"]: item for item in families}
+    ranked_keys = [item["key"] for item in families]
+    for index, key in enumerate(FAMILY_ORDER):
+        meta = FAMILY_META[key]
+        item = family_map.get(key, {"score": 0.0, "charts": 0})
+        score = _number(item.get("score"))
+        planets.append({**item, "key": key, "name": meta["planet"], "label": meta["label"],
+                        "color": meta["planetColor"], "score": score, "charts": int(_number(item.get("charts"))),
+                        "normalized": max(0.0, min(1.0, score / 14.0)), "period": _orbit_period(score),
+                        "delta": score - center, "rank": ranked_keys.index(key) + 1 if key in ranked_keys else 0,
+                        "index": index})
+
     actions = []
     if weakest:
-        actions.append(("01 / 能力突破口", f"{DIM_NAME.get(weakest['key'], weakest['key'])}补强", weakest["score"], f"{weakest['charts']} 张能力证据", f"围绕{DIM_NAME.get(weakest['key'], weakest['key'])}选择低压谱面，稳定后再提高压力。"))
-    if rhythm:
-        item = rhythm[0]
-        actions.append(("02 / 节奏突破口", f"{item.get('pattern', '节奏型')} · BPM {item.get('bpmBand', '--')}", _score(item.get("score")), f"{item.get('charts', 0)} 张节奏证据", "先在同 BPM 的低压谱面中分段练习，确认空拍与落点。"))
-    actions.append(("03 / 目视突破口", "目视变化识别", weakest["score"] if weakest else 0, "静态画像建议", "先降低击打压力，单独识别视觉变化，再回到实战谱面。"))
-    _text(ax, "02 / DIAGNOSIS", 78, 1270, 17, ACCENT_DARK, "bold", family="monospace")
-    _text(ax, "关键弱项与下一步动作", 78, 1300, 34, INK, "bold")
-    width, gap = (1300 - 36) / 3, 18
-    for index, (category, title, score, evidence, method) in enumerate(actions[:3]):
-        x = 70 + index * (width + gap)
-        _box(ax, x, 1358, width, 332, "#f8ddd6" if index == 0 else SURFACE, LINE, radius=20)
-        _text(ax, category, x + 28, 1386, 14, ACCENT_DARK if index == 0 else MUTED, "bold", family="monospace")
-        _wrapped(ax, title, x + 28, 1420, 322, 23, 30, INK, "bold", 2)
-        _text(ax, f"{_fixed(score)} · {evidence}", x + 28, 1486, 14, MUTED, "bold", family="monospace")
-        ax.plot([x + 28, x + width - 28], [1592, 1592], color=LINE)
-        _text(ax, "建议动作", x + 28, 1610, 12, ACCENT_DARK if index == 0 else MINT_DARK, "bold", family="monospace")
-        _wrapped(ax, method, x + 28, 1633, 322, 15, 22, INK_SOFT, limit=2)
+        actions.append({"index": "01", "category": "能力突破口", "title": f"{weakest['label']}补强", "score": weakest["score"],
+                        "evidence": f"{weakest['charts']} 张能力证据", "signal": f"{weakest['description']}低于个人七项能力中位 {_fixed(abs(weakest['score'] - center))}。",
+                        "method": FAMILY_PRACTICE.get(weakest["key"], f"围绕{weakest['description']}选择低压谱面稳定练习。")})
+    if weak_rhythm:
+        actions.append({"index": "02", "category": "节奏突破口", "title": f"{_rhythm_label(weak_rhythm.get('pattern'))} · BPM {_bpm_label(weak_rhythm.get('bpmBand'))}",
+                        "score": _number(weak_rhythm.get("score")), "evidence": f"{int(_number(weak_rhythm.get('charts')))} 张节奏证据",
+                        "signal": f"平均 BPM {_fixed(weak_rhythm.get('averageBpm'), 0)}，是当前合格节奏单元中的优先补强项。", "method": _rhythm_practice(weak_rhythm)})
+    if weakest_visual:
+        visual_key = weakest_visual.get("key")
+        visual_label, visual_desc = VISUAL_META.get(visual_key, (visual_key or "目视变化", "视觉变化"))
+        actions.append({"index": "03", "category": "目视突破口", "title": f"{visual_label}识别", "score": _number(weakest_visual.get("score")),
+                        "evidence": f"{int(_number(weakest_visual.get('charts')))} 张目视证据", "signal": f"{visual_desc}，暴露权重 {_fixed(weakest_visual.get('exposure'))}。",
+                        "method": f"先降低击打压力，单独识别{visual_desc}，再回到实战谱面。"})
 
+    evidence, seen = [], set()
+    _append_evidence(evidence, seen, weakest.get("best") if weakest else [], weakest.get("label") if weakest else "能力补强", weakest.get("color") if weakest else ACCENT, 2)
+    _append_evidence(evidence, seen, weak_rhythm.get("best") if weak_rhythm else [], _rhythm_label(weak_rhythm.get("pattern")) if weak_rhythm else "节奏补强", ACCENT_DARK, 2)
+    if weakest_visual:
+        visual_label = VISUAL_META.get(weakest_visual.get("key"), (weakest_visual.get("key"), ""))[0]
+        _append_evidence(evidence, seen, weakest_visual.get("best"), visual_label, "#66727c", 1)
+    records = sorted(analysis.get("records") or [], key=lambda row: _number(row.get("rating")), reverse=True)
+    _append_evidence(evidence, seen, records, "综合上限", MINT_DARK, 5)
+    for index, row in enumerate(evidence): row["rank"] = index + 1
 
-def _draw_evidence(ax, analysis):
-    records = sorted(analysis.get("records") or [], key=lambda item: -_score(item.get("rating")))[:5]
-    _text(ax, "03 / EVIDENCE", 78, 1725, 17, ACCENT_DARK, "bold", family="monospace")
-    _text(ax, "支撑弱项判断的关键谱面", 78, 1755, 34, INK, "bold")
-    _box(ax, 70, 1813, 1300, 352, SURFACE, LINE, radius=20)
-    for label, x in (("#", 102), ("对应判断", 150), ("谱面", 340), ("难度", 950), ("AI 定数", 1040), ("准确率", 1162), ("Rating", 1322)):
-        _text(ax, label, x, 1836, 12, MUTED, "bold", "right" if label == "Rating" else "left", "monospace")
-    for index, row in enumerate(records):
-        y = 1878 + index * 53
-        if index: ax.plot([96, 1344], [y - 12, y - 12], color=LINE)
-        _text(ax, f"{index + 1:02d}", 102, y + 2, 13, QUIET, "bold", family="monospace")
-        _box(ax, 148, y - 3, 162, 28, "#ebe7dd", radius=14)
-        _text(ax, "综合上限", 229, y + 3, 12, MINT_DARK, "bold", "center")
-        title = _truncate(row.get("title") or f"谱面 {row.get('id')}", 570, 16)
-        _text(ax, title, 340, y, 16, INK, "bold")
-        _text(ax, _level(row.get("level")), 950, y + 2, 14, MUTED, "bold")
-        _text(ax, _fixed(row.get("aiConstant") or row.get("constant"), 1), 1040, y + 2, 14, INK_SOFT, "bold", family="monospace")
-        _text(ax, f"{_number(row.get('accuracy')) * 100:.2f}%", 1162, y + 2, 14, INK_SOFT, "bold", family="monospace")
-        _text(ax, _fixed(row.get("rating")), 1322, y - 1, 18, INK, "bold", "right", "monospace")
-
-
-def render_report_image(analysis: dict, out_path: str) -> str:
-    """Render the same fixed report hierarchy as the source Canvas exporter."""
-    _setup_fonts()
-    fig = plt.figure(figsize=(WIDTH / 100, HEIGHT / 100), dpi=100)
-    fig.patch.set_facecolor(PAPER)
-    ax = fig.add_axes([0, 0, 1, 1])
-    ax.set_xlim(0, WIDTH)
-    ax.set_ylim(HEIGHT, 0)
-    ax.axis("off")
-    ax.set_facecolor(PAPER)
-    ax.set_xticks(range(0, WIDTH + 1, 40), minor=False)
-    ax.set_yticks(range(0, HEIGHT + 1, 40), minor=False)
-    ax.grid(True, color=INK, alpha=.025, linewidth=.5)
-    ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
-    _draw_header(ax, analysis)
-    families = _families(analysis)
-    _draw_hero(ax, analysis, families)
-    _draw_galaxy(ax, analysis, families)
-    _draw_actions(ax, analysis, families)
-    _draw_evidence(ax, analysis)
-    metrics = [
-        ("有效谱面", str((analysis.get("meta") or {}).get("uniqueCharts") or 0), "去重后的最佳成绩"),
-        ("特征覆盖", f"{_number((analysis.get('featureAbility') or {}).get('matchedCharts')) / max(_number((analysis.get('meta') or {}).get('uniqueCharts')), 1) * 100:.1f}%", "有完整画像"),
-        ("v1 参考差", _fixed(_number((analysis.get("summary") or {}).get("rating")) - _number(((analysis.get("ourTaikoV1") or {}).get("summary") or {}).get("rating"))), "仅用于标尺对照"),
-        ("未纳入成绩", str(_number((analysis.get("counts") or {}).get("belowThreshold")) + _number((analysis.get("counts") or {}).get("missing"))), "低准确率或未匹配"),
-    ]
-    for index, (label, value, note) in enumerate(metrics):
-        x = 70 + index * ((1300 + 12) / 4)
-        _box(ax, x, 2200, 316, 88, "#fffdf8", LINE, radius=14)
-        _text(ax, label, x + 18, 2217, 11, QUIET, "bold", family="monospace")
-        _text(ax, value, x + 18, 2238, 22, INK_SOFT, "bold", family="monospace")
-        _text(ax, note, x + 300, 2243, 11, MUTED, align="right")
+    tags = []
+    if strongest: tags.append(f"优势 · {strongest['label']} {_fixed(strongest['score'])}")
+    if weakest: tags.append(f"补强 · {weakest['label']} {_fixed(weakest['score'])}")
+    if best_rhythm: tags.append(f"节奏强项 · {_rhythm_label(best_rhythm.get('pattern'))}")
+    if weak_rhythm: tags.append(f"节奏短板 · {_rhythm_label(weak_rhythm.get('pattern'))}")
+    counts = analysis.get("counts") or {}
     meta = analysis.get("meta") or {}
-    _text(ax, f"AI 主结果 · 玩家成绩只用于本次报告 · {meta.get('server') or '--'}", 70, 2335, 12, MUTED)
-    _text(ax, "星系为能力数据的静态表达；不代表历史趋势、通关预测或官方竞技裁定。", 70, 2360, 12, MUTED)
-    _text(ax, "报告含玩家 ID 与成绩摘要，请按个人数据妥善分享。", 1370, 2360, 12, ACCENT_DARK, "bold", "right")
-    os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
-    fig.savefig(out_path, dpi=100, facecolor=PAPER, pil_kwargs={"compress_level": 6})
-    plt.close(fig)
-    return out_path
+    return {
+        "playerId": str(meta.get("playerId") or "未提供编号"), "server": str(meta.get("server") or "未知服务器"),
+        "generatedAt": f"{generated_at.year}年{generated_at.month}月{generated_at.day}日", "model": "Taiko Signal Rhythm v2 2026-08-05",
+        "rating": rating, "stage": stage, "planets": planets, "center": center,
+        "spread": strongest["score"] - weakest["score"] if strongest and weakest else 0,
+        "galaxyHeadline": stage["headline"],
+        "headline": f"{strongest['label']}最突出，{weakest['label']}是当前突破口" if strongest and weakest else "有效成绩已生成，能力证据仍待补充",
+        "summary": f"七类能力最大差距为 {_fixed(strongest['score'] - weakest['score'])}。保持{strongest['label']}优势，下一轮优先处理{weakest['description']}。" if strongest and weakest else "当前数据不足以稳定比较七类能力，请继续积累鬼或里难度成绩。",
+        "tags": tags, "actions": actions[:3], "evidence": evidence,
+        "metrics": [
+            {"label": "有效谱面", "value": str(unique), "note": "去重后的最佳成绩"},
+            {"label": "特征覆盖", "value": f"{matched / max(unique, 1) * 100:.1f}%", "note": f"{matched} 张有完整画像"},
+            {"label": "v1 参考差", "value": f"{rating - public_rating:+.2f}" if math.isfinite(public_rating) else "--", "note": "仅用于标尺对照"},
+            {"label": "未纳入成绩", "value": str(int(_number(counts.get("belowThreshold")) + _number(counts.get("missing")))), "note": f"{int(_number(counts.get('belowThreshold')))} 条低准确率 · {int(_number(counts.get('missing')))} 条未匹配"},
+        ],
+        "sourceNote": "AI 主结果 · v2 · 玩家成绩只用于本次报告",
+    }
+
+
+def _font_path():
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resource", "NotoSansCJKsc-Regular.otf")
+    if not os.path.isfile(path):
+        raise RuntimeError("插件缺少 resource/NotoSansCJKsc-Regular.otf，无法稳定渲染中文")
+    return path
+
+
+@lru_cache(maxsize=64)
+def _font(size, bold=False):
+    return ImageFont.truetype(_font_path(), size=size)
+
+
+def _text(draw, value, x, y, size, color=INK, bold=False, align="left"):
+    font = _font(size, bold)
+    anchor = {"left": "lt", "center": "mt", "right": "rt"}[align]
+    draw.text((x, y), str(value), font=font, fill=color, anchor=anchor,
+              stroke_width=1 if bold and size >= 15 else 0, stroke_fill=color)
+
+
+def _measure(draw, value, size, bold=False):
+    return draw.textlength(str(value), font=_font(size, bold))
+
+
+def _lines(draw, value, max_width, size, bold=False):
+    result = []
+    for paragraph in str(value or "").split("\n"):
+        current = ""
+        for char in paragraph:
+            candidate = current + char
+            if current and _measure(draw, candidate, size, bold) > max_width:
+                result.append(current.rstrip())
+                current = char.lstrip()
+            else:
+                current = candidate
+        if current or not paragraph:
+            result.append(current)
+    return result
+
+
+def _wrapped(draw, value, x, y, max_width, size, line_height, color=MUTED, bold=False, limit=3):
+    lines = _lines(draw, value, max_width, size, bold)
+    visible = lines[:limit]
+    if len(lines) > limit and visible:
+        last = visible[-1]
+        while last and _measure(draw, last + "…", size, bold) > max_width:
+            last = last[:-1]
+        visible[-1] = last + "…"
+    for index, line in enumerate(visible):
+        _text(draw, line, x, y + index * line_height, size, color, bold)
+    return len(visible) * line_height
+
+
+def _truncate(draw, value, max_width, size, bold=False):
+    value = str(value or "")
+    if _measure(draw, value, size, bold) <= max_width:
+        return value
+    while value and _measure(draw, value + "…", size, bold) > max_width:
+        value = value[:-1]
+    return value + "…"
+
+
+def _box(draw, x, y, width, height, fill, outline=None, radius=24, line_width=2):
+    draw.rounded_rectangle((x, y, x + width, y + height), radius=radius, fill=fill, outline=outline, width=line_width)
+
+
+def _section(draw, index, title, y):
+    _text(draw, index, 78, y, 17, ACCENT_DARK, True)
+    _text(draw, title, 78, y + 30, 34, INK, True)
+
+
+def _draw_ring(draw, rating):
+    bounds = (169, 225, 361, 417)
+    draw.ellipse(bounds, outline="#36414d", width=18)
+    start = -90
+    end = start + 360 * min(rating / MAX_RATING, 1)
+    draw.arc(bounds, start=start, end=end, fill=ACCENT, width=18)
+    radius, cx, cy = 96, 265, 321
+    for angle in (start, end):
+        radians = math.radians(angle)
+        px, py = cx + radius * math.cos(radians), cy + radius * math.sin(radians)
+        draw.ellipse((px - 9, py - 9, px + 9, py + 9), fill=ACCENT)
+
+
+def _planet_glow(image, x, y, radius, color):
+    layer = Image.new("RGBA", image.size, (0, 0, 0, 0))
+    ld = ImageDraw.Draw(layer)
+    ld.ellipse((x - radius * 2, y - radius * 2, x + radius * 2, y + radius * 2), fill=color + "88")
+    layer = layer.filter(ImageFilter.GaussianBlur(radius))
+    image.alpha_composite(layer)
+
+
+def _draw_header_footer(draw, data):
+    _text(draw, "鼓迹", 70, 58, 33, INK, True)
+    _text(draw, "TAIKO TRACE", 160, 70, 15, ACCENT, True)
+    _text(draw, f"PLAYER {data['playerId']}", 1370, 56, 15, INK, True, "right")
+    _text(draw, f"{data['generatedAt']} · {data['server']} · {data['model']}", 1370, 82, 13, MUTED, False, "right")
+    draw.line((70, 120, 1370, 120), fill=LINE, width=2)
+    _text(draw, data["sourceNote"], 70, 2335, 12, MUTED)
+    _text(draw, "星系为能力数据的静态表达；不代表历史趋势、通关预测或官方竞技裁定。", 70, 2360, 12, MUTED)
+    _text(draw, "报告含玩家 ID 与成绩摘要，请按个人数据妥善分享。", 1370, 2360, 12, ACCENT_DARK, True, "right")
+
+
+def _draw_hero(draw, data):
+    _box(draw, 70, 148, 390, 340, INK)
+    _text(draw, "AI 综合 RATING", 108, 192, 18, MINT, True)
+    _draw_ring(draw, data["rating"])
+    _text(draw, _fixed(data["rating"]), 265, 290, 54, "#ffffff", True, "center")
+    _text(draw, "/ 15.50", 265, 355, 16, "#8f9ca8", False, "center")
+    _box(draw, 108, 426, 314, 36, "#26313d", radius=18)
+    _text(draw, f"恒星阶段 · {data['stage']['label']}", 265, 434, 14, data["stage"]["color"], True, "center")
+    _box(draw, 480, 148, 890, 340, SURFACE, LINE)
+    _text(draw, "本次关键结论", 528, 190, 17, ACCENT_DARK, True)
+    _wrapped(draw, data["headline"], 528, 228, 790, 41, 52, INK, True, 2)
+    _wrapped(draw, data["summary"], 528, 340, 790, 20, 32, MUTED, False, 2)
+    x, y = 528, 422
+    for value in data["tags"][:4]:
+        width = min(_measure(draw, value, 15, True) + 30, 360)
+        if x + width > 1320:
+            x, y = 528, y + 42
+        _box(draw, x, y, width, 32, SURFACE_SOFT, radius=16)
+        _text(draw, value, x + 15, y + 7, 15, INK_SOFT, True)
+        x += width + 10
+
+
+def _draw_galaxy(image, draw, data):
+    _section(draw, "01 / GALAXY", "能力星系数据", 530)
+    _box(draw, 70, 620, 1300, 615, "#050911", "#263345")
+    _text(draw, data["galaxyHeadline"], 106, 655, 25, "#ffffff", True)
+    _wrapped(draw, data["stage"]["detail"], 106, 693, 570, 15, 24, "#9caaba", False, 2)
+    cx, cy = 382, 945
+    orbit_layer = Image.new("RGBA", (620, 420), (0, 0, 0, 0))
+    od = ImageDraw.Draw(orbit_layer)
+    local_cx, local_cy = 310, 210
+    for index, planet in enumerate(data["planets"]):
+        rx, ry = 72 + index * 38, 30 + index * 15
+        od.ellipse((local_cx - rx, local_cy - ry, local_cx + rx, local_cy + ry), outline=(151, 184, 226, 38 + index * 3), width=2)
+    rotated = orbit_layer.rotate(7, resample=Image.Resampling.BICUBIC, expand=False)
+    image.alpha_composite(rotated, (cx - local_cx, cy - local_cy))
+    for index, planet in enumerate(data["planets"]):
+        rx, ry = 72 + index * 38, 30 + index * 15
+        angle = -.7 + index * .91
+        x, y = cx + math.cos(angle) * rx, cy + math.sin(angle) * ry
+        radius = 7 + planet["normalized"] * 8
+        _planet_glow(image, x, y, radius, planet["color"])
+        draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=planet["color"])
+    _planet_glow(image, cx, cy, 38, data["stage"]["color"])
+    draw.ellipse((cx - 39, cy - 39, cx + 39, cy + 39), fill=data["stage"]["color"])
+    _text(draw, _fixed(data["rating"]), cx, cy - 15, 22, INK, True, "center")
+    _box(draw, 106, 1142, 570, 58, "#101722", "#36475c", radius=14)
+    _text(draw, f"阶段 {data['stage']['label']}", 128, 1158, 14, data["stage"]["color"], True)
+    _text(draw, f"中位 {_fixed(data['center'])}  ·  最大差 {_fixed(data['spread'])}", 650, 1158, 14, "#c4ced9", True, "right")
+    draw.line((735, 650, 735, 1200), fill="#263345", width=2)
+    _text(draw, "七颗能力行星", 778, 654, 18, "#ffffff", True)
+    _text(draw, "分数 / 证据 / 相对中位 / 公转周期", 1328, 658, 12, "#93a3b5", False, "right")
+    for index, planet in enumerate(data["planets"]):
+        y = 706 + index * 68
+        if index:
+            draw.line((778, y - 10, 1328, y - 10), fill="#1c2a3a", width=1)
+        draw.ellipse((784, y + 6, 798, y + 20), fill=planet["color"])
+        _text(draw, planet["name"], 812, y, 15, "#ffffff", True)
+        _text(draw, planet["label"], 920, y + 1, 14, "#9caaba")
+        _text(draw, f"#{planet['rank']}" if planet["rank"] else "--", 1062, y + 2, 12, "#75869a", True)
+        _text(draw, _fixed(planet["score"]), 1160, y - 3, 23, planet["color"], True, "right")
+        _text(draw, f"{planet['charts']} 张 · {planet['delta']:+.2f}", 1183, y + 2, 12, "#c4ced9")
+        _text(draw, _format_period(planet["period"]), 1328, y + 2, 13, "#93a3b5", True, "right")
+        _box(draw, 812, y + 32, 348, 7, "#1b2430", radius=4)
+        _box(draw, 812, y + 32, max(5, min(348, planet["score"] / MAX_RATING * 348)), 7, planet["color"], radius=4)
+
+
+def _draw_actions(draw, data):
+    _section(draw, "02 / DIAGNOSIS", "关键弱项与下一步动作", 1270)
+    gap, width = 18, (1300 - 36) / 3
+    for index, item in enumerate(data["actions"]):
+        x = 70 + index * (width + gap)
+        _box(draw, x, 1358, width, 332, "#f8ddd6" if index == 0 else SURFACE, LINE, radius=20)
+        color = ACCENT_DARK if index == 0 else MUTED
+        _text(draw, f"{item['index']} / {item['category']}", x + 28, 1386, 14, color, True)
+        _wrapped(draw, item["title"], x + 28, 1420, width - 56, 23, 30, INK, True, 2)
+        _text(draw, f"{_fixed(item['score'])} · {item['evidence']}", x + 28, 1486, 14, MUTED, True)
+        _wrapped(draw, item["signal"], x + 28, 1520, width - 56, 15, 23, MUTED, False, 3)
+        draw.line((x + 28, 1592, x + width - 28, 1592), fill=LINE, width=2)
+        _text(draw, "建议动作", x + 28, 1610, 12, ACCENT_DARK if index == 0 else MINT_DARK, True)
+        _wrapped(draw, item["method"], x + 28, 1633, width - 56, 15, 22, INK_SOFT, False, 2)
+
+
+def _draw_evidence(draw, data):
+    _section(draw, "03 / EVIDENCE", "支撑弱项判断的关键谱面", 1725)
+    _box(draw, 70, 1813, 1300, 352, SURFACE, LINE, radius=20)
+    headers = (("#", 102), ("对应判断", 150), ("谱面", 340), ("难度", 950), ("AI 定数", 1040), ("准确率", 1162), ("Rating", 1322))
+    for label, x in headers:
+        _text(draw, label, x, 1836, 12, MUTED, True, "right" if label == "Rating" else "left")
+    for index, row in enumerate(data["evidence"]):
+        y = 1878 + index * 53
+        if index:
+            draw.line((96, y - 12, 1344, y - 12), fill=LINE, width=2)
+        _text(draw, f"{row['rank']:02d}", 102, y + 2, 13, QUIET, True)
+        _box(draw, 148, y - 3, 162, 28, SURFACE_SOFT, radius=14)
+        _text(draw, _truncate(draw, row["focus"], 142, 12, True), 229, y + 3, 12, row["color"], True, "center")
+        _text(draw, _truncate(draw, row["title"], 570, 16, True), 340, y, 16, INK, True)
+        _text(draw, row["level"], 950, y + 2, 14, MUTED, True)
+        _text(draw, _fixed(row["constant"], 1), 1040, y + 2, 14, INK_SOFT, True)
+        _text(draw, f"{row['accuracy'] * 100:.2f}%", 1162, y + 2, 14, INK_SOFT, True)
+        _text(draw, _fixed(row["rating"]), 1322, y - 1, 18, INK, True, "right")
+
+
+def _draw_metrics(draw, data):
+    gap, width = 12, (1300 - 36) / 4
+    for index, item in enumerate(data["metrics"]):
+        x = 70 + index * (width + gap)
+        _box(draw, x, 2200, width, 88, SURFACE, LINE, radius=14)
+        _text(draw, item["label"], x + 18, 2217, 11, QUIET, True)
+        _text(draw, item["value"], x + 18, 2238, 22, INK_SOFT, True)
+        _text(draw, _truncate(draw, item["note"], width - 130, 11), x + width - 16, 2243, 11, MUTED, False, "right")
+
+
+def render_report_image(analysis: dict, out_path: str, generated_at: datetime | None = None) -> str:
+    """Render a fixed-size PNG and return its absolute output path."""
+    data = build_report_data(analysis, generated_at)
+    image = Image.new("RGBA", (WIDTH, HEIGHT), PAPER)
+    draw = ImageDraw.Draw(image)
+    for x in range(0, WIDTH + 1, 40):
+        draw.line((x, 0, x, HEIGHT), fill="#ece9e1", width=1)
+    for y in range(0, HEIGHT + 1, 40):
+        draw.line((0, y, WIDTH, y), fill="#ece9e1", width=1)
+    _draw_header_footer(draw, data)
+    _draw_hero(draw, data)
+    _draw_galaxy(image, draw, data)
+    _draw_actions(draw, data)
+    _draw_evidence(draw, data)
+    _draw_metrics(draw, data)
+    output = os.path.abspath(out_path)
+    os.makedirs(os.path.dirname(output), exist_ok=True)
+    image.convert("RGB").save(output, format="PNG", compress_level=6)
+    return output

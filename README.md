@@ -9,7 +9,7 @@
 - **难度筛选**：支持难度别名（鬼/魔王/里/里魔王/松/困难/竹/一般/梅/简单）与组合名（如「鬼夏祭」「里夏祭」）
 - **歌曲别名**：两步确认（发起 → 管理员审核），审核通过后可用别名查询
 - **玩家实力评级**：综合 Rating + 七维能力（谱面底力/持续耐力/爆发手速/击打精度/配置处理/节奏适应/读谱）+ 强项/弱项
-- **实力画像图片**：`/rtlink rating` 或 AI 工具 `generate_rating_image` 生成 PNG 报告（Rating 环 + 七维雷达 + 强弱项 + 表现证据）
+- **实力画像图片**：`/rtlink rating` 或 AI 工具 `generate_rating_image` 在插件本地生成与「鼓迹」网站同版式的 `1440 × 2400` PNG 报告（Rating 环 + 能力星系 + 强弱项 + 表现证据）
 - **节奏型弱项**：按「节奏型 × BPM 档」给出短板与参考曲目
 - LLM 工具：注册多个查询工具，模型可在自然对话中自动调用
 - 本地存储：SQLite 持久化菌菌 hiroba/kinoko 同步数据（转义落库，关键信息不缺失）
@@ -54,6 +54,7 @@
 astrbot_plugin_rt_link/
 ├── main.py             # 插件入口（Star 类 + 命令 + LLM 工具）
 ├── rating.py           # 玩家 Rating 算法（AI v2 主 + OurTaiko-v1 参考 + 节奏型画像）
+├── report_image.py     # 与鼓迹网站同源版式的固定像素 Pillow 渲染器
 ├── storage.py          # SQLite 存储层 + 空间计量
 ├── service.py          # 核心服务（绑定/同步/评级/查询）
 ├── api_client.py       # 菌菌公开 API 客户端（标准库实现）
@@ -95,6 +96,13 @@ astrbot_plugin_rt_link/
 - `bind` / `unbind` / `list` / `storage` / `cleanup` 是聊天命令而非 LLM 工具；且命令一旦返回结果，AstrBot 不会再调用大模型处理该条消息。
 - `bind` 命令仅允许在私聊中使用，避免 apikey 泄露到群聊。
 - 请勿在普通对话中直接粘贴 apikey。
+
+## 成绩图渲染
+
+- 图片在 AstrBot 插件进程内生成，不访问额外的生图 API，不要求 Node.js、浏览器或独立后端。
+- 固定输出 `1440 × 2400` PNG，并使用随插件打包的 `resource/NotoSansCJKsc-Regular.otf`，避免服务器缺少中文字体时出现方框、乱码或平台间排版漂移。
+- 数据摘要、颜色、分区层级、Rating 环、能力星系、诊断卡和证据表均与「鼓迹」网站的导出报告保持一致。
+- 每次生成使用新的文件名，避免 QQ/AstrBot 复用旧图片缓存。
 
 ## 开发
 
