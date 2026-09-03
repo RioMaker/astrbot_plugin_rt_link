@@ -14,6 +14,7 @@
 - **节奏型弱项图片**：`/rtlink weakness` 输出 `1440 × 2200` PNG；按「节奏型 × BPM 档」给出核心短板、练习路径和参考曲目
 - **冷门配置分组**：内置谱面库覆盖率低于 3% 的节奏配置单列观察，不进入核心弱项排行
 - **成长记录**：每次获取 Rating 或执行 `/rtlink update` 都会追加一份轻量历史快照，完整保留七维、全部常见/冷门节奏配置，以及算法和谱面库版本
+- **完整帮助长图**：`/rtlink help` 或 `/rtlink 帮助` 返回同一张说明图片，包含菌菌 apikey 四步绑定实图、常用指令、评级与安全说明
 - LLM 工具：注册多个查询工具，模型可在自然对话中自动调用
 - 本地存储：SQLite 持久化菌菌 hiroba/kinoko 同步数据（转义落库，关键信息不缺失）
 - 空间监管：`/rtlink storage` 查询用量，接近配额自动提醒管理员
@@ -30,6 +31,7 @@
 /rtlink weakness                            生成节奏型弱项与练习建议图片（冷门配置单列）
 /rtlink alias <ID或曲名> <别名>              申请歌曲别名（待管理员审核）
 /rtlink help                                查看帮助
+/rtlink 帮助                                查看同一张完整帮助长图
 /rtlink about                               查看插件信息
 
 裸 `/rtlink`（不带子命令）默认返回实力画像图片，等价于 `/rtlink rating`。
@@ -37,7 +39,7 @@
 管理员指令不在此列出，完整指令（含管理员）见 [docs/commands.md](docs/commands.md)。
 ```
 
-也可以直接自然语言询问，例如：「我的实力怎么样」「我该练什么」「我的《夏祭り》成绩是多少」。
+也可以直接自然语言询问，例如：「可可子，我的实力怎么样」「可可子，我该练什么」「可可子，我的《夏祭り》成绩是多少」。
 
 ## 难度筛选与别名
 
@@ -63,6 +65,7 @@ astrbot_plugin_rt_link/
 ├── report_image.py     # 与鼓迹网站同源版式的固定像素 Pillow 渲染器
 ├── profile_image.py    # /rtlink profile 玩家画像渲染器
 ├── weakness_image.py   # /rtlink weakness 弱项渲染器（冷门配置单列）
+├── help_image.py       # /rtlink help 完整说明长图渲染器
 ├── storage.py          # SQLite 成绩、Rating 历史快照与空间计量
 ├── service.py          # 核心服务（绑定/同步/评级/查询）
 ├── api_client.py       # 菌菌公开 API 客户端（标准库实现）

@@ -18,7 +18,7 @@
 | `/rtlink profile` | 生成个人画像图片：Rating、七维、强项/弱项、全连/咚大福与代表谱面 | `/rtlink profile` |
 | `/rtlink weakness` | 生成节奏型弱项图片：核心弱项排行、冷门配置观察、练习路径与参考谱面 | `/rtlink weakness` |
 | `/rtlink alias <ID或曲名> <别名>` | 申请歌曲别名（返回歌曲信息确认，待管理员审核） | `/rtlink alias 夏祭り 夏祭` |
-| `/rtlink help` | 查看帮助（仅普通指令） | `/rtlink help` |
+| `/rtlink help` / `/rtlink 帮助` | 返回包含绑定实图、指令、评级和安全说明的完整帮助长图 | `/rtlink 帮助` |
 | `/rtlink about` | 查看插件信息 | `/rtlink about` |
 
 ## 管理员指令

@@ -23,6 +23,9 @@ class FakeService:
     async def generate_report_image(self, qq):
         return True, f"report-{qq}.png"
 
+    async def generate_help_image(self, qq):
+        return True, f"help-{qq}.png"
+
     async def generate_profile_image(self, qq):
         return True, f"profile-{qq}.png"
 
@@ -86,9 +89,12 @@ async def run_dispatch_cases():
     private_help = mock.AstrMessageEvent(
         "10001", private=True, is_admin=False, message_str="rtlink help"
     )
-    help_text = (await invoke(plugin, private_help, "help"))[0]
-    assert "rtlink 命令" in help_text
-    assert "/rtlink update" in help_text
+    assert await invoke(plugin, private_help, "help") == ["help-10001.png"]
+
+    chinese_help = mock.AstrMessageEvent(
+        "10001", private=True, is_admin=False, message_str="rtlink 帮助"
+    )
+    assert await invoke(plugin, chinese_help, "帮助") == ["help-10001.png"]
 
     group_score = mock.AstrMessageEvent(
         "10002", private=False, is_admin=False, message_str="rtlink score 夏祭り"

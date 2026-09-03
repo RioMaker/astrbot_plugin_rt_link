@@ -18,6 +18,7 @@ from pathlib import Path
 if __package__:
     from . import rating as rating_mod
     from .api_client import KinokoClient, KinokoAPIError
+    from .help_image import render_help_image
     from .profile_image import render_profile_image
     from .report_image import render_report_image
     from .weakness_image import render_weakness_image
@@ -25,6 +26,7 @@ if __package__:
 else:
     import rating as rating_mod
     from api_client import KinokoClient, KinokoAPIError
+    from help_image import render_help_image
     from profile_image import render_profile_image
     from report_image import render_report_image
     from weakness_image import render_weakness_image
@@ -719,6 +721,22 @@ class ScoreService:
         return await self._generate_analysis_image(
             qq, "report", render_report_image, "报告", snapshot_trigger="rating_image"
         )
+
+    async def generate_help_image(self, qq) -> tuple[bool, str]:
+        """生成包含绑定实图和完整说明的帮助长图。"""
+        out_dir = self.report_dir
+        if not out_dir and self.db is not None:
+            out_dir = os.path.dirname(os.path.abspath(self.db.db_path))
+        if not out_dir:
+            out_dir = os.path.dirname(os.path.abspath(__file__))
+        path = os.path.join(out_dir, f"help_{qq}_{time.time_ns()}.png")
+        try:
+            await asyncio.to_thread(render_help_image, path)
+            await asyncio.to_thread(self._prune_analysis_images, out_dir, "help", qq, path)
+        except Exception as error:
+            self._logger.error(f"生成帮助图片失败：{error}")
+            return False, f"生成帮助图片失败：{error}"
+        return True, path
 
     async def _generate_analysis_image(
         self, qq, prefix, renderer, label, snapshot_trigger: str | None = None

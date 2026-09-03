@@ -29,7 +29,7 @@ else:
 PLUGIN_NAME = "rt_link"
 PLUGIN_AUTHOR = "Rio"
 PLUGIN_DESC = "将 QQ 绑定到菌菌控制台 apikey，查询太鼓达人成绩并评估玩家实力"
-PLUGIN_VERSION = "v0.6.0"
+PLUGIN_VERSION = "v0.7.0"
 
 COMMAND_NAME = "rtlink"
 BINDINGS_KEY = "bindings"
@@ -141,6 +141,7 @@ class RTLinkPlugin(Star):
 
         handlers = {
             "help": self.help,
+            "帮助": self.help,
             "unbind": self.unbind,
             "list": self.list_bindings,
             "score": self.score,
@@ -165,21 +166,11 @@ class RTLinkPlugin(Star):
             yield result
 
     async def help(self, event: AstrMessageEvent):
-        yield event.plain_result(
-            "rtlink 命令：\n"
-            "/rtlink bind <apikey> <player_id> [server]  绑定当前 QQ\n"
-            "/rtlink unbind                             解绑当前 QQ\n"
-            "/rtlink score <曲名>                       查询指定曲目成绩（可加难度前缀如「鬼夏祭」）\n"
-            "/rtlink rating                             生成完整实力画像图片（含冷门配置观察）\n"
-            "/rtlink update                             立即从菌菌重新拉取成绩并记录历史快照\n"
-            "/rtlink profile                            生成个人强项/弱项画像图片\n"
-            "/rtlink weakness                           生成节奏型弱项与练习建议图片\n"
-            "/rtlink alias <ID或曲名> <别名>             申请歌曲别名（待审核）\n"
-            "/rtlink help                               查看帮助\n"
-            "/rtlink about                              查看插件信息\n"
-            "也可以直接用自然语言问我，例如「我的实力怎么样」「我该练什么」\n"
-            "注意：apikey 仅用于服务端绑定与查询，不会发送给大模型；请在私聊中绑定。"
-        )
+        ok, result = await self.service.generate_help_image(event.get_sender_id())
+        if not ok:
+            yield event.plain_result(result)
+            return
+        yield event.image_result(result)
 
     async def bind(self, event: AstrMessageEvent, apikey: str, player_id: str, server: str = ""):
         if not event.is_private_chat():
