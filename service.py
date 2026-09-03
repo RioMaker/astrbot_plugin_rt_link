@@ -347,7 +347,7 @@ class ScoreService:
     async def _sync(self, qq) -> tuple[bool, str, dict | None]:
         b = await self._binding(qq)
         if not b:
-            return False, "你还没有绑定菌菌账号。请先发送：/rtlink bind <apikey> <player_id> [server]", None
+            return False, "你还没有绑定菌菌账号。请先私聊可可子发送：/rtlink bind <apikey> <player_id> [server]", None
         apikey = b["apikey"]
         player_id = str(b.get("player_id") or "")
         server = b.get("server") or self.default_server
@@ -428,7 +428,7 @@ class ScoreService:
         if not qq:
             return None, "无法识别你的 QQ 号。"
         if not await self._binding(qq):
-            return None, "你还没有绑定菌菌账号。请先发送：/rtlink bind <apikey> <player_id> [server]"
+            return None, "你还没有绑定菌菌账号。请先私聊可可子发送：/rtlink bind <apikey> <player_id> [server]"
         if self.db is not None:
             cache = await asyncio.to_thread(self.db.get_rating_cache, qq)
             if (
@@ -1004,7 +1004,7 @@ class ScoreService:
         if not qq:
             return "无法识别你的 QQ 号。"
         if not await self._binding(qq):
-            return "你还没有绑定菌菌账号。请先发送：/rtlink bind <apikey> <player_id> [server]"
+            return "你还没有绑定菌菌账号。请先私聊可可子发送：/rtlink bind <apikey> <player_id> [server]"
         if self.db is None:
             return "本地存储未启用，无法设置别名。"
         target = (target or "").strip()
