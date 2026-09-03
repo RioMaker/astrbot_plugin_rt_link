@@ -12,17 +12,22 @@ import os
 import time
 from collections import defaultdict
 from datetime import datetime
+from pathlib import Path
 
 # 包加载（AstrBot）时用相对导入；本地直接运行 service.py 时回退到绝对导入。
 if __package__:
     from . import rating as rating_mod
     from .api_client import KinokoClient, KinokoAPIError
+    from .profile_image import render_profile_image
     from .report_image import render_report_image
+    from .weakness_image import render_weakness_image
     from .storage import ScoreDatabase, load_charts
 else:
     import rating as rating_mod
     from api_client import KinokoClient, KinokoAPIError
+    from profile_image import render_profile_image
     from report_image import render_report_image
+    from weakness_image import render_weakness_image
     from storage import ScoreDatabase, load_charts
 
 DIFFICULTY_NAMES = {
@@ -34,8 +39,8 @@ DIFFICULTY_NAMES = {
 }
 
 # 精简画像缓存的数据契约版本。字段新增后提升版本，避免继续读取旧缓存
-# 中缺少准确率/AI 定数的证据行。
-RATING_CACHE_SCHEMA = 2
+# 中缺少图片证据字段或节奏配置常见度分组。
+RATING_CACHE_SCHEMA = 3
 
 
 def difficulty_label(level) -> str:
@@ -229,6 +234,9 @@ def _slim_result(result: dict) -> dict:
             "exposure": round(c.get("exposure") or 0, 3),
             "compoundRatio": round(c.get("compoundRatio") or 0, 3),
             "averageBpm": round(c.get("averageBpm") or 0, 1),
+            "catalogCharts": c.get("catalogCharts"),
+            "catalogCoverage": round(c.get("catalogCoverage"), 6) if c.get("catalogCoverage") is not None else None,
+            "rarity": c.get("rarity") or "common",
             "best": [_slim_song(b) for b in c.get("best", [])],
         }
 
@@ -236,6 +244,9 @@ def _slim_result(result: dict) -> dict:
         "cells": [slim_cell(c) for c in result["rhythmAbility"]["cells"]],
         "best": [slim_cell(c) for c in result["rhythmAbility"]["best"]],
         "weakest": [slim_cell(c) for c in result["rhythmAbility"]["weakest"]],
+        "rareWeakest": [slim_cell(c) for c in result["rhythmAbility"].get("rareWeakest", [])],
+        "catalogCharts": result["rhythmAbility"].get("catalogCharts"),
+        "rareCatalogCoverageThreshold": result["rhythmAbility"].get("rareCatalogCoverageThreshold"),
         "visual": {
             k: slim_cell(v) for k, v in result["rhythmAbility"]["visual"].items()
         },
@@ -628,6 +639,10 @@ class ScoreService:
 
     async def generate_report_image(self, qq) -> tuple[bool, str]:
         """生成鼓点画像图片，返回 (成功, 图片路径 或 错误信息)。"""
+        return await self._generate_analysis_image(qq, "report", render_report_image, "报告")
+
+    async def _generate_analysis_image(self, qq, prefix, renderer, label) -> tuple[bool, str]:
+        """使用新文件名渲染分析图片，避免 AstrBot/QQ 复用旧图缓存。"""
         analysis, err = await self._get_analysis(qq)
         if err:
             return False, err
@@ -636,15 +651,48 @@ class ScoreService:
             out_dir = os.path.dirname(os.path.abspath(self.db.db_path))
         if not out_dir:
             out_dir = os.path.dirname(os.path.abspath(__file__))
-        # Use a fresh path for every export so AstrBot/QQ cannot reuse a stale
-        # image generated before the report template or font was fixed.
-        path = os.path.join(out_dir, f"report_{qq}_{time.time_ns()}.png")
+        path = os.path.join(out_dir, f"{prefix}_{qq}_{time.time_ns()}.png")
         try:
-            await asyncio.to_thread(render_report_image, analysis, path)
+            await asyncio.to_thread(renderer, analysis, path)
+            await asyncio.to_thread(self._prune_analysis_images, out_dir, prefix, qq, path)
         except Exception as e:
-            self._logger.error(f"生成报告图片失败：{e}")
-            return False, f"生成报告图片失败：{e}"
+            self._logger.error(f"生成{label}图片失败：{e}")
+            return False, f"生成{label}图片失败：{e}"
         return True, path
+
+    def _prune_analysis_images(self, out_dir, prefix, qq, keep_path, retain=3) -> None:
+        """仅回收同用户同类型的旧临时图片，保留最近若干张供消息发送。"""
+        directory = Path(out_dir).resolve()
+        keep = Path(keep_path).resolve()
+        if keep.parent != directory or not directory.is_dir():
+            return
+        name_prefix = f"{prefix}_{qq}_"
+        try:
+            candidates = sorted(
+                (
+                    path for path in directory.iterdir()
+                    if path.is_file() and path.resolve() != keep
+                    and path.name.startswith(name_prefix) and path.suffix.lower() == ".png"
+                ),
+                key=lambda path: path.stat().st_mtime_ns,
+                reverse=True,
+            )
+        except OSError as error:
+            self._logger.warning(f"扫描旧{prefix}图片失败：{error}")
+            return
+        for old_path in candidates[max(int(retain) - 1, 0):]:
+            try:
+                old_path.unlink()
+            except OSError as error:
+                self._logger.warning(f"回收旧{prefix}图片失败：{error}")
+
+    async def generate_profile_image(self, qq) -> tuple[bool, str]:
+        """生成玩家 profile 图片。"""
+        return await self._generate_analysis_image(qq, "profile", render_profile_image, "玩家画像")
+
+    async def generate_weakness_image(self, qq) -> tuple[bool, str]:
+        """生成节奏弱项图片，冷门配置在图中独立展示。"""
+        return await self._generate_analysis_image(qq, "weakness", render_weakness_image, "节奏弱项")
 
     async def get_profile_text(self, qq) -> str:
         analysis, err = await self._get_analysis(qq)
@@ -674,10 +722,11 @@ class ScoreService:
         if err:
             return err
         ra = analysis["rhythmAbility"]
-        weakest = ra["weakest"]
-        if not weakest:
+        weakest = ra.get("weakest") or []
+        rare = ra.get("rareWeakest") or []
+        if not weakest and not rare:
             return "节奏画像样本不足（至少 3 张同节奏型谱面才会形成结论）。"
-        lines = ["节奏型弱项（按处理 Rating 从低到高，前几项最该练）："]
+        lines = ["常见节奏型弱项（按处理 Rating 从低到高，前几项最该练）："]
         for c in weakest[:5]:
             pattern = c.get("pattern")
             bpm = c.get("bpmBand")
@@ -687,6 +736,15 @@ class ScoreService:
                 f"  {pattern} @{bpm}BPM{compound}：处理 Rating {c['score']}（{c['charts']} 张）"
                 + (f"｜参考曲目：{refs}" if refs else "")
             )
+        if rare:
+            threshold = float(ra.get("rareCatalogCoverageThreshold") or 0.03) * 100
+            lines.append(f"冷门配置观察（全库覆盖低于 {threshold:.0f}%，不计入核心弱项排行）：")
+            for c in rare[:5]:
+                coverage = float(c.get("catalogCoverage") or 0) * 100
+                lines.append(
+                    f"  {c.get('pattern')} @{c.get('bpmBand')}BPM：处理 Rating {c.get('score')}"
+                    f"（个人 {c.get('charts')} 张｜全库 {coverage:.2f}%）"
+                )
         return "\n".join(lines)
 
     def _filter_records(self, records, level=None, query=None, constant_min=None, constant_max=None, rank_min=None):

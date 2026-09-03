@@ -99,6 +99,10 @@ VISUAL_DEFINITIONS = {
     "hbScroll": "hbscrollNoteRatio",
 }
 
+# 节奏型 × BPM 配置若只出现在不足 3% 的内置谱面中，视为冷门配置。
+# 冷门配置保留统计，但不参与核心弱项排行，避免罕见配置被误读为主要短板。
+RHYTHM_RARE_CATALOG_COVERAGE = 0.03
+
 # 维度中文名（面向 LLM / 用户输出）
 AI_DIMENSION_NAMES = {
     "rating": "综合Rating",
@@ -531,7 +535,7 @@ def analyze(payload: dict, charts: dict) -> dict:
         "top": top,
         "referenceTop": reference_top,
         "featureAbility": calculate_feature_ability(records),
-        "rhythmAbility": calculate_rhythm_ability(records),
+        "rhythmAbility": calculate_rhythm_ability(records, charts),
     }
 
 
@@ -589,7 +593,22 @@ def _aggregate_arrangement_lengths(arrangement_cells: list) -> list:
     return result
 
 
-def calculate_rhythm_ability(records: list) -> dict:
+def _rhythm_catalog_prevalence(catalog_charts) -> tuple[int, dict]:
+    if not catalog_charts:
+        return 0, {}
+    charts = catalog_charts.values() if isinstance(catalog_charts, dict) else catalog_charts
+    charts = list(charts)
+    counts = defaultdict(int)
+    for chart in charts:
+        rhythm = ((chart.get("feature") or {}).get("rhythmProfile") or {})
+        for cell in rhythm.get("cells") or []:
+            if float(cell.get("noteRatio") or 0) <= 0.005:
+                continue
+            counts[f"{cell.get('pattern')}|{cell.get('bpmBand')}"] += 1
+    return len(charts), dict(counts)
+
+
+def calculate_rhythm_ability(records: list, catalog_charts=None) -> dict:
     cell_samples = defaultdict(list)
     arrangement_samples = defaultdict(list)
     arrangement_cell_samples = defaultdict(list)
@@ -662,6 +681,16 @@ def calculate_rhythm_ability(records: list) -> dict:
     cells = [arrangement_length_map.get(c["key"], c) for c in cells]
     cells.sort(key=lambda c: c["score"], reverse=True)
 
+    catalog_total, catalog_counts = _rhythm_catalog_prevalence(catalog_charts)
+    for cell in cells:
+        catalog_count = catalog_counts.get(cell["key"], 0)
+        coverage = catalog_count / catalog_total if catalog_total else None
+        cell["catalogCharts"] = catalog_count if catalog_total else None
+        cell["catalogCoverage"] = coverage
+        cell["rarity"] = "rare" if coverage is not None and coverage < RHYTHM_RARE_CATALOG_COVERAGE else "common"
+    common_cells = [cell for cell in cells if cell["rarity"] == "common"]
+    rare_cells = [cell for cell in cells if cell["rarity"] == "rare"]
+
     visual = {}
     for key, definition in VISUAL_DEFINITIONS.items():
         samples = []
@@ -682,7 +711,10 @@ def calculate_rhythm_ability(records: list) -> dict:
     return {
         "cells": cells, "arrangements": arrangements, "arrangementCells": arrangement_cells,
         "arrangementLengthCells": arrangement_length_cells, "visual": visual,
-        "best": cells[:10], "weakest": list(reversed(cells[-10:])),
+        "best": common_cells[:10], "weakest": list(reversed(common_cells[-10:])),
+        "rareWeakest": sorted(rare_cells, key=lambda cell: cell["score"])[:10],
+        "catalogCharts": catalog_total,
+        "rareCatalogCoverageThreshold": RHYTHM_RARE_CATALOG_COVERAGE,
     }
 
 

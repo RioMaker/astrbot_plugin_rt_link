@@ -10,7 +10,9 @@
 - **歌曲别名**：两步确认（发起 → 管理员审核），审核通过后可用别名查询
 - **玩家实力评级**：综合 Rating + 七维能力（谱面底力/持续耐力/爆发手速/击打精度/配置处理/节奏适应/读谱）+ 强项/弱项
 - **实力画像图片**：`/rtlink rating` 或 AI 工具 `generate_rating_image` 在插件本地生成与「鼓迹」网站同版式的 `1440 × 2400` PNG 报告（Rating 环 + 能力星系 + 强弱项 + 表现证据）
-- **节奏型弱项**：按「节奏型 × BPM 档」给出短板与参考曲目
+- **个人画像图片**：`/rtlink profile` 输出 `1440 × 1800` PNG，集中展示 Rating、七维轮廓、强弱项、全连/全良与代表谱面
+- **节奏型弱项图片**：`/rtlink weakness` 输出 `1440 × 2200` PNG；按「节奏型 × BPM 档」给出核心短板、练习路径和参考曲目
+- **冷门配置分组**：内置谱面库覆盖率低于 3% 的节奏配置单列观察，不进入核心弱项排行
 - LLM 工具：注册多个查询工具，模型可在自然对话中自动调用
 - 本地存储：SQLite 持久化菌菌 hiroba/kinoko 同步数据（转义落库，关键信息不缺失）
 - 空间监管：`/rtlink storage` 查询用量，接近配额自动提醒管理员
@@ -22,8 +24,8 @@
 /rtlink unbind                              解绑当前 QQ
 /rtlink score <曲名|别名|鬼夏祭>             查询指定曲目成绩（支持难度前缀组合名）
 /rtlink rating                              生成实力画像图片
-/rtlink profile                             查看强项/弱项画像
-/rtlink weakness                            查看节奏型弱项与参考曲目
+/rtlink profile                             生成个人强项/弱项画像图片
+/rtlink weakness                            生成节奏型弱项与练习建议图片（冷门配置单列）
 /rtlink alias <ID或曲名> <别名>              申请歌曲别名（待管理员审核）
 /rtlink help                                查看帮助
 /rtlink about                               查看插件信息
@@ -55,6 +57,8 @@ astrbot_plugin_rt_link/
 ├── main.py             # 插件入口（Star 类 + 命令 + LLM 工具）
 ├── rating.py           # 玩家 Rating 算法（AI v2 主 + OurTaiko-v1 参考 + 节奏型画像）
 ├── report_image.py     # 与鼓迹网站同源版式的固定像素 Pillow 渲染器
+├── profile_image.py    # /rtlink profile 玩家画像渲染器
+├── weakness_image.py   # /rtlink weakness 弱项渲染器（冷门配置单列）
 ├── storage.py          # SQLite 存储层 + 空间计量
 ├── service.py          # 核心服务（绑定/同步/评级/查询）
 ├── api_client.py       # 菌菌公开 API 客户端（标准库实现）
@@ -102,7 +106,7 @@ astrbot_plugin_rt_link/
 - 图片在 AstrBot 插件进程内生成，不访问额外的生图 API，不要求 Node.js、浏览器或独立后端。
 - 固定输出 `1440 × 2400` PNG，并使用随插件打包的 `resource/NotoSansCJKsc-Regular.otf`，避免服务器缺少中文字体时出现方框、乱码或平台间排版漂移。
 - 数据摘要、颜色、分区层级、Rating 环、能力星系、诊断卡和证据表均与「鼓迹」网站的导出报告保持一致。
-- 每次生成使用新的文件名，避免 QQ/AstrBot 复用旧图片缓存。
+- 每次生成使用新的文件名，避免 QQ/AstrBot 复用旧图片缓存；同一用户、同一图片类型仅保留最近 3 张。
 
 ## 开发
 

@@ -29,7 +29,7 @@ else:
 PLUGIN_NAME = "rt_link"
 PLUGIN_AUTHOR = "Rio"
 PLUGIN_DESC = "将 QQ 绑定到菌菌控制台 apikey，查询太鼓达人成绩并评估玩家实力"
-PLUGIN_VERSION = "v0.4.1"
+PLUGIN_VERSION = "v0.5.0"
 
 COMMAND_NAME = "rtlink"
 BINDINGS_KEY = "bindings"
@@ -170,8 +170,8 @@ class RTLinkPlugin(Star):
             "/rtlink unbind                             解绑当前 QQ\n"
             "/rtlink score <曲名>                       查询指定曲目成绩（可加难度前缀如「鬼夏祭」）\n"
             "/rtlink rating                             生成实力画像图片\n"
-            "/rtlink profile                            查看我的强项/弱项画像\n"
-            "/rtlink weakness                           查看节奏型弱项与参考曲目\n"
+            "/rtlink profile                            生成个人强项/弱项画像图片\n"
+            "/rtlink weakness                           生成节奏型弱项与练习建议图片\n"
             "/rtlink alias <ID或曲名> <别名>             申请歌曲别名（待审核）\n"
             "/rtlink help                               查看帮助\n"
             "/rtlink about                              查看插件信息\n"
@@ -212,10 +212,18 @@ class RTLinkPlugin(Star):
         yield event.image_result(result)
 
     async def profile_cmd(self, event: AstrMessageEvent):
-        yield event.plain_result(await self.service.get_profile_text(event.get_sender_id()))
+        ok, result = await self.service.generate_profile_image(event.get_sender_id())
+        if not ok:
+            yield event.plain_result(result)
+            return
+        yield event.image_result(result)
 
     async def weakness_cmd(self, event: AstrMessageEvent):
-        yield event.plain_result(await self.service.get_rhythm_weakness_text(event.get_sender_id()))
+        ok, result = await self.service.generate_weakness_image(event.get_sender_id())
+        if not ok:
+            yield event.plain_result(result)
+            return
+        yield event.image_result(result)
 
     async def storage_cmd(self, event: AstrMessageEvent):
         if not event.is_admin():

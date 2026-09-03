@@ -23,6 +23,12 @@ class FakeService:
     async def generate_report_image(self, qq):
         return True, f"report-{qq}.png"
 
+    async def generate_profile_image(self, qq):
+        return True, f"profile-{qq}.png"
+
+    async def generate_weakness_image(self, qq):
+        return True, f"weakness-{qq}.png"
+
     async def bind(self, qq, apikey, player_id, server):
         self.bind_calls.append((qq, apikey, player_id, server))
         return True, "绑定成功"
@@ -115,6 +121,16 @@ async def run_dispatch_cases():
         "10006", private=False, is_admin=True, message_str="rtlink storage"
     )
     assert await invoke(plugin, admin_storage, "storage") == ["存储状态"]
+
+    profile = mock.AstrMessageEvent(
+        "10008", private=True, is_admin=False, message_str="rtlink profile"
+    )
+    assert await invoke(plugin, profile, "profile") == ["profile-10008.png"]
+
+    weakness = mock.AstrMessageEvent(
+        "10009", private=False, is_admin=False, message_str="rtlink weakness"
+    )
+    assert await invoke(plugin, weakness, "weakness") == ["weakness-10009.png"]
 
     bare = mock.AstrMessageEvent(
         "10007", private=False, is_admin=False, message_str="/rtlink"

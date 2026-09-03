@@ -14,8 +14,8 @@
 | `/rtlink unbind` | 解绑当前 QQ | `/rtlink unbind` |
 | `/rtlink score <曲名\|别名\|鬼夏祭>` | 查询指定曲目成绩；支持难度前缀组合名（`鬼夏祭`→鬼难度+夏祭）与别名 | `/rtlink score 鬼夏祭` |
 | `/rtlink rating` | 生成实力画像图片（Rating 环 + 七维能力 + 强弱项 + 表现证据） | `/rtlink rating` |
-| `/rtlink profile` | 文本画像：综合 Rating、七维、强项/弱项、全连/咚大福数 | `/rtlink profile` |
-| `/rtlink weakness` | 节奏型弱项与参考曲目 | `/rtlink weakness` |
+| `/rtlink profile` | 生成个人画像图片：Rating、七维、强项/弱项、全连/咚大福与代表谱面 | `/rtlink profile` |
+| `/rtlink weakness` | 生成节奏型弱项图片：核心弱项排行、冷门配置观察、练习路径与参考谱面 | `/rtlink weakness` |
 | `/rtlink alias <ID或曲名> <别名>` | 申请歌曲别名（返回歌曲信息确认，待管理员审核） | `/rtlink alias 夏祭り 夏祭` |
 | `/rtlink help` | 查看帮助（仅普通指令） | `/rtlink help` |
 | `/rtlink about` | 查看插件信息 | `/rtlink about` |
@@ -66,3 +66,4 @@
 
 - 组合名：查询时可写 `鬼夏祭`、`里夏祭`（难度前缀 + 曲名）。
 - 仅鬼/里（4/5）参与评级，1–3 难度查询会提示「不在评级范围内」。
+- 节奏配置按内置谱面库覆盖率分组；覆盖率低于 3% 的冷门配置不进入核心弱项排行，仅单列观察。

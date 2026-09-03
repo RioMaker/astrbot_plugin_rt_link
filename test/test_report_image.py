@@ -32,7 +32,7 @@ def test_slim_result_marks_current_cache_schema():
         "meta": {},
         "records": [],
         "featureAbility": {"families": [], "strengths": [], "weaknesses": [], "matchedCharts": 0},
-        "rhythmAbility": {"cells": [], "best": [], "weakest": [], "visual": {}},
+        "rhythmAbility": {"cells": [], "best": [], "weakest": [], "rareWeakest": [], "visual": {}},
     }
     assert _slim_result(result)["_cacheSchema"] == RATING_CACHE_SCHEMA
 
