@@ -29,7 +29,7 @@ else:
 PLUGIN_NAME = "rt_link"
 PLUGIN_AUTHOR = "Rio"
 PLUGIN_DESC = "将 QQ 绑定到菌菌控制台 apikey，查询太鼓达人成绩并评估玩家实力"
-PLUGIN_VERSION = "v0.5.0"
+PLUGIN_VERSION = "v0.5.1"
 
 COMMAND_NAME = "rtlink"
 BINDINGS_KEY = "bindings"
@@ -169,7 +169,7 @@ class RTLinkPlugin(Star):
             "/rtlink bind <apikey> <player_id> [server]  绑定当前 QQ\n"
             "/rtlink unbind                             解绑当前 QQ\n"
             "/rtlink score <曲名>                       查询指定曲目成绩（可加难度前缀如「鬼夏祭」）\n"
-            "/rtlink rating                             生成实力画像图片\n"
+            "/rtlink rating                             生成完整实力画像图片（含冷门配置观察）\n"
             "/rtlink profile                            生成个人强项/弱项画像图片\n"
             "/rtlink weakness                           生成节奏型弱项与练习建议图片\n"
             "/rtlink alias <ID或曲名> <别名>             申请歌曲别名（待审核）\n"

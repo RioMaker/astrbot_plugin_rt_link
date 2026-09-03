@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Deterministic 1440x2400 report renderer shared with the Taiko Trace design.
+"""Deterministic 1440x2720 report renderer shared with the Taiko Trace design.
 
 The browser report uses a fixed Canvas layout.  This module mirrors that data
 summary and those pixel coordinates with Pillow so AstrBot can generate the
@@ -16,7 +16,7 @@ from statistics import median
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-WIDTH, HEIGHT = 1440, 2400
+WIDTH, HEIGHT = 1440, 2720
 MAX_RATING = 15.5
 INK, INK_SOFT = "#17202a", "#26313d"
 PAPER, SURFACE = "#f3f0e8", "#fffdf8"
@@ -156,6 +156,17 @@ def build_report_data(analysis: dict, generated_at: datetime | None = None) -> d
     weak_rhythm = (rhythm.get("weakest") or [None])[0]
     visuals = [item for item in (rhythm.get("visual") or {}).values() if _number(item.get("charts")) >= 3]
     weakest_visual = min(visuals, key=lambda item: _number(item.get("score")), default=None)
+    rare_rhythms = []
+    for item in (rhythm.get("rareWeakest") or [])[:3]:
+        rare_rhythms.append({
+            "pattern": item.get("pattern"),
+            "label": _rhythm_label(item.get("pattern")),
+            "bpm": _bpm_label(item.get("bpmBand")),
+            "score": _number(item.get("score")),
+            "charts": int(_number(item.get("charts"))),
+            "catalogCharts": int(_number(item.get("catalogCharts"))),
+            "catalogCoverage": _number(item.get("catalogCoverage")),
+        })
     unique = int(_number((analysis.get("meta") or {}).get("uniqueCharts")))
     matched = int(_number((analysis.get("featureAbility") or {}).get("matchedCharts")))
     public_rating = _number(((analysis.get("ourTaikoV1") or {}).get("summary") or {}).get("rating"), math.nan)
@@ -216,6 +227,9 @@ def build_report_data(analysis: dict, generated_at: datetime | None = None) -> d
         "headline": f"{strongest['label']}最突出，{weakest['label']}是当前突破口" if strongest and weakest else "有效成绩已生成，能力证据仍待补充",
         "summary": f"七类能力最大差距为 {_fixed(strongest['score'] - weakest['score'])}。保持{strongest['label']}优势，下一轮优先处理{weakest['description']}。" if strongest and weakest else "当前数据不足以稳定比较七类能力，请继续积累鬼或里难度成绩。",
         "tags": tags, "actions": actions[:3], "evidence": evidence,
+        "rareRhythms": rare_rhythms,
+        "rhythmCatalogCharts": int(_number(rhythm.get("catalogCharts"))),
+        "rareCatalogCoverageThreshold": _number(rhythm.get("rareCatalogCoverageThreshold"), .03),
         "metrics": [
             {"label": "有效谱面", "value": str(unique), "note": "去重后的最佳成绩"},
             {"label": "特征覆盖", "value": f"{matched / max(unique, 1) * 100:.1f}%", "note": f"{matched} 张有完整画像"},
@@ -335,9 +349,9 @@ def _draw_header_footer(draw, data):
     _text(draw, f"PLAYER {data['playerId']}", 1370, 56, 15, INK, True, "right")
     _text(draw, f"{data['generatedAt']} · {data['server']} · {data['model']}", 1370, 82, 13, MUTED, False, "right")
     draw.line((70, 120, 1370, 120), fill=LINE, width=2)
-    _text(draw, data["sourceNote"], 70, 2335, 12, MUTED)
-    _text(draw, "星系为能力数据的静态表达；不代表历史趋势、通关预测或官方竞技裁定。", 70, 2360, 12, MUTED)
-    _text(draw, "报告含玩家 ID 与成绩摘要，请按个人数据妥善分享。", 1370, 2360, 12, ACCENT_DARK, True, "right")
+    _text(draw, data["sourceNote"], 70, 2655, 12, MUTED)
+    _text(draw, "星系为能力数据的静态表达；不代表历史趋势、通关预测或官方竞技裁定。", 70, 2680, 12, MUTED)
+    _text(draw, "报告含玩家 ID 与成绩摘要，请按个人数据妥善分享。", 1370, 2680, 12, ACCENT_DARK, True, "right")
 
 
 def _draw_hero(draw, data):
@@ -443,14 +457,38 @@ def _draw_evidence(draw, data):
         _text(draw, _fixed(row["rating"]), 1322, y - 1, 18, INK, True, "right")
 
 
+def _draw_niche_watch(draw, data):
+    _section(draw, "04 / NICHE WATCH", "冷门节奏配置观察", 2200)
+    threshold = data["rareCatalogCoverageThreshold"] * 100
+    _text(draw, f"全库覆盖低于 {threshold:.0f}%，不计入核心弱项排行", 1370, 2240, 14, MUTED, False, "right")
+    rare = data["rareRhythms"]
+    if not rare:
+        _box(draw, 70, 2290, 1300, 178, "#eceae4", "#d2cec5", radius=20)
+        _text(draw, "当前没有形成有效结论的冷门节奏配置。", 720, 2355, 17, MUTED, False, "center")
+    else:
+        total = data["rhythmCatalogCharts"] or "--"
+        for index, item in enumerate(rare):
+            x, width = 70 + index * 438, 420
+            _box(draw, x, 2290, width, 178, "#eceae4", "#d2cec5", radius=20)
+            _box(draw, x + 22, 2308, 84, 30, "#d8d5cd", radius=15)
+            _text(draw, "冷门观察", x + 64, 2315, 12, "#667078", True, "center")
+            _text(draw, item["label"], x + 22, 2352, 19, INK_SOFT, True)
+            _text(draw, f"BPM {item['bpm']}", x + 22, 2386, 13, MUTED)
+            _text(draw, _fixed(item["score"]), x + width - 22, 2345, 27, "#667078", True, "right")
+            _text(draw, "处理 Rating", x + width - 22, 2383, 11, MUTED, False, "right")
+            _text(draw, f"全库 {item['catalogCharts']}/{total} 张 · {item['catalogCoverage'] * 100:.2f}%", x + 22, 2420, 12, MUTED)
+            _text(draw, f"个人证据 {item['charts']} 张", x + width - 22, 2420, 12, MUTED, True, "right")
+    _text(draw, "冷门配置保留数据观察价值，但不建议取代常见节奏型成为主练目标。", 70, 2480, 12, QUIET)
+
+
 def _draw_metrics(draw, data):
     gap, width = 12, (1300 - 36) / 4
     for index, item in enumerate(data["metrics"]):
         x = 70 + index * (width + gap)
-        _box(draw, x, 2200, width, 88, SURFACE, LINE, radius=14)
-        _text(draw, item["label"], x + 18, 2217, 11, QUIET, True)
-        _text(draw, item["value"], x + 18, 2238, 22, INK_SOFT, True)
-        _text(draw, _truncate(draw, item["note"], width - 130, 11), x + width - 16, 2243, 11, MUTED, False, "right")
+        _box(draw, x, 2510, width, 88, SURFACE, LINE, radius=14)
+        _text(draw, item["label"], x + 18, 2527, 11, QUIET, True)
+        _text(draw, item["value"], x + 18, 2548, 22, INK_SOFT, True)
+        _text(draw, _truncate(draw, item["note"], width - 130, 11), x + width - 16, 2553, 11, MUTED, False, "right")
 
 
 def render_report_image(analysis: dict, out_path: str, generated_at: datetime | None = None) -> str:
@@ -467,6 +505,7 @@ def render_report_image(analysis: dict, out_path: str, generated_at: datetime | 
     _draw_galaxy(image, draw, data)
     _draw_actions(draw, data)
     _draw_evidence(draw, data)
+    _draw_niche_watch(draw, data)
     _draw_metrics(draw, data)
     output = os.path.abspath(out_path)
     os.makedirs(os.path.dirname(output), exist_ok=True)

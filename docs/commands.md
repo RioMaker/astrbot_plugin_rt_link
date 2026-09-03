@@ -13,7 +13,7 @@
 | `/rtlink bind <apikey> <player_id> [server]` | 绑定当前 QQ 到菌菌账号（**仅私聊**）。`server` 默认 `cn`，可选 `cn`/`jp`/`custom` | `/rtlink bind tk_xxx 30053354 cn` |
 | `/rtlink unbind` | 解绑当前 QQ | `/rtlink unbind` |
 | `/rtlink score <曲名\|别名\|鬼夏祭>` | 查询指定曲目成绩；支持难度前缀组合名（`鬼夏祭`→鬼难度+夏祭）与别名 | `/rtlink score 鬼夏祭` |
-| `/rtlink rating` | 生成实力画像图片（Rating 环 + 七维能力 + 强弱项 + 表现证据） | `/rtlink rating` |
+| `/rtlink rating` | 生成完整实力画像图片（Rating 环 + 七维能力 + 强弱项 + 表现证据 + 冷门配置观察） | `/rtlink rating` |
 | `/rtlink profile` | 生成个人画像图片：Rating、七维、强项/弱项、全连/咚大福与代表谱面 | `/rtlink profile` |
 | `/rtlink weakness` | 生成节奏型弱项图片：核心弱项排行、冷门配置观察、练习路径与参考谱面 | `/rtlink weakness` |
 | `/rtlink alias <ID或曲名> <别名>` | 申请歌曲别名（返回歌曲信息确认，待管理员审核） | `/rtlink alias 夏祭り 夏祭` |

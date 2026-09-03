@@ -79,7 +79,7 @@ def test_report_image_keeps_template_sections_in_bounds(tmp_path: Path):
     assert Path(output).is_file()
     assert Path(output).stat().st_size > 10_000
     with Image.open(output) as image:
-        assert image.size == (1440, 2400)
+        assert image.size == (1440, 2720)
         assert image.mode == "RGB"
 
 
@@ -102,10 +102,26 @@ def test_report_summary_matches_website_contract():
         "counts": {"belowThreshold": 1, "missing": 2},
         "records": [],
         "ourTaikoV1": {"summary": {"rating": 9.5}},
-        "rhythmAbility": {"best": [], "weakest": [], "visual": {}},
+        "rhythmAbility": {
+            "best": [], "weakest": [], "visual": {},
+            "rareWeakest": [{
+                "pattern": "thirtysecond_burst", "bpmBand": "210_239",
+                "score": 8.82, "charts": 3, "catalogCharts": 3,
+                "catalogCoverage": 3 / 1393,
+            }],
+            "catalogCharts": 1393,
+            "rareCatalogCoverageThreshold": .03,
+        },
     }
     data = build_report_data(analysis)
     assert data["headline"] == "复合控制最突出，精度兑现是当前突破口"
     assert data["center"] == 11.8
     assert data["metrics"][3]["value"] == "3"
     assert [planet["rank"] for planet in data["planets"]] == [6, 2, 5, 7, 1, 4, 3]
+    assert data["rareRhythms"] == [{
+        "pattern": "thirtysecond_burst", "label": "32 分爆发", "bpm": "210-239",
+        "score": 8.82, "charts": 3, "catalogCharts": 3,
+        "catalogCoverage": 3 / 1393,
+    }]
+    assert data["rhythmCatalogCharts"] == 1393
+    assert data["rareCatalogCoverageThreshold"] == .03
