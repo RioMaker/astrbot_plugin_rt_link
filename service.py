@@ -41,6 +41,7 @@ DIFFICULTY_NAMES = {
 # 精简画像缓存的数据契约版本。字段新增后提升版本，避免继续读取旧缓存
 # 中缺少图片证据字段或节奏配置常见度分组。
 RATING_CACHE_SCHEMA = 3
+RATING_HISTORY_SCHEMA = 1
 
 
 def difficulty_label(level) -> str:
@@ -268,6 +269,41 @@ def _slim_result(result: dict) -> dict:
     }
 
 
+def _history_snapshot(analysis: dict) -> dict:
+    """提取可长期保存的成长曲线数据，不重复存储谱面明细。"""
+    rhythm = analysis.get("rhythmAbility") or {}
+    features = analysis.get("featureAbility") or {}
+    return {
+        "schema": RATING_HISTORY_SCHEMA,
+        "meta": dict(analysis.get("meta") or {}),
+        "summary": dict(analysis.get("summary") or {}),
+        "counts": dict(analysis.get("counts") or {}),
+        "families": [
+            {
+                "key": item.get("key"),
+                "score": item.get("score"),
+                "charts": item.get("charts"),
+                "exposure": item.get("exposure"),
+            }
+            for item in features.get("families") or []
+        ],
+        "rhythmCells": [
+            {
+                "key": item.get("key"),
+                "pattern": item.get("pattern"),
+                "bpmBand": item.get("bpmBand"),
+                "score": item.get("score"),
+                "charts": item.get("charts"),
+                "catalogCharts": item.get("catalogCharts"),
+                "catalogCoverage": item.get("catalogCoverage"),
+                "rarity": item.get("rarity") or "common",
+            }
+            for item in rhythm.get("cells") or []
+        ],
+        "rareCatalogCoverageThreshold": rhythm.get("rareCatalogCoverageThreshold"),
+    }
+
+
 class ScoreService:
     """rt_link 核心业务逻辑（绑定 + 同步 + 评级画像）。"""
 
@@ -442,6 +478,28 @@ class ScoreService:
             return None, msg
         return slim, ""
 
+    async def _record_rating_snapshot(self, qq, analysis: dict, trigger: str) -> bool:
+        if self.db is None:
+            return False
+        try:
+            snapshot = _history_snapshot(analysis)
+            await asyncio.to_thread(self.db.add_rating_snapshot, qq, trigger, snapshot)
+            return True
+        except Exception as error:
+            self._logger.error(f"记录 Rating 历史快照失败：{error}")
+            return False
+
+    async def force_update(self, qq) -> tuple[bool, str]:
+        """跳过缓存，从菌菌重新拉取成绩、计算 Rating 并记录快照。"""
+        ok, message, analysis = await self._sync(qq)
+        if not ok or analysis is None:
+            return False, message
+        recorded = await self._record_rating_snapshot(qq, analysis, "update")
+        rating = float((analysis.get("summary") or {}).get("rating") or 0)
+        chart_count = len(analysis.get("records") or [])
+        suffix = "历史快照已记录。" if recorded else "成绩已更新，但历史快照记录失败，请检查日志。"
+        return True, f"更新完成：已从菌菌拉取 {chart_count} 张有效成绩，综合 Rating {rating:.2f}；{suffix}"
+
     def _records(self, analysis: dict) -> list:
         return analysis.get("records") or []
 
@@ -479,6 +537,7 @@ class ScoreService:
             warn + f"用量 {stats['db_bytes']/1048576:.1f}MiB / 配额 {self.quota_mb}MiB（剩余 {remaining/1048576:.1f}MiB，{ratio*100:.0f}%）",
             f"成绩记录：{stats['scores_count']} 条（{by_source}）",
             f"评级缓存：{stats['cache_count']} 个玩家",
+            f"Rating 历史：{stats['snapshot_count']} 份快照",
             f"内容字节：{stats['content_bytes']/1048576:.1f}MiB ｜ 可回收空页：{stats['reclaimable_bytes']/1024:.0f}KiB",
             f"按玩家：{by_player}",
             "清理：/rtlink cleanup 释放数据库空页（VACUUM）。",
@@ -624,6 +683,7 @@ class ScoreService:
         analysis, err = await self._get_analysis(qq)
         if err:
             return err
+        await self._record_rating_snapshot(qq, analysis, "rating_text")
         summary = analysis["summary"]
         meta = analysis.get("meta") or {}
         records = self._records(analysis)
@@ -639,9 +699,13 @@ class ScoreService:
 
     async def generate_report_image(self, qq) -> tuple[bool, str]:
         """生成鼓点画像图片，返回 (成功, 图片路径 或 错误信息)。"""
-        return await self._generate_analysis_image(qq, "report", render_report_image, "报告")
+        return await self._generate_analysis_image(
+            qq, "report", render_report_image, "报告", snapshot_trigger="rating_image"
+        )
 
-    async def _generate_analysis_image(self, qq, prefix, renderer, label) -> tuple[bool, str]:
+    async def _generate_analysis_image(
+        self, qq, prefix, renderer, label, snapshot_trigger: str | None = None
+    ) -> tuple[bool, str]:
         """使用新文件名渲染分析图片，避免 AstrBot/QQ 复用旧图缓存。"""
         analysis, err = await self._get_analysis(qq)
         if err:
@@ -654,6 +718,8 @@ class ScoreService:
         path = os.path.join(out_dir, f"{prefix}_{qq}_{time.time_ns()}.png")
         try:
             await asyncio.to_thread(renderer, analysis, path)
+            if snapshot_trigger:
+                await self._record_rating_snapshot(qq, analysis, snapshot_trigger)
             await asyncio.to_thread(self._prune_analysis_images, out_dir, prefix, qq, path)
         except Exception as e:
             self._logger.error(f"生成{label}图片失败：{e}")

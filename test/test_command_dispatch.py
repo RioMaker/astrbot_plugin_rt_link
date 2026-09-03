@@ -29,6 +29,9 @@ class FakeService:
     async def generate_weakness_image(self, qq):
         return True, f"weakness-{qq}.png"
 
+    async def force_update(self, qq):
+        return True, f"更新完成：{qq}"
+
     async def bind(self, qq, apikey, player_id, server):
         self.bind_calls.append((qq, apikey, player_id, server))
         return True, "绑定成功"
@@ -83,7 +86,9 @@ async def run_dispatch_cases():
     private_help = mock.AstrMessageEvent(
         "10001", private=True, is_admin=False, message_str="rtlink help"
     )
-    assert "rtlink 命令" in (await invoke(plugin, private_help, "help"))[0]
+    help_text = (await invoke(plugin, private_help, "help"))[0]
+    assert "rtlink 命令" in help_text
+    assert "/rtlink update" in help_text
 
     group_score = mock.AstrMessageEvent(
         "10002", private=False, is_admin=False, message_str="rtlink score 夏祭り"
@@ -131,6 +136,11 @@ async def run_dispatch_cases():
         "10009", private=False, is_admin=False, message_str="rtlink weakness"
     )
     assert await invoke(plugin, weakness, "weakness") == ["weakness-10009.png"]
+
+    update = mock.AstrMessageEvent(
+        "10010", private=True, is_admin=False, message_str="rtlink update"
+    )
+    assert await invoke(plugin, update, "update") == ["更新完成：10010"]
 
     bare = mock.AstrMessageEvent(
         "10007", private=False, is_admin=False, message_str="/rtlink"

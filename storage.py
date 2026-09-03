@@ -64,6 +64,18 @@ CREATE TABLE IF NOT EXISTS rating_cache (
     payload_json TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS rating_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner_id TEXT NOT NULL,
+    game_player_id TEXT,
+    server TEXT,
+    captured_at TEXT NOT NULL,
+    trigger TEXT NOT NULL,
+    payload_json TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_rating_snapshots_owner_time
+ON rating_snapshots(owner_id, captured_at, id);
+
 CREATE TABLE IF NOT EXISTS sync_state (
     player_id TEXT PRIMARY KEY,
     source TEXT NOT NULL,
@@ -195,6 +207,61 @@ class ScoreDatabase:
         except (ValueError, TypeError):
             return None
 
+    # -- Rating 历史快照 ---------------------------------------------------
+    def add_rating_snapshot(
+        self,
+        owner_id: str,
+        trigger: str,
+        payload: dict,
+        captured_at: str | None = None,
+    ) -> int:
+        """追加一份不可变分析快照，供后续生成玩家成长曲线。"""
+        meta = payload.get("meta") or {}
+        with self._lock:
+            cur = self._conn.execute(
+                "INSERT INTO rating_snapshots "
+                "(owner_id, game_player_id, server, captured_at, trigger, payload_json) "
+                "VALUES (?,?,?,?,?,?)",
+                (
+                    str(owner_id),
+                    str(meta.get("playerId") or "") or None,
+                    str(meta.get("server") or "") or None,
+                    captured_at or now_iso(),
+                    str(trigger),
+                    json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+                ),
+            )
+            self._conn.commit()
+            return int(cur.lastrowid)
+
+    def get_rating_snapshots(
+        self,
+        owner_id: str,
+        limit: int | None = None,
+        since: str | None = None,
+    ) -> list[dict]:
+        """按时间升序读取快照；limit 取最近 N 条后仍按升序返回。"""
+        sql = "SELECT * FROM rating_snapshots WHERE owner_id=?"
+        params: list = [str(owner_id)]
+        if since:
+            sql += " AND captured_at>=?"
+            params.append(since)
+        sql += " ORDER BY captured_at DESC, id DESC"
+        if limit is not None:
+            sql += " LIMIT ?"
+            params.append(max(int(limit), 0))
+        with self._lock:
+            rows = [dict(row) for row in self._conn.execute(sql, params).fetchall()]
+        result = []
+        for row in reversed(rows):
+            try:
+                row["payload"] = json.loads(row.pop("payload_json"))
+            except (ValueError, TypeError):
+                row["payload"] = {}
+                row.pop("payload_json", None)
+            result.append(row)
+        return result
+
     # -- 同步状态 ----------------------------------------------------------
     def set_sync_state(self, player_id: str, source: str, ok: bool) -> None:
         with self._lock:
@@ -295,6 +362,7 @@ class ScoreDatabase:
             freelist = self._conn.execute("PRAGMA freelist_count").fetchone()[0]
             scores_count = self._conn.execute("SELECT COUNT(*) FROM scores").fetchone()[0]
             cache_count = self._conn.execute("SELECT COUNT(*) FROM rating_cache").fetchone()[0]
+            snapshot_count = self._conn.execute("SELECT COUNT(*) FROM rating_snapshots").fetchone()[0]
             kv_count = self._conn.execute("SELECT COUNT(*) FROM kv").fetchone()[0]
             content_bytes = self._conn.execute(
                 "SELECT COALESCE(SUM(LENGTH(raw_json)),0) FROM scores"
@@ -319,6 +387,7 @@ class ScoreDatabase:
             "reclaimable_bytes": freelist * page_size,
             "scores_count": scores_count,
             "cache_count": cache_count,
+            "snapshot_count": snapshot_count,
             "kv_count": kv_count,
             "content_bytes": content_bytes,
             "by_source": by_source,

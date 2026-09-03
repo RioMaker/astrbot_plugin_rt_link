@@ -13,6 +13,7 @@
 - **个人画像图片**：`/rtlink profile` 输出 `1440 × 1800` PNG，集中展示 Rating、七维轮廓、强弱项、全连/全良与代表谱面
 - **节奏型弱项图片**：`/rtlink weakness` 输出 `1440 × 2200` PNG；按「节奏型 × BPM 档」给出核心短板、练习路径和参考曲目
 - **冷门配置分组**：内置谱面库覆盖率低于 3% 的节奏配置单列观察，不进入核心弱项排行
+- **成长记录**：每次获取 Rating 或执行 `/rtlink update` 都会追加一份轻量历史快照，完整保留七维与全部常见/冷门节奏配置
 - LLM 工具：注册多个查询工具，模型可在自然对话中自动调用
 - 本地存储：SQLite 持久化菌菌 hiroba/kinoko 同步数据（转义落库，关键信息不缺失）
 - 空间监管：`/rtlink storage` 查询用量，接近配额自动提醒管理员
@@ -24,6 +25,7 @@
 /rtlink unbind                              解绑当前 QQ
 /rtlink score <曲名|别名|鬼夏祭>             查询指定曲目成绩（支持难度前缀组合名）
 /rtlink rating                              生成实力画像图片
+/rtlink update                              跳过缓存，从菌菌重新拉取并记录历史快照
 /rtlink profile                             生成个人强项/弱项画像图片
 /rtlink weakness                            生成节奏型弱项与练习建议图片（冷门配置单列）
 /rtlink alias <ID或曲名> <别名>              申请歌曲别名（待管理员审核）
@@ -49,6 +51,7 @@
 - 主 Rating 采用 **AI v2**（Taiko Signal Rhythm v2），参考 OurTaiko-v1 公式（MIT，来源 [OurTaiko/taiko-rating-analyzer](https://github.com/OurTaiko/taiko-rating-analyzer)）。
 - **仅评估鬼/里（魔王/里魔王）谱面**，1–3 难度无谱面定数，不参与评级。
 - 谱面元数据打包在 `resource/charts.v1.json.gz`（1393 张，覆盖 95% 谱面）。
+- Rating 历史保存在 AstrBot 的 `data/plugin_data/astrbot_plugin_rt_link/rt_link.db`，插件更新不会覆盖；快照不保存 apikey。
 
 ## 目录结构
 
@@ -59,7 +62,7 @@ astrbot_plugin_rt_link/
 ├── report_image.py     # 与鼓迹网站同源版式的固定像素 Pillow 渲染器
 ├── profile_image.py    # /rtlink profile 玩家画像渲染器
 ├── weakness_image.py   # /rtlink weakness 弱项渲染器（冷门配置单列）
-├── storage.py          # SQLite 存储层 + 空间计量
+├── storage.py          # SQLite 成绩、Rating 历史快照与空间计量
 ├── service.py          # 核心服务（绑定/同步/评级/查询）
 ├── api_client.py       # 菌菌公开 API 客户端（标准库实现）
 ├── resource/           # 谱面元数据（charts.v1.json.gz + manifest）

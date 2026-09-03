@@ -29,7 +29,7 @@ else:
 PLUGIN_NAME = "rt_link"
 PLUGIN_AUTHOR = "Rio"
 PLUGIN_DESC = "将 QQ 绑定到菌菌控制台 apikey，查询太鼓达人成绩并评估玩家实力"
-PLUGIN_VERSION = "v0.5.1"
+PLUGIN_VERSION = "v0.6.0"
 
 COMMAND_NAME = "rtlink"
 BINDINGS_KEY = "bindings"
@@ -145,6 +145,7 @@ class RTLinkPlugin(Star):
             "list": self.list_bindings,
             "score": self.score,
             "rating": self.rating_cmd,
+            "update": self.update_cmd,
             "profile": self.profile_cmd,
             "weakness": self.weakness_cmd,
             "storage": self.storage_cmd,
@@ -170,6 +171,7 @@ class RTLinkPlugin(Star):
             "/rtlink unbind                             解绑当前 QQ\n"
             "/rtlink score <曲名>                       查询指定曲目成绩（可加难度前缀如「鬼夏祭」）\n"
             "/rtlink rating                             生成完整实力画像图片（含冷门配置观察）\n"
+            "/rtlink update                             立即从菌菌重新拉取成绩并记录历史快照\n"
             "/rtlink profile                            生成个人强项/弱项画像图片\n"
             "/rtlink weakness                           生成节奏型弱项与练习建议图片\n"
             "/rtlink alias <ID或曲名> <别名>             申请歌曲别名（待审核）\n"
@@ -217,6 +219,10 @@ class RTLinkPlugin(Star):
             yield event.plain_result(result)
             return
         yield event.image_result(result)
+
+    async def update_cmd(self, event: AstrMessageEvent):
+        _ok, result = await self.service.force_update(event.get_sender_id())
+        yield event.plain_result(result)
 
     async def weakness_cmd(self, event: AstrMessageEvent):
         ok, result = await self.service.generate_weakness_image(event.get_sender_id())
