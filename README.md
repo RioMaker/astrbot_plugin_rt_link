@@ -13,7 +13,7 @@
 - **个人画像图片**：`/rtlink profile` 输出 `1440 × 1800` PNG，集中展示 Rating、七维轮廓、强弱项、全连/全良与代表谱面
 - **节奏型弱项图片**：`/rtlink weakness` 输出 `1440 × 2200` PNG；按「节奏型 × BPM 档」给出核心短板、练习路径和参考曲目
 - **冷门配置分组**：内置谱面库覆盖率低于 3% 的节奏配置单列观察，不进入核心弱项排行
-- **成长记录**：每次获取 Rating 或执行 `/rtlink update` 都会追加一份轻量历史快照，完整保留七维与全部常见/冷门节奏配置
+- **成长记录**：每次获取 Rating 或执行 `/rtlink update` 都会追加一份轻量历史快照，完整保留七维、全部常见/冷门节奏配置，以及算法和谱面库版本
 - LLM 工具：注册多个查询工具，模型可在自然对话中自动调用
 - 本地存储：SQLite 持久化菌菌 hiroba/kinoko 同步数据（转义落库，关键信息不缺失）
 - 空间监管：`/rtlink storage` 查询用量，接近配额自动提醒管理员
@@ -52,6 +52,7 @@
 - **仅评估鬼/里（魔王/里魔王）谱面**，1–3 难度无谱面定数，不参与评级。
 - 谱面元数据打包在 `resource/charts.v1.json.gz`（1393 张，覆盖 95% 谱面）。
 - Rating 历史保存在 AstrBot 的 `data/plugin_data/astrbot_plugin_rt_link/rt_link.db`，插件更新不会覆盖；快照不保存 apikey。
+- 每份快照记录 `algorithmVersion`、`catalogVersion` 和 `catalogSchemaVersion`；后续算法升级后可按版本区间标注曲线，避免把算法变化误判为玩家进步。
 
 ## 目录结构
 

@@ -10,7 +10,15 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _PROJECT_ROOT)
 
 import service as service_mod  # noqa: E402
-from service import MemoryBindingsStore, ScoreService, _history_snapshot  # noqa: E402
+from service import (  # noqa: E402
+    CATALOG_SCHEMA_VERSION,
+    CATALOG_VERSION,
+    RATING_ALGORITHM_VERSION,
+    RATING_HISTORY_SCHEMA,
+    MemoryBindingsStore,
+    ScoreService,
+    _history_snapshot,
+)
 from storage import ScoreDatabase  # noqa: E402
 
 
@@ -82,6 +90,10 @@ def test_snapshot_persists_all_common_and_rare_cells(tmp_path):
         "rare",
     ]
     assert rows[0]["payload"]["summary"]["pattern"] == 7.9
+    assert rows[0]["payload"]["algorithmVersion"] == RATING_ALGORITHM_VERSION
+    assert rows[0]["payload"]["schema"] == RATING_HISTORY_SCHEMA == 2
+    assert rows[0]["payload"]["catalogVersion"] == CATALOG_VERSION
+    assert rows[0]["payload"]["catalogSchemaVersion"] == CATALOG_SCHEMA_VERSION
     assert stats["snapshot_count"] == 1
 
 

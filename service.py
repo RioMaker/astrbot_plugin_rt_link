@@ -41,7 +41,21 @@ DIFFICULTY_NAMES = {
 # 精简画像缓存的数据契约版本。字段新增后提升版本，避免继续读取旧缓存
 # 中缺少图片证据字段或节奏配置常见度分组。
 RATING_CACHE_SCHEMA = 3
-RATING_HISTORY_SCHEMA = 1
+RATING_HISTORY_SCHEMA = 2
+RATING_ALGORITHM_VERSION = "taiko-signal-rhythm-v2-r1"
+
+
+def _catalog_identity() -> tuple[str, int | None]:
+    """读取随插件发布的谱面模型标识，失败时保留明确的 unknown。"""
+    manifest_path = Path(__file__).resolve().parent / "resource" / "charts.manifest.json"
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        return str(manifest.get("modelId") or "unknown"), manifest.get("schemaVersion")
+    except (OSError, ValueError, TypeError):
+        return "unknown", None
+
+
+CATALOG_VERSION, CATALOG_SCHEMA_VERSION = _catalog_identity()
 
 
 def difficulty_label(level) -> str:
@@ -275,6 +289,9 @@ def _history_snapshot(analysis: dict) -> dict:
     features = analysis.get("featureAbility") or {}
     return {
         "schema": RATING_HISTORY_SCHEMA,
+        "algorithmVersion": RATING_ALGORITHM_VERSION,
+        "catalogVersion": CATALOG_VERSION,
+        "catalogSchemaVersion": CATALOG_SCHEMA_VERSION,
         "meta": dict(analysis.get("meta") or {}),
         "summary": dict(analysis.get("summary") or {}),
         "counts": dict(analysis.get("counts") or {}),
