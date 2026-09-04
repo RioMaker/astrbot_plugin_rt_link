@@ -18,6 +18,7 @@ from pathlib import Path
 if __package__:
     from . import rating as rating_mod
     from .api_client import KinokoClient, KinokoAPIError
+    from .dan_query import evaluate_player_dan_text
     from .help_image import render_help_image
     from .profile_image import render_profile_image
     from .report_image import render_report_image
@@ -26,6 +27,7 @@ if __package__:
 else:
     import rating as rating_mod
     from api_client import KinokoClient, KinokoAPIError
+    from dan_query import evaluate_player_dan_text
     from help_image import render_help_image
     from profile_image import render_profile_image
     from report_image import render_report_image
@@ -459,7 +461,7 @@ class ScoreService:
         return True, "", slim
 
     def _store_payload(self, player_id: str, source: str, payload: dict) -> int:
-        normalized = rating_mod.normalize_scores(payload)
+        normalized = rating_mod.normalize_scores(payload, rated_only=False)
         rows = []
         for r in normalized["rows"]:
             rows.append({
@@ -469,6 +471,11 @@ class ScoreService:
                 "ok_cnt": r["okCount"],
                 "ng_cnt": r["ngCount"],
                 "dondaful_cnt": r["dondafulComboCount"],
+                "pound_cnt": r.get("poundCount"),
+                "combo_cnt": r.get("comboCount"),
+                "stage_cnt": r.get("stageCount"),
+                "clear_cnt": r.get("clearCount"),
+                "full_combo_cnt": r.get("fullComboCount"),
                 "high_score": r["highScore"],
                 "best_score_rank": r["bestScoreRank"],
                 "highscore_datetime": (r.get("raw") or {}).get("highscore_datetime"),
@@ -477,7 +484,41 @@ class ScoreService:
             })
         if self.db is None:
             return len(rows)
-        return self.db.replace_scores(player_id, source, rows)
+        count = self.db.replace_scores(
+            player_id,
+            source,
+            rows,
+            game_player_id=normalized["meta"].get("playerId") or None,
+            server=normalized["meta"].get("server") or None,
+        )
+        self.db.kv_set(f"score_storage_schema:{player_id}", 2)
+        return count
+
+    async def get_player_dan_capability_text(
+        self, qq, catalog: dict, year: int, region: str, rank: str
+    ) -> str:
+        """同步后将玩家最佳单曲记录与指定段位的可计算条件对照。"""
+        binding = await self._binding(qq)
+        if not binding:
+            return "你还没有绑定菌菌账号。请先私聊可可子发送：/rtlink bind <apikey> <player_id> [server]"
+        if self.db is None:
+            return "本地成绩存储未启用，无法评估段位课题曲。"
+
+        _, error = await self._get_analysis(qq)
+        schema = await asyncio.to_thread(self.db.kv_get, f"score_storage_schema:{qq}", 0)
+        if schema != 2:
+            ok, message, _ = await self._sync(qq)
+            schema = await asyncio.to_thread(self.db.kv_get, f"score_storage_schema:{qq}", 0)
+            if not ok and schema != 2:
+                return message
+
+        effective_region = region or ("cn" if binding.get("server") == "cn" else "jp")
+        rows = await asyncio.to_thread(self.db.get_scores, str(qq))
+        if not rows:
+            return error or "同步完成，但没有可用于段位评估的成绩。"
+        return evaluate_player_dan_text(
+            catalog, rows, year=year, region=effective_region, rank=rank
+        )
 
     async def _get_analysis(self, qq) -> tuple[dict | None, str]:
         if not qq:
@@ -555,6 +596,7 @@ class ScoreService:
         lines = [
             warn + f"用量 {stats['db_bytes']/1048576:.1f}MiB / 配额 {self.quota_mb}MiB（剩余 {remaining/1048576:.1f}MiB，{ratio*100:.0f}%）",
             f"成绩记录：{stats['scores_count']} 条（{by_source}）",
+            f"成绩历史：{stats['score_history_count']} 个变化状态 ｜ 同步批次：{stats['score_sync_count']} 次",
             f"评级缓存：{stats['cache_count']} 个玩家",
             f"Rating 历史：{stats['snapshot_count']} 份快照",
             f"内容字节：{stats['content_bytes']/1048576:.1f}MiB ｜ 可回收空页：{stats['reclaimable_bytes']/1024:.0f}KiB",

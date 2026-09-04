@@ -293,7 +293,7 @@ def calculate_ai_values(chart: dict, score: dict) -> dict:
 # 成绩归一化（kinoko 全历史 / hiroba 最新）
 # ---------------------------------------------------------------------------
 
-def normalize_scores(payload: dict) -> dict:
+def normalize_scores(payload: dict, rated_only: bool = True) -> dict:
     """把菌菌 kinoko/hiroba 响应归一到 rows 列表。
 
     返回 rows（每条含 id/level/title/goodCount/okCount/ngCount/dondafulComboCount/
@@ -308,7 +308,9 @@ def normalize_scores(payload: dict) -> dict:
         try:
             id_ = _to_int(record.get("song_no"), "song_no")
             level = _to_int(record.get("level"), "level")
-            if level not in (4, 5):
+            if level not in (1, 2, 3, 4, 5):
+                raise RatingError("level 必须为 1-5")
+            if rated_only and level not in (4, 5):
                 continue
             inner = record.get("scoreInfo")
             scores = inner if isinstance(inner, list) else [record]
@@ -341,6 +343,7 @@ def normalize_scores(payload: dict) -> dict:
                         "fullComboCount": score.get("full_combo_cnt"),
                         "poundCount": score.get("pound_cnt"),
                         "comboCount": score.get("combo_cnt"),
+                        "stageCount": score.get("stage_cnt"),
                         "clearCount": score.get("clear_cnt"),
                         "songDetail": record.get("song_detail"),
                         "raw": score,

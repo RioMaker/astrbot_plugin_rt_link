@@ -17,7 +17,8 @@
 - **完整帮助长图**：`/rtlink help` 或 `/rtlink 帮助` 返回同一张说明图片，包含菌菌 apikey 四步绑定实图、常用指令、评级与安全说明
 - LLM 工具：注册多个查询工具，模型可在自然对话中自动调用
 - **AI 段位资料查询**：LLM 工具 `query_dan_course` 可按年份、区域、段位、曲名或 `song_no` 查询 2022–2025 日版/国际版与国服课题曲、条件和来源
-- 本地存储：SQLite 持久化菌菌 hiroba/kinoko 同步数据（转义落库，关键信息不缺失）
+- **AI 过段能力参考**：LLM 工具 `evaluate_player_dan` 将三首课题曲的实际良/可/不可/连打与普通、金合格条件逐项对照，并明确标注魂槽及连续演奏无法验证
+- 本地存储：SQLite 持久化全部 1–5 难度成绩；当前最佳、同步批次、去重变化历史分表保存，原始字段完整保留
 - 空间监管：`/rtlink storage` 查询用量，接近配额自动提醒管理员
 
 ## 命令
@@ -55,6 +56,7 @@
 - **仅评估鬼/里（魔王/里魔王）谱面**，1–3 难度无谱面定数，不参与评级。
 - 谱面元数据打包在 `resource/charts.v1.json.gz`（1393 张，覆盖 95% 谱面）。
 - Rating 历史保存在 AstrBot 的 `data/plugin_data/astrbot_plugin_rt_link/rt_link.db`，插件更新不会覆盖；快照不保存 apikey。
+- 每次菌菌同步都会记录同步批次；曲目成绩状态发生变化时追加到 `score_history`，相同状态不会重复占用空间。旧数据库启动时自动增量迁移。
 - 每份快照记录 `algorithmVersion`、`catalogVersion` 和 `catalogSchemaVersion`；后续算法升级后可按版本区间标注曲线，避免把算法变化误判为玩家进步。
 
 ## 目录结构

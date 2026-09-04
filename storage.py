@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import gzip
+import hashlib
 import json
 import os
 import sqlite3
@@ -126,6 +127,13 @@ CREATE TABLE IF NOT EXISTS scores (
     ok_cnt INTEGER,
     ng_cnt INTEGER,
     dondaful_cnt INTEGER,
+    pound_cnt INTEGER,
+    combo_cnt INTEGER,
+    stage_cnt INTEGER,
+    clear_cnt INTEGER,
+    full_combo_cnt INTEGER,
+    game_player_id TEXT,
+    server TEXT,
     high_score INTEGER,
     best_score_rank INTEGER,
     highscore_datetime TEXT,
@@ -135,6 +143,50 @@ CREATE TABLE IF NOT EXISTS scores (
 );
 CREATE INDEX IF NOT EXISTS idx_scores_lookup ON scores(player_id, song_no, level);
 CREATE INDEX IF NOT EXISTS idx_scores_player ON scores(player_id);
+
+CREATE TABLE IF NOT EXISTS score_syncs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner_id TEXT NOT NULL,
+    game_player_id TEXT,
+    server TEXT,
+    source TEXT NOT NULL,
+    fetched_at TEXT NOT NULL,
+    received_count INTEGER NOT NULL,
+    current_count INTEGER NOT NULL,
+    changed_count INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_score_syncs_owner_time
+ON score_syncs(owner_id, fetched_at, id);
+
+CREATE TABLE IF NOT EXISTS score_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sync_id INTEGER NOT NULL,
+    owner_id TEXT NOT NULL,
+    game_player_id TEXT,
+    server TEXT,
+    song_no INTEGER NOT NULL,
+    level INTEGER NOT NULL,
+    source TEXT NOT NULL,
+    good_cnt INTEGER,
+    ok_cnt INTEGER,
+    ng_cnt INTEGER,
+    pound_cnt INTEGER,
+    combo_cnt INTEGER,
+    stage_cnt INTEGER,
+    clear_cnt INTEGER,
+    full_combo_cnt INTEGER,
+    dondaful_cnt INTEGER,
+    high_score INTEGER,
+    best_score_rank INTEGER,
+    highscore_datetime TEXT,
+    update_datetime TEXT,
+    raw_json TEXT NOT NULL,
+    state_hash TEXT NOT NULL,
+    fetched_at TEXT NOT NULL,
+    UNIQUE(owner_id, source, song_no, level, state_hash)
+);
+CREATE INDEX IF NOT EXISTS idx_score_history_lookup
+ON score_history(owner_id, song_no, level, fetched_at, id);
 
 CREATE TABLE IF NOT EXISTS rating_cache (
     player_id TEXT PRIMARY KEY,
@@ -193,9 +245,24 @@ class ScoreDatabase:
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA synchronous=NORMAL")
-        with self._lock:
+        with self._lock, self._conn:
             self._conn.executescript(_SCHEMA)
+            self._ensure_score_columns()
             self._conn.commit()
+
+    def _ensure_score_columns(self) -> None:
+        """为旧数据库补充当前成绩表的新字段，不破坏已有数据。"""
+        existing = {
+            row["name"] for row in self._conn.execute("PRAGMA table_info(scores)").fetchall()
+        }
+        columns = {
+            "pound_cnt": "INTEGER", "combo_cnt": "INTEGER", "stage_cnt": "INTEGER",
+            "clear_cnt": "INTEGER", "full_combo_cnt": "INTEGER",
+            "game_player_id": "TEXT", "server": "TEXT",
+        }
+        for name, sql_type in columns.items():
+            if name not in existing:
+                self._conn.execute(f"ALTER TABLE scores ADD COLUMN {name} {sql_type}")
 
     def close(self) -> None:
         with self._lock:
@@ -205,31 +272,98 @@ class ScoreDatabase:
                 self._conn.close()
 
     # -- 成绩写入 / 读取 ----------------------------------------------------
-    def replace_scores(self, player_id: str, source: str, rows: list, fetched_at: str | None = None) -> int:
-        """按快照替换：删除该 (player, source) 旧数据后批量插入，保证幂等。"""
+    def replace_scores(
+        self,
+        player_id: str,
+        source: str,
+        rows: list,
+        fetched_at: str | None = None,
+        game_player_id: str | None = None,
+        server: str | None = None,
+    ) -> int:
+        """更新当前最佳成绩，并把每次同步及变化状态写入历史表。"""
         fetched_at = fetched_at or now_iso()
-        with self._lock:
+        current = {}
+        for row in rows:
+            key = (row["id"], row["level"])
+            rank_key = (
+                int(row.get("high_score") or 0), int(row.get("best_score_rank") or 0),
+                str(row.get("update_datetime") or row.get("highscore_datetime") or ""),
+            )
+            previous = current.get(key)
+            if previous is None or rank_key > previous[0]:
+                current[key] = (rank_key, row)
+        current_rows = [item[1] for item in current.values()]
+
+        with self._lock, self._conn:
+            sync_cur = self._conn.execute(
+                "INSERT INTO score_syncs "
+                "(owner_id, game_player_id, server, source, fetched_at, received_count, current_count) "
+                "VALUES (?,?,?,?,?,?,?)",
+                (str(player_id), game_player_id, server, source, fetched_at, len(rows), len(current_rows)),
+            )
+            sync_id = int(sync_cur.lastrowid)
+            changed_count = 0
+            for r in rows:
+                raw_json = json.dumps(r.get("raw") or {}, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+                state = {
+                    key: r.get(key) for key in (
+                        "good_cnt", "ok_cnt", "ng_cnt", "pound_cnt", "combo_cnt",
+                        "stage_cnt", "clear_cnt", "full_combo_cnt", "dondaful_cnt",
+                        "high_score", "best_score_rank", "highscore_datetime", "update_datetime",
+                    )
+                }
+                state["raw"] = raw_json
+                state_hash = hashlib.sha256(
+                    json.dumps(state, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+                ).hexdigest()
+                history_cur = self._conn.execute(
+                    """
+                    INSERT OR IGNORE INTO score_history
+                    (sync_id, owner_id, game_player_id, server, song_no, level, source,
+                     good_cnt, ok_cnt, ng_cnt, pound_cnt, combo_cnt, stage_cnt, clear_cnt,
+                     full_combo_cnt, dondaful_cnt, high_score, best_score_rank,
+                     highscore_datetime, update_datetime, raw_json, state_hash, fetched_at)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    """,
+                    (
+                        sync_id, str(player_id), game_player_id, server, r["id"], r["level"], source,
+                        r.get("good_cnt"), r.get("ok_cnt"), r.get("ng_cnt"), r.get("pound_cnt"),
+                        r.get("combo_cnt"), r.get("stage_cnt"), r.get("clear_cnt"),
+                        r.get("full_combo_cnt"), r.get("dondaful_cnt"), r.get("high_score"),
+                        r.get("best_score_rank"), r.get("highscore_datetime"),
+                        r.get("update_datetime"), raw_json, state_hash, fetched_at,
+                    ),
+                )
+                changed_count += history_cur.rowcount
+
             self._conn.execute("DELETE FROM scores WHERE player_id=? AND source=?", (player_id, source))
             self._conn.executemany(
                 """
                 INSERT INTO scores
                 (player_id, song_no, level, source, good_cnt, ok_cnt, ng_cnt, dondaful_cnt,
-                 high_score, best_score_rank, highscore_datetime, update_datetime, raw_json, fetched_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                 pound_cnt, combo_cnt, stage_cnt, clear_cnt, full_combo_cnt, game_player_id,
+                 server, high_score, best_score_rank, highscore_datetime, update_datetime,
+                 raw_json, fetched_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """,
                 [
                     (
                         player_id, r["id"], r["level"], source,
                         r.get("good_cnt"), r.get("ok_cnt"), r.get("ng_cnt"), r.get("dondaful_cnt"),
+                        r.get("pound_cnt"), r.get("combo_cnt"), r.get("stage_cnt"),
+                        r.get("clear_cnt"), r.get("full_combo_cnt"), game_player_id, server,
                         r.get("high_score"), r.get("best_score_rank"),
                         r.get("highscore_datetime"), r.get("update_datetime"),
                         json.dumps(r.get("raw") or {}, ensure_ascii=False), fetched_at,
                     )
-                    for r in rows
+                    for r in current_rows
                 ],
             )
-            self._conn.commit()
-            return len(rows)
+            self._conn.execute(
+                "UPDATE score_syncs SET changed_count=? WHERE id=?", (changed_count, sync_id)
+            )
+            return len(current_rows)
 
     def get_scores(self, player_id: str, source: str | None = None) -> list:
         with self._lock:
@@ -249,17 +383,26 @@ class ScoreDatabase:
         with self._lock:
             if source:
                 cur = self._conn.execute(
-                    "SELECT * FROM scores WHERE player_id=? AND song_no=? AND level=? AND source=? "
+                    "SELECT * FROM score_history WHERE owner_id=? AND song_no=? AND level=? AND source=? "
                     "ORDER BY COALESCE(update_datetime, highscore_datetime, fetched_at)",
                     (player_id, song_no, level, source),
                 )
             else:
                 cur = self._conn.execute(
-                    "SELECT * FROM scores WHERE player_id=? AND song_no=? AND level=? "
+                    "SELECT * FROM score_history WHERE owner_id=? AND song_no=? AND level=? "
                     "ORDER BY COALESCE(update_datetime, highscore_datetime, fetched_at)",
                     (player_id, song_no, level),
                 )
             return [dict(r) for r in cur.fetchall()]
+
+    def get_score_syncs(self, player_id: str, limit: int = 20) -> list:
+        """读取最近同步批次，便于确认每次同步与新增历史状态数量。"""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM score_syncs WHERE owner_id=? ORDER BY id DESC LIMIT ?",
+                (str(player_id), max(int(limit), 0)),
+            ).fetchall()
+        return [dict(row) for row in rows]
 
     # -- 聚合缓存 ----------------------------------------------------------
     def put_rating_cache(self, player_id: str, payload: dict) -> None:
@@ -439,11 +582,16 @@ class ScoreDatabase:
             page_count = self._conn.execute("PRAGMA page_count").fetchone()[0]
             freelist = self._conn.execute("PRAGMA freelist_count").fetchone()[0]
             scores_count = self._conn.execute("SELECT COUNT(*) FROM scores").fetchone()[0]
+            score_history_count = self._conn.execute("SELECT COUNT(*) FROM score_history").fetchone()[0]
+            score_sync_count = self._conn.execute("SELECT COUNT(*) FROM score_syncs").fetchone()[0]
             cache_count = self._conn.execute("SELECT COUNT(*) FROM rating_cache").fetchone()[0]
             snapshot_count = self._conn.execute("SELECT COUNT(*) FROM rating_snapshots").fetchone()[0]
             kv_count = self._conn.execute("SELECT COUNT(*) FROM kv").fetchone()[0]
-            content_bytes = self._conn.execute(
+            current_content_bytes = self._conn.execute(
                 "SELECT COALESCE(SUM(LENGTH(raw_json)),0) FROM scores"
+            ).fetchone()[0]
+            history_content_bytes = self._conn.execute(
+                "SELECT COALESCE(SUM(LENGTH(raw_json)),0) FROM score_history"
             ).fetchone()[0]
             by_source = {
                 r["source"]: r["n"]
@@ -464,10 +612,14 @@ class ScoreDatabase:
             "page_count": page_count,
             "reclaimable_bytes": freelist * page_size,
             "scores_count": scores_count,
+            "score_history_count": score_history_count,
+            "score_sync_count": score_sync_count,
             "cache_count": cache_count,
             "snapshot_count": snapshot_count,
             "kv_count": kv_count,
-            "content_bytes": content_bytes,
+            "content_bytes": current_content_bytes + history_content_bytes,
+            "current_content_bytes": current_content_bytes,
+            "history_content_bytes": history_content_bytes,
             "by_source": by_source,
             "by_player": by_player,
         }

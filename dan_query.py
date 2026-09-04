@@ -162,3 +162,154 @@ def query_dan_courses_text(
         f"可用段位：{', '.join(ranks)}\n"
         "请补充 rank 获取完整三曲、合格条件与来源。"
     )
+
+
+def _best_score(rows: list[dict]) -> dict | None:
+    if not rows:
+        return None
+    return max(rows, key=lambda row: (
+        int(row.get("high_score") or 0),
+        int(row.get("best_score_rank") or 0),
+        -int(row.get("ng_cnt") or 0),
+        -int(row.get("ok_cnt") or 0),
+        str(row.get("update_datetime") or row.get("highscore_datetime") or ""),
+    ))
+
+
+def _score_metric(row: dict, metric: str) -> int | None:
+    field = {
+        "good_count": "good_cnt", "ok_count": "ok_cnt", "bad_count": "ng_cnt",
+        "drumroll_count": "pound_cnt",
+    }.get(metric)
+    if field:
+        value = row.get(field)
+        return int(value) if value is not None else None
+    if metric == "hit_count":
+        fields = ("good_cnt", "ok_cnt", "ng_cnt", "pound_cnt")
+        if any(row.get(field_name) is None for field_name in fields):
+            return None
+        return sum(int(row[field_name]) for field_name in fields)
+    return None
+
+
+def _passes(actual: int, target: int, operator: str) -> bool:
+    return actual >= target if operator == ">=" else actual < target
+
+
+def _evaluation_line(condition: dict, score_rows: list[dict | None]) -> tuple[str, bool | None, bool | None]:
+    metric = condition["metric"]
+    label = METRIC_LABELS.get(metric, metric)
+    scope = SCOPE_LABELS.get(condition.get("scope"), condition.get("scope", ""))
+    if metric == "soul_gauge":
+        return f"- {label}（{scope}）：普通单曲成绩不包含魂槽，无法核对", None, None
+    if any(row is None for row in score_rows):
+        return f"- {label}（{scope}）：三曲成绩不完整，无法核对", None, None
+
+    values = [_score_metric(row, metric) for row in score_rows]
+    if any(value is None for value in values):
+        return f"- {label}（{scope}）：同步数据缺少所需字段，无法核对", None, None
+    if condition.get("scope") == "course":
+        actual = sum(values)
+        actual_text = str(actual)
+        normal_ok = _passes(actual, int(condition["normal"]), condition["operator"])
+        gold_ok = _passes(actual, int(condition["gold"]), condition["operator"])
+    else:
+        actual = values
+        actual_text = " / ".join(map(str, actual))
+        normal_ok = all(
+            _passes(value, int(target), condition["operator"])
+            for value, target in zip(actual, condition["normal"])
+        )
+        gold_ok = all(
+            _passes(value, int(target), condition["operator"])
+            for value, target in zip(actual, condition["gold"])
+        )
+    target_normal = _value_text(condition["normal"], condition.get("unit", "count"))
+    target_gold = _value_text(condition["gold"], condition.get("unit", "count"))
+    operator = "≥" if condition["operator"] == ">=" else "<"
+    return (
+        f"- {label}（{scope}）：实际 {actual_text}；"
+        f"普通要求 {operator}{target_normal} [{'满足' if normal_ok else '未满足'}]；"
+        f"金要求 {operator}{target_gold} [{'满足' if gold_ok else '未满足'}]",
+        normal_ok,
+        gold_ok,
+    )
+
+
+def evaluate_player_dan_text(
+    catalog: dict,
+    score_rows: list[dict],
+    year: int,
+    region: str,
+    rank: str,
+) -> str:
+    """用玩家各课题谱面的当前最佳记录核对可计算的段位条件。"""
+    region_key = _region(region)
+    if not year or region_key is None or not rank:
+        return "评估过段能力需要明确 year、region 和 rank。"
+    course = next((
+        item for item in catalog.get("courses", [])
+        if item.get("year") == int(year)
+        and item.get("region") == region_key
+        and _norm(item.get("rank", "")) == _norm(rank)
+    ), None)
+    if course is None:
+        return f"未找到 {year} {region} {rank} 的段位资料。"
+
+    selected = []
+    lines = [
+        f"玩家段位能力参考｜{course['year']} {REGION_LABELS[course['region']]} {course['rank']}",
+        "课题曲当前最佳记录：",
+    ]
+    for song in course["songs"]:
+        candidates = set(song.get("song_no_candidates") or [])
+        matches = [
+            row for row in score_rows
+            if row.get("song_no") in candidates and row.get("level") == song["level"]
+        ]
+        best = _best_score(matches)
+        selected.append(best)
+        if best is None:
+            reason = "当前段位曲库无可关联 ID" if not candidates else "尚无同步成绩"
+            lines.append(
+                f"{song['order']}. {song['title']}（{song['difficulty']}★{song['stars']}）：{reason}"
+            )
+            continue
+        lines.append(
+            f"{song['order']}. {song['title']}（{song['difficulty']}★{song['stars']}）："
+            f"良 {best.get('good_cnt')} / 可 {best.get('ok_cnt')} / 不可 {best.get('ng_cnt')} / "
+            f"连打 {best.get('pound_cnt')} / 最高连击 {best.get('combo_cnt')} / "
+            f"分数 {best.get('high_score')}（{best.get('source')}，"
+            f"{best.get('update_datetime') or best.get('highscore_datetime') or '时间未知'}）"
+        )
+
+    lines.append("条件核对：")
+    normal_results = []
+    gold_results = []
+    missing_evaluable_data = False
+    for condition in course["conditions"]:
+        text, normal_ok, gold_ok = _evaluation_line(condition, selected)
+        lines.append(text)
+        if condition.get("metric") != "soul_gauge" and normal_ok is None:
+            missing_evaluable_data = True
+        if normal_ok is not None:
+            normal_results.append(normal_ok)
+        if gold_ok is not None:
+            gold_results.append(gold_ok)
+
+    complete = all(row is not None for row in selected)
+    if not complete:
+        conclusion = "成绩不完整，暂时无法评估可计算条件。请先 /rtlink update 同步全部难度成绩。"
+    elif missing_evaluable_data:
+        conclusion = "部分良/可/不可或连打字段缺失，暂时无法完整评估可计算条件。"
+    elif normal_results and not all(normal_results):
+        conclusion = "各曲最佳记录中仍有普通合格条件未满足。"
+    elif gold_results and all(gold_results):
+        conclusion = "各曲最佳记录满足目前可计算的金合格条件。"
+    else:
+        conclusion = "各曲最佳记录满足目前可计算的普通合格条件。"
+    lines.extend([
+        f"参考结论：{conclusion}",
+        "重要限制：这些是三首歌各自的最佳单曲记录，不是同一次段位道场连续演奏；普通成绩接口也不提供段位魂槽，因此不能据此断言已经过段。",
+    ])
+    return "\n".join(lines)

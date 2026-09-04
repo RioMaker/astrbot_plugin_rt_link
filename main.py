@@ -31,7 +31,7 @@ else:
 PLUGIN_NAME = "rt_link"
 PLUGIN_AUTHOR = "Rio"
 PLUGIN_DESC = "将 QQ 绑定到菌菌控制台 apikey，查询太鼓达人成绩并评估玩家实力"
-PLUGIN_VERSION = "v0.8.0"
+PLUGIN_VERSION = "v0.9.0"
 
 COMMAND_NAME = "rtlink"
 BINDINGS_KEY = "bindings"
@@ -341,6 +341,7 @@ class RTLinkPlugin(Star):
         """查询太鼓达人街机版段位道场课题曲、普通/金合格条件、开放时间与来源。
 
         用户询问某年段位内容、国服与日版差异、某首歌出现在哪届段位，或需要用段位曲目辅助判断水平时调用。
+        若用户询问自己的过段能力，必须改用 evaluate_player_dan，不能只凭本工具的公开门槛进行判断。
         单曲成绩只能作为段位能力参考，不能据此断言玩家已通过段位。
 
         Args:
@@ -357,6 +358,29 @@ class RTLinkPlugin(Star):
             rank=rank,
             song_name=song_name,
             song_no=song_no,
+        )
+
+    @filter.llm_tool(name="evaluate_player_dan")
+    async def evaluate_player_dan(
+        self,
+        event: AstrMessageEvent,
+        year: int,
+        rank: str,
+        region: str = "",
+    ) -> str:
+        """按玩家三首课题曲的实际良/可/不可/连打数据，核对指定段位的可计算合格条件。
+
+        用户询问「我能不能过某段」「评价我的过段能力」「哪些课题曲条件没达到」时，
+        应调用本工具，而不是只调用 query_dan_course。返回结果会明确区分可核对条件与
+        无法由单曲成绩证明的魂槽、连续演奏条件。
+
+        Args:
+            year(int): 段位年份，可选 2022、2023、2024、2025
+            rank(string): 段位，如 五级、初段、十段、玄人、达人
+            region(string): 区域，可选 cn/国服/中国大陆 或 jp/日版/国际版；省略时按玩家绑定服务器选择
+        """
+        return await self.service.get_player_dan_capability_text(
+            event.get_sender_id(), self.dan_courses, year, region, rank
         )
 
     @filter.llm_tool(name="get_player_rating")
