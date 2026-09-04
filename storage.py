@@ -37,6 +37,84 @@ def load_charts(path) -> dict:
     return charts
 
 
+DAN_COURSE_SCHEMA_VERSION = 1
+
+
+class DanCourseDataError(ValueError):
+    """段位道场静态资源格式错误。"""
+
+
+def load_dan_courses(path, charts: dict | None = None) -> dict:
+    """加载并校验段位数据，同时建立课程与玩家曲目反查索引。"""
+    raw = Path(path).read_bytes()
+    if str(path).endswith(".gz"):
+        raw = gzip.decompress(raw)
+    payload = json.loads(raw.decode("utf-8"))
+    if not isinstance(payload, dict):
+        raise DanCourseDataError("段位资源根节点必须是对象")
+    if payload.get("schema_version") != DAN_COURSE_SCHEMA_VERSION:
+        raise DanCourseDataError(
+            f"不支持的段位资源版本：{payload.get('schema_version')}"
+        )
+
+    sources = payload.get("sources")
+    courses = payload.get("courses")
+    if not isinstance(sources, dict) or not isinstance(courses, list):
+        raise DanCourseDataError("段位资源缺少 sources 或 courses")
+
+    by_key = {}
+    by_song = {}
+    valid_regions = {"jp_worldwide", "cn"}
+    valid_statuses = {
+        "verified", "song_verified_level_unrated", "verified_aliases",
+        "not_in_chart_resource",
+    }
+    for course in courses:
+        if not isinstance(course, dict):
+            raise DanCourseDataError("课程记录必须是对象")
+        key = (course.get("year"), course.get("region"), course.get("rank"))
+        if not isinstance(key[0], int) or key[1] not in valid_regions or not key[2]:
+            raise DanCourseDataError(f"课程键无效：{key}")
+        if key in by_key:
+            raise DanCourseDataError(f"课程键重复：{key}")
+        if any(source_id not in sources for source_id in course.get("source_ids", [])):
+            raise DanCourseDataError(f"课程引用了未知来源：{key}")
+
+        songs = course.get("songs")
+        if not isinstance(songs, list) or len(songs) != 3:
+            raise DanCourseDataError(f"课程必须包含三首曲目：{key}")
+        if {song.get("order") for song in songs if isinstance(song, dict)} != {1, 2, 3}:
+            raise DanCourseDataError(f"课程曲序无效：{key}")
+        if not isinstance(course.get("conditions"), list) or not course["conditions"]:
+            raise DanCourseDataError(f"课程缺少合格条件：{key}")
+
+        for song in songs:
+            level = song.get("level")
+            status = song.get("mapping_status")
+            candidates = song.get("song_no_candidates")
+            if level not in (1, 2, 3, 4, 5) or status not in valid_statuses:
+                raise DanCourseDataError(f"曲目难度或映射状态无效：{key}")
+            if not isinstance(candidates, list) or any(
+                not isinstance(song_no, int) or song_no <= 0 for song_no in candidates
+            ):
+                raise DanCourseDataError(f"曲目候选 ID 无效：{key}")
+            if status == "not_in_chart_resource":
+                if candidates or song.get("song_no") is not None:
+                    raise DanCourseDataError(f"缺失曲目不应包含 ID：{key}")
+                continue
+            if not candidates or song.get("song_no") not in candidates:
+                raise DanCourseDataError(f"已映射曲目缺少主 ID：{key}")
+            if charts is not None and level in (4, 5) and not any(
+                (song_no, level) in charts for song_no in candidates
+            ):
+                raise DanCourseDataError(f"段位曲目未对应到评级谱面：{key} / {song.get('title')}")
+            for song_no in candidates:
+                by_song.setdefault(song_no, []).append({"course": course, "song": song})
+        by_key[key] = course
+
+    return {**payload, "by_key": by_key, "by_song": by_song}
+
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS scores (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

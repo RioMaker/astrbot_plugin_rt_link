@@ -20,11 +20,11 @@ from astrbot.api.star import Context, Star, StarTools, register
 if __package__:
     from .api_client import KinokoClient
     from .service import BindingsStore, ScoreService, parse_difficulty
-    from .storage import ScoreDatabase, load_charts
+    from .storage import ScoreDatabase, load_charts, load_dan_courses
 else:
     from api_client import KinokoClient
     from service import BindingsStore, ScoreService, parse_difficulty
-    from storage import ScoreDatabase, load_charts
+    from storage import ScoreDatabase, load_charts, load_dan_courses
 
 PLUGIN_NAME = "rt_link"
 PLUGIN_AUTHOR = "Rio"
@@ -73,6 +73,20 @@ class RTLinkPlugin(Star):
         except Exception as e:
             self.charts = {}
             logger.warning(f"rt_link：谱面数据加载失败，评级功能不可用：{e}")
+
+        # 段位道场参考数据（静态资源；暂不参与 Rating 计算）。
+        try:
+            self.dan_courses = load_dan_courses(
+                self.plugin_dir / "resource" / "dan_courses.v1.json.gz",
+                self.charts,
+            )
+            logger.info(
+                f"rt_link：已加载段位数据 {len(self.dan_courses['courses'])} 个课程，"
+                f"关联 {len(self.dan_courses['by_song'])} 个曲目 ID"
+            )
+        except Exception as e:
+            self.dan_courses = {"courses": [], "by_key": {}, "by_song": {}}
+            logger.warning(f"rt_link：段位数据加载失败，段位参考功能不可用：{e}")
 
         self.db = ScoreDatabase(self.data_dir / "rt_link.db")
 
