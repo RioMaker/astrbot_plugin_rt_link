@@ -19,17 +19,19 @@ from astrbot.api.star import Context, Star, StarTools, register
 # 本地直接运行/测试 main.py 时（__package__ 为空），回退到同目录绝对导入。
 if __package__:
     from .api_client import KinokoClient
+    from .dan_query import query_dan_courses_text
     from .service import BindingsStore, ScoreService, parse_difficulty
     from .storage import ScoreDatabase, load_charts, load_dan_courses
 else:
     from api_client import KinokoClient
+    from dan_query import query_dan_courses_text
     from service import BindingsStore, ScoreService, parse_difficulty
     from storage import ScoreDatabase, load_charts, load_dan_courses
 
 PLUGIN_NAME = "rt_link"
 PLUGIN_AUTHOR = "Rio"
 PLUGIN_DESC = "将 QQ 绑定到菌菌控制台 apikey，查询太鼓达人成绩并评估玩家实力"
-PLUGIN_VERSION = "v0.7.0"
+PLUGIN_VERSION = "v0.8.0"
 
 COMMAND_NAME = "rtlink"
 BINDINGS_KEY = "bindings"
@@ -324,6 +326,37 @@ class RTLinkPlugin(Star):
         """
         return await self.service.query_score_text(
             event.get_sender_id(), song_name, parse_difficulty(level) if level else None
+        )
+
+    @filter.llm_tool(name="query_dan_course")
+    async def query_dan_course(
+        self,
+        event: AstrMessageEvent,
+        year: int = 0,
+        region: str = "",
+        rank: str = "",
+        song_name: str = "",
+        song_no: int = 0,
+    ) -> str:
+        """查询太鼓达人街机版段位道场课题曲、普通/金合格条件、开放时间与来源。
+
+        用户询问某年段位内容、国服与日版差异、某首歌出现在哪届段位，或需要用段位曲目辅助判断水平时调用。
+        单曲成绩只能作为段位能力参考，不能据此断言玩家已通过段位。
+
+        Args:
+            year(int): 年份，可选 2022、2023、2024、2025；0 表示不限
+            region(string): 区域，可选 cn/国服/中国大陆 或 jp/日版/国际版；空表示不限
+            rank(string): 段位，如 五级、初段、十段、玄人、达人；空表示不限
+            song_name(string): 按课题曲名称反查段位，可省略
+            song_no(int): 按 RTLink 曲目 ID 反查段位，0 表示不用 ID 筛选
+        """
+        return query_dan_courses_text(
+            self.dan_courses,
+            year=year,
+            region=region,
+            rank=rank,
+            song_name=song_name,
+            song_no=song_no,
         )
 
     @filter.llm_tool(name="get_player_rating")

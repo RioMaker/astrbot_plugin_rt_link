@@ -16,6 +16,7 @@
 - **成长记录**：每次获取 Rating 或执行 `/rtlink update` 都会追加一份轻量历史快照，完整保留七维、全部常见/冷门节奏配置，以及算法和谱面库版本
 - **完整帮助长图**：`/rtlink help` 或 `/rtlink 帮助` 返回同一张说明图片，包含菌菌 apikey 四步绑定实图、常用指令、评级与安全说明
 - LLM 工具：注册多个查询工具，模型可在自然对话中自动调用
+- **AI 段位资料查询**：LLM 工具 `query_dan_course` 可按年份、区域、段位、曲名或 `song_no` 查询 2022–2025 日版/国际版与国服课题曲、条件和来源
 - 本地存储：SQLite 持久化菌菌 hiroba/kinoko 同步数据（转义落库，关键信息不缺失）
 - 空间监管：`/rtlink storage` 查询用量，接近配额自动提醒管理员
 
@@ -39,7 +40,7 @@
 管理员指令不在此列出，完整指令（含管理员）见 [docs/commands.md](docs/commands.md)。
 ```
 
-也可以直接自然语言询问，例如：「可可子，我的实力怎么样」「可可子，我该练什么」「可可子，我的《夏祭り》成绩是多少」。
+也可以直接自然语言询问，例如：「可可子，我的实力怎么样」「可可子，我该练什么」「可可子，2025 国服十段是什么」「可可子，《天狗囃子》出现在哪届段位」。
 
 ## 难度筛选与别名
 
@@ -61,6 +62,7 @@
 ```
 astrbot_plugin_rt_link/
 ├── main.py             # 插件入口（Star 类 + 命令 + LLM 工具）
+├── dan_query.py        # 段位资料查询与 LLM 文本格式化
 ├── rating.py           # 玩家 Rating 算法（AI v2 主 + OurTaiko-v1 参考 + 节奏型画像）
 ├── report_image.py     # 与鼓迹网站同源版式的固定像素 Pillow 渲染器
 ├── profile_image.py    # /rtlink profile 玩家画像渲染器
@@ -69,7 +71,7 @@ astrbot_plugin_rt_link/
 ├── storage.py          # SQLite 成绩、Rating 历史快照与空间计量
 ├── service.py          # 核心服务（绑定/同步/评级/查询）
 ├── api_client.py       # 菌菌公开 API 客户端（标准库实现）
-├── resource/           # 谱面元数据（charts.v1.json.gz + manifest）
+├── resource/           # 谱面与段位道场静态资源（压缩 JSON + manifest）
 ├── test_api.py         # API 连通性测试（读取 apikey.key）
 ├── metadata.yaml       # 插件元数据
 ├── _conf_schema.json   # WebUI 配置项
@@ -142,6 +144,12 @@ python test/simulate.py unbind                     # 解绑
 
 ```bash
 python scripts/build_charts.py --src ../taiko-star-rating-system-cal-by-ai/public/data/charts.v1.json
+```
+
+段位资料由仓库内已审阅 Markdown 构建：
+
+```bash
+python scripts/build_dan_courses.py
 ```
 
 ## 参考
