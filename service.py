@@ -17,18 +17,24 @@ from pathlib import Path
 # 包加载（AstrBot）时用相对导入；本地直接运行 service.py 时回退到绝对导入。
 if __package__:
     from . import rating as rating_mod
+    from . import score_query as score_query_mod
+    from . import score_rank as score_rank_mod
     from .api_client import KinokoClient, KinokoAPIError
     from .dan_query import evaluate_player_dan_text
     from .help_image import render_help_image
+    from .improve_image import render_improve_image
     from .profile_image import render_profile_image
     from .report_image import render_report_image
     from .weakness_image import render_weakness_image
     from .storage import ScoreDatabase, load_charts
 else:
     import rating as rating_mod
+    import score_query as score_query_mod
+    import score_rank as score_rank_mod
     from api_client import KinokoClient, KinokoAPIError
     from dan_query import evaluate_player_dan_text
     from help_image import render_help_image
+    from improve_image import render_improve_image
     from profile_image import render_profile_image
     from report_image import render_report_image
     from weakness_image import render_weakness_image
@@ -44,7 +50,7 @@ DIFFICULTY_NAMES = {
 
 # 精简画像缓存的数据契约版本。字段新增后提升版本，避免继续读取旧缓存
 # 中缺少图片证据字段或节奏配置常见度分组。
-RATING_CACHE_SCHEMA = 3
+RATING_CACHE_SCHEMA = 5
 RATING_HISTORY_SCHEMA = 2
 RATING_ALGORITHM_VERSION = "taiko-signal-rhythm-v2-r1"
 SCORE_STORAGE_SCHEMA = 2
@@ -226,6 +232,7 @@ def _slim_result(result: dict) -> dict:
             "goodCount": r.get("goodCount"),
             "okCount": r.get("okCount"),
             "ngCount": r.get("ngCount"),
+            "poundCount": r.get("poundCount"),
             "clearCount": r.get("clearCount"),
             "updatedAt": r.get("updatedAt"),
             "aiV2": r.get("aiV2"),
@@ -272,6 +279,21 @@ def _slim_result(result: dict) -> dict:
         },
     }
 
+    # analyze() 会丢弃「谱面资料版本不一致」或「精度低于阈值」的成绩。这些曲目玩家其实打过，
+    # 必须单独记下来：否则检索时会把它们误报成「未游玩」。
+    rated_keys = {(item["id"], item["level"]) for item in records}
+    unrated = []
+    for diagnostic in result.get("diagnostics") or []:
+        song_no, level = diagnostic.get("id"), diagnostic.get("level")
+        if song_no is None or level is None or (song_no, level) in rated_keys:
+            continue
+        unrated.append({
+            "id": song_no,
+            "level": level,
+            "code": diagnostic.get("code") or "",
+            "reason": diagnostic.get("message") or "",
+        })
+
     return {
         "_cacheSchema": RATING_CACHE_SCHEMA,
         "_ts": time.time(),
@@ -283,6 +305,7 @@ def _slim_result(result: dict) -> dict:
         "counts": result["counts"],
         "meta": result["meta"],
         "records": records,
+        "unrated": unrated,
         "featureAbility": feature_ability,
         "rhythmAbility": rhythm_ability,
     }
@@ -335,6 +358,7 @@ class ScoreService:
         client_factory,
         charts: dict | None = None,
         score_db: ScoreDatabase | None = None,
+        score_rank: dict | None = None,
         default_server: str = "cn",
         sync_ttl: int = 300,
         quota_mb: int = 256,
@@ -346,6 +370,7 @@ class ScoreService:
         self._client_factory = client_factory
         self.charts = charts or {}
         self.db = score_db
+        self.score_rank = score_rank or score_rank_mod.empty_score_rank()
         self.default_server = default_server
         self.sync_ttl = sync_ttl
         self.quota_mb = quota_mb
@@ -1051,36 +1076,153 @@ class ScoreService:
         ]
         return "\n".join(lines)
 
-    async def search_scores_text(self, qq, query=None, level=None, constant_min=None, constant_max=None, rank_min=None) -> str:
-        level = self._norm_level(level)
-        analysis, err = await self._get_analysis(qq)
-        if err:
-            return err
-        if level is not None and level not in (4, 5):
-            return f"{difficulty_label(level)} 不在评级范围内（本系统仅评估鬼/里）。"
-        records = self._records(analysis)
-        # 组合名（如「鬼夏祭」）+ 别名解析
-        prefix_level, clean = parse_song_query(query or "")
-        eff_level = level if level is not None else prefix_level
-        if clean:
-            records = await self._resolve_query_to_records(records, clean)
-        if eff_level is not None:
-            if eff_level not in (4, 5):
-                return f"{difficulty_label(eff_level)} 不在评级范围内（本系统仅评估鬼/里）。"
-            records = [r for r in records if r.get("level") == eff_level]
-        if constant_min is not None:
-            records = [r for r in records if (r.get("constant") or 0) >= constant_min]
-        if constant_max is not None:
-            records = [r for r in records if (r.get("constant") or 0) <= constant_max]
-        if rank_min is not None:
-            records = [r for r in records if (r.get("bestScoreRank") or 0) >= rank_min]
-        if not records:
-            return "没有符合条件的结果。"
-        records = sorted(records, key=lambda r: -(r.get("rating") or 0))
-        if len(records) > 30:
-            head = records[:30]
-            return self._format_song_rows(head) + f"\n（共 {len(records)} 条，仅显示前 30，可缩小筛选范围）"
-        return self._format_song_rows(records)
+    # ------------------------------------------------------------------
+    # 自定义条件检索（成绩 / 谱面库）
+    # ------------------------------------------------------------------
+    SORT_LABELS = {
+        "rating": "Rating", "score": "分数", "accuracy": "精度", "constant": "定数",
+        "notes": "音符数", "gap": "距目标缺口", "rank": "评价", "updated": "更新时间",
+        "title": "曲名", "id": "曲目 ID",
+    }
+
+    async def _alias_index(self) -> dict:
+        """{song_no: [别名, ...]}，供检索时按别名匹配。"""
+        if self.db is None:
+            return {}
+        approved = await asyncio.to_thread(self.db.get_approved_aliases)
+        index = defaultdict(list)
+        for alias, song_no in approved.items():
+            index[song_no].append(alias)
+        return dict(index)
+
+    async def query_scores(self, qq, **filters) -> tuple[dict | None, str]:
+        """按自定义条件检索成绩／谱面库，返回 (结构化结果, 错误信息)。"""
+        analysis, error = await self._get_analysis(qq)
+        if error:
+            return None, error
+        result = score_query_mod.select(
+            self._records(analysis),
+            self.charts,
+            self.score_rank,
+            alias_index=await self._alias_index(),
+            unrated=analysis.get("unrated") or [],
+            **filters,
+        )
+        return result, ""
+
+    def _format_query_row(self, row: dict, detail: str = "brief") -> str:
+        title = row.get("title") or f"曲目 {row.get('id')}"
+        title_ja = row.get("titleJa")
+        head = f"《{title}》"
+        if title_ja and title_ja != title:
+            head += f"（{title_ja}）"
+        head += f"{difficulty_label(row.get('level'))}"
+
+        if not row.get("played"):
+            bits = [head, f"定数 {row.get('constant') if row.get('constant') is not None else '-'}"]
+            if row.get("totalNotes"):
+                bits.append(f"音符 {row['totalNotes']}")
+            bits.append(f"分区 {row.get('genre')}")
+            bits.append("未游玩")
+            return "  " + "｜".join(bits)
+
+        if not row.get("rated"):
+            # 有成绩但没进评级：谱面资料版本不一致，或精度低于评级阈值。
+            bits = [
+                head,
+                f"定数 {row.get('constant') if row.get('constant') is not None else '-'}",
+                f"音符 {row.get('totalNotes')}",
+                f"分区 {row.get('genre')}",
+                "有成绩但未参与评级",
+            ]
+            if row.get("unratedReason"):
+                bits.append(row["unratedReason"])
+            return "  " + "｜".join(bits)
+
+        bits = [
+            head,
+            f"Rating {round(row.get('rating') or 0, 2)}",
+            f"分数 {row.get('highScore')}",
+            f"评价 {_rank_text(row.get('bestScoreRank'))}",
+            f"精度 {(row.get('accuracy') or 0) * 100:.2f}%",
+            f"定数 {row.get('constant') if row.get('constant') is not None else '-'}",
+        ]
+        if detail == "full":
+            bits.append(f"分区 {row.get('genre')}")
+            bits.append(
+                f"良 {row.get('goodCount')}／可 {row.get('okCount')}／不可 {row.get('ngCount')}／连打 {row.get('poundCount')}"
+            )
+            bits.append(f"全连 {row.get('fullComboCount') or 0}／全良 {row.get('dondafulComboCount') or 0}")
+            if row.get("updatedAt"):
+                bits.append(f"更新 {row['updatedAt']}")
+        lines = ["  " + "｜".join(bits)]
+        if row.get("targetRank") and row.get("targetScore"):
+            if row.get("reached"):
+                lines.append(f"      已达成「{row['targetName']}」")
+            else:
+                gap_text = f"距「{row['targetName']}」门槛 {row['targetScore']} 还差 {row['gap']}"
+                if row.get("targetRequiresAllGood"):
+                    gap_text += (
+                        f"；需全良（现有 {row.get('okCount') or 0} 可 / {row.get('ngCount') or 0} 不可）"
+                        + (f"，并补 {row['rollsNeeded']} 打连打" if row.get("rollsNeeded") else "，精度曲无需连打")
+                    )
+                else:
+                    gap_text += f"；把 {row.get('okToGood')} 个「可」打成「良」"
+                    if row.get("ngToGood"):
+                        gap_text += f"，其中「可」不够，还需 {row['ngToGood']} 个「不可」转「良」"
+                    gap_text += f"，或补 {row.get('rollsNeeded')} 打连打"
+                if not row.get("targetExact"):
+                    gap_text += "（门槛为估算值）"
+                lines.append(f"      {gap_text}")
+        return "\n".join(lines)
+
+    def format_query_result(self, result: dict, detail: str = "brief") -> str:
+        spec = result["filters"]
+        lines = []
+        if result["filterText"]:
+            lines.append("筛选条件：" + "；".join(result["filterText"]))
+        sort_label = self.SORT_LABELS.get(result["sort"], result["sort"])
+        order_label = "降序" if result["order"] == "desc" else "升序"
+        if result["shown"]:
+            span = f"第 {result['offset'] + 1}-{result['offset'] + result['shown']} 条"
+            lines.append(f"命中 {result['total']} 条，显示{span}（按 {sort_label} {order_label}）")
+        else:
+            lines.append(f"命中 {result['total']} 条")
+        for note in result["notes"]:
+            lines.append(f"提示：{note}")
+        if not result["rows"]:
+            lines.append("没有符合条件的结果，可放宽条件或换用 match_mode=any/all。")
+            return "\n".join(lines)
+        for row in result["rows"]:
+            lines.append(self._format_query_row(row, detail))
+        remaining = result["total"] - result["offset"] - result["shown"]
+        if remaining > 0:
+            lines.append(f"（还有 {remaining} 条：可调大 limit、用 offset 翻页，或收紧条件）")
+        if spec["scope"] == "unplayed":
+            lines.append("说明：这些曲目当前没有你的成绩记录，只列出谱面信息。")
+        return "\n".join(lines)
+
+    async def query_scores_text(self, qq, detail: str = "brief", **filters) -> str:
+        result, error = await self.query_scores(qq, **filters)
+        if error:
+            return error
+        return self.format_query_result(result, detail)
+
+    async def search_scores_text(self, qq, query=None, level=None, constant_min=None,
+                                 constant_max=None, rank_min=None, **extra) -> str:
+        """兼容旧签名：把位置参数翻译成新筛选条件。"""
+        filters = dict(extra)
+        if query:
+            filters["query"] = query
+        if level is not None:
+            filters["levels"] = (level,)
+        if constant_min:
+            filters["constant_min"] = constant_min
+        if constant_max:
+            filters["constant_max"] = constant_max
+        if rank_min:
+            filters["rank_min"] = rank_min
+        return await self.query_scores_text(qq, **filters)
 
     async def get_song_full_text(self, qq, song_name) -> str:
         analysis, err = await self._get_analysis(qq)
@@ -1196,6 +1338,143 @@ class ScoreService:
         if not lines:
             return "当前没有明显「差一点」的谱面，继续保持。"
         return "\n".join(lines)
+
+    # ------------------------------------------------------------------
+    # スコアランク（成绩评价）提升候选
+    # ------------------------------------------------------------------
+    def _default_target_rank(self, records) -> int:
+        """默认目标 = 玩家最常拿到的评价的上一档（「提升一档」）。"""
+        counts = defaultdict(int)
+        for record in records:
+            rank = int(record.get("bestScoreRank") or 0)
+            if score_rank_mod.SCORE_RANK_MIN <= rank <= score_rank_mod.SCORE_RANK_MAX:
+                counts[rank] += 1
+        if not counts:
+            return 4
+        mode = max(counts.items(), key=lambda item: (item[1], item[0]))[0]
+        return min(mode + 1, score_rank_mod.SCORE_RANK_MAX)
+
+    async def get_rank_improvement(
+        self, qq, target_rank=None, level=None, per_genre: int = 4, gap_limit_ratio: float = 0.0
+    ) -> tuple[dict | None, str, str]:
+        """返回 (分析结果, 错误信息, 默认目标说明)。"""
+        analysis, error = await self._get_analysis(qq)
+        if error:
+            return None, error, ""
+        records = self._records(analysis)
+        if not records:
+            return None, "暂无鬼/里成绩，无法分析评价提升空间。", ""
+
+        note = ""
+        if target_rank is None:
+            target_rank = self._default_target_rank(records)
+            counts = defaultdict(int)
+            for record in records:
+                counts[int(record.get("bestScoreRank") or 0)] += 1
+            mode = max(counts.items(), key=lambda item: (item[1], item[0]))[0]
+            note = (
+                f"（未指定目标评价：取你最常拿到的「{score_rank_mod.score_rank_name(mode)}」"
+                f"的上一档）"
+            )
+
+        levels = (level,) if level in (4, 5) else (4, 5)
+        result = score_rank_mod.analyze_rank_improvements(
+            records,
+            self.charts,
+            self.score_rank,
+            target_rank,
+            levels=levels,
+            per_genre=per_genre,
+            gap_limit_ratio=gap_limit_ratio,
+        )
+        result["meta"] = analysis.get("meta") or {}
+        return result, "", note
+
+    @staticmethod
+    def _improve_item_text(item: dict) -> str:
+        title = item.get("titleJa") or item.get("title")
+        head = (
+            f"《{title}》{difficulty_label(item['level'])}｜"
+            f"{item['currentScore']}（{item['currentRankName']}）→ {item['targetScore']}｜"
+            f"差 {item['gap']}"
+        )
+        if item["pathRequiresAllGood"]:
+            path = f"需全良（现有 {item['okCount']} 个「可」、{item['ngCount']} 个「不可」）"
+            path += (
+                f"，并补足 {item['rollsNeeded']} 打连打"
+                if item["rollsNeeded"]
+                else "；该谱为精度曲，无需连打"
+            )
+            return f"{head}\n      {path}"
+        path = f"把 {item['okToGood']} 个「可」打成「良」"
+        if item["ngToGood"]:
+            path += f"，其中「可」不够，还需把 {item['ngToGood']} 个「不可」打成「良」"
+        path += f"；或等量改补 {item['rollsNeeded']} 打连打"
+        return f"{head}\n      {path}"
+
+    def format_rank_improvement_text(self, result: dict, note: str = "") -> str:
+        label = score_rank_mod.score_rank_label(result["targetRank"])
+        if not result["scanned"]:
+            return "没有可用于评价提升分析的成绩。"
+        lines = [f"目标评价：{label}{note}"]
+        if not result["candidateCount"]:
+            lines.append(
+                f"已扫描 {result['scanned']} 张已有成绩的谱面，全部达到该评价，暂时没有可提升的曲目。"
+            )
+            return "\n".join(lines)
+
+        lines.append(
+            f"已扫描 {result['scanned']} 张成绩：{result['alreadyAtTarget']} 张已达该评价，"
+            f"{result['candidateCount']} 张可提升"
+            f"（{result['exactCount']} 张使用 wiki 实测天井スコア，其余为估算门槛）。"
+        )
+        lines.append("下列按分区列出「离目标最近」的谱面，差距越小越容易达成：")
+        for row in result["genres"]:
+            lines.append("")
+            lines.append(f"■ {row['genre']}（{row['count']} 张待提升，中位差距 {row['gapMedian']}）")
+            for item in row["closest"]:
+                lines.append("  " + self._improve_item_text(item))
+        lines.append("")
+        lines.append(
+            "算法：スコア = 良×基本点 + 可×⌊基本点/2⌋ + 黄色連打×100，"
+            "基本点 = 天井スコア ÷ 总音符数，"
+            "评价门槛为天井スコア的 50/60/70/80/90/95%，最高档「极+连打满」需达到该谱極スコア。"
+        )
+        lines.append(
+            "提示：可加目标评价与难度，例如 /rtlink improve 金雅、/rtlink improve 紫雅 鬼。"
+        )
+        return "\n".join(lines)
+
+    async def get_rank_improvement_text(self, qq, target_rank=None, level=None) -> str:
+        result, error, note = await self.get_rank_improvement(qq, target_rank, level)
+        if error:
+            return error
+        return self.format_rank_improvement_text(result, note)
+
+    async def generate_rank_improve_image(
+        self, qq, target_rank=None, level=None, per_genre: int = 4
+    ) -> tuple[bool, str]:
+        """生成「提升评价」候选曲目图片。"""
+        result, error, note = await self.get_rank_improvement(
+            qq, target_rank, level, per_genre=per_genre
+        )
+        if error:
+            return False, error
+        result["note"] = note
+
+        out_dir = self.report_dir
+        if not out_dir and self.db is not None:
+            out_dir = os.path.dirname(os.path.abspath(self.db.db_path))
+        if not out_dir:
+            out_dir = os.path.dirname(os.path.abspath(__file__))
+        path = os.path.join(out_dir, f"improve_{qq}_{time.time_ns()}.png")
+        try:
+            await asyncio.to_thread(render_improve_image, result, path)
+            await asyncio.to_thread(self._prune_analysis_images, out_dir, "improve", qq, path)
+        except Exception as error:  # noqa: BLE001 - 渲染失败直接回报用户
+            self._logger.error(f"生成评价提升图片失败：{error}")
+            return False, f"生成评价提升图片失败：{error}"
+        return True, path
 
     # ------------------------------------------------------------------
     # 歌曲别名（两步确认 + 管理员审批）

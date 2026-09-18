@@ -20,18 +20,20 @@ from astrbot.api.star import Context, Star, StarTools, register
 if __package__:
     from .api_client import KinokoClient
     from .dan_query import query_dan_courses_text
+    from .score_rank import empty_score_rank, load_score_rank, parse_score_rank
     from .service import BindingsStore, ScoreService, parse_difficulty
     from .storage import ScoreDatabase, load_charts, load_dan_courses
 else:
     from api_client import KinokoClient
     from dan_query import query_dan_courses_text
+    from score_rank import empty_score_rank, load_score_rank, parse_score_rank
     from service import BindingsStore, ScoreService, parse_difficulty
     from storage import ScoreDatabase, load_charts, load_dan_courses
 
 PLUGIN_NAME = "rt_link"
 PLUGIN_AUTHOR = "Rio"
 PLUGIN_DESC = "将 QQ 绑定到菌菌控制台 apikey，查询太鼓达人成绩并评估玩家实力"
-PLUGIN_VERSION = "v0.9.0"
+PLUGIN_VERSION = "v0.10.0"
 
 COMMAND_NAME = "rtlink"
 BINDINGS_KEY = "bindings"
@@ -92,11 +94,26 @@ class RTLinkPlugin(Star):
 
         self.db = ScoreDatabase(self.data_dir / "rt_link.db")
 
+        # スコアランク（成绩评价）门槛：wiki 实测天井スコア / 極スコア；缺失曲目运行时按音符数估算。
+        try:
+            self.score_rank = load_score_rank(
+                self.plugin_dir / "resource" / "score_rank.v1.json.gz",
+                self.charts,
+            )
+            logger.info(
+                f"rt_link：已加载评价门槛数据 {len(self.score_rank['songs'])} 个谱面"
+                f"（版本 {self.score_rank['data_version']}）"
+            )
+        except Exception as e:
+            self.score_rank = empty_score_rank()
+            logger.warning(f"rt_link：评价门槛数据加载失败，评价提升分析将使用估算门槛：{e}")
+
         self.service = ScoreService(
             store=KvBindingsStore(self),
             client_factory=self._make_client,
             charts=self.charts,
             score_db=self.db,
+            score_rank=self.score_rank,
             default_server=self.cfg.get("default_server") or "cn",
             sync_ttl=int(self.cfg.get("sync_ttl", 300) or 300),
             quota_mb=int(self.cfg.get("storage_quota_mb", 256) or 256),
@@ -165,6 +182,8 @@ class RTLinkPlugin(Star):
             "update": self.update_cmd,
             "profile": self.profile_cmd,
             "weakness": self.weakness_cmd,
+            "improve": self.improve_cmd,
+            "提升": self.improve_cmd,
             "storage": self.storage_cmd,
             "cleanup": self.cleanup_cmd,
             "alias": self.alias_cmd,
@@ -174,6 +193,12 @@ class RTLinkPlugin(Star):
         }
         handler = handlers.get(command)
         if handler is None:
+            # 简写：`/rtlink 金雅`、`/rtlink 紫雅 鬼` 直接等价于 `/rtlink improve …`。
+            target, level = self._parse_improve_args("improve " + rest)
+            if target is not None or level is not None:
+                async for result in self.improve_cmd(event, target, level):
+                    yield result
+                return
             yield event.plain_result(
                 f"未知子指令：{command}。发送 /rtlink help 查看可用指令。"
             )
@@ -236,6 +261,21 @@ class RTLinkPlugin(Star):
 
     async def weakness_cmd(self, event: AstrMessageEvent):
         ok, result = await self.service.generate_weakness_image(event.get_sender_id())
+        if not ok:
+            yield event.plain_result(result)
+            return
+        yield event.image_result(result)
+
+    async def improve_cmd(self, event: AstrMessageEvent, target=None, level=None):
+        """提升评价候选曲目：按分区列出离目标评价最近的谱面与所需分数/良数/连打数。
+
+        作为子指令调用时参数从消息里解析；作为 `/rtlink <评价>` 简写调用时由分发层直接传入。
+        """
+        if target is None and level is None:
+            target, level = self._parse_improve_args(event.get_message_str())
+        ok, result = await self.service.generate_rank_improve_image(
+            event.get_sender_id(), target, level
+        )
         if not ok:
             yield event.plain_result(result)
             return
@@ -311,6 +351,58 @@ class RTLinkPlugin(Star):
     def _parse_rest(msg: str, command: str) -> str:
         m = re.search(re.escape(command) + r"\s+(.+)$", msg or "", re.IGNORECASE)
         return m.group(1).strip() if m else ""
+
+    @staticmethod
+    def _parse_levels(text: str):
+        """解析难度筛选，支持「鬼」「4,5」「鬼 里」「鬼里」等写法；返回 tuple 或 None。"""
+        raw = (text or "").strip()
+        if not raw:
+            return None
+        whole = parse_difficulty(raw)
+        if whole in RATED_LEVELS:
+            return (whole,)
+        compact = re.sub(r"[\s+／/、,，]+", "", raw).lower()
+        if compact in ("鬼里", "里鬼", "45", "54", "oniura", "uraoni", "maniaura", "uramania"):
+            return (4, 5)
+        levels = []
+        for token in re.split(r"[\s,，、/／+]+", raw):
+            if not token:
+                continue
+            level = parse_difficulty(token)
+            if level in RATED_LEVELS and level not in levels:
+                levels.append(level)
+        return tuple(sorted(levels)) or None
+
+    @staticmethod
+    def _parse_improve_args(msg: str):
+        """解析「improve [目标评价] [难度]」，顺序不限、均可省略。
+
+        纯数字按「先目标评价、后难度」的顺序赋值：`improve 4` 指评价 4（金雅），
+        `improve 金雅 5` 指评价金雅 + 里谱面。中文/日文评价名与难度名互不冲突。
+        """
+        m = re.search(r"(?:improve|提升)\s+(.+)$", msg or "", re.IGNORECASE)
+        target = level = None
+        if not m:
+            return None, None
+        for token in m.group(1).split():
+            token = token.strip()
+            if not token:
+                continue
+            if token.isdigit():
+                number = int(token)
+                if target is None and 1 <= number <= 8:
+                    target = number
+                elif level is None and number in RATED_LEVELS:
+                    level = number
+                continue
+            rank = parse_score_rank(token)
+            if rank is not None and target is None:
+                target = rank
+                continue
+            difficulty = parse_difficulty(token)
+            if difficulty in RATED_LEVELS and level is None:
+                level = difficulty
+        return target, level
 
     @staticmethod
     def _level_arg(level: int) -> int | None:
@@ -445,25 +537,127 @@ class RTLinkPlugin(Star):
 
     @filter.llm_tool(name="search_scores")
     async def search_scores(
-        self, event: AstrMessageEvent, query: str = "", level: str = "",
-        constant_min: float = 0.0, constant_max: float = 0.0, rank_min: int = 0,
+        self,
+        event: AstrMessageEvent,
+        query: str = "",
+        match_mode: str = "contains",
+        match_fields: str = "any",
+        scope: str = "played",
+        level: str = "",
+        genre: str = "",
+        song_no: int = 0,
+        constant_min: float = 0.0,
+        constant_max: float = -1.0,
+        rating_min: float = 0.0,
+        rating_max: float = -1.0,
+        accuracy_min: float = 0.0,
+        accuracy_max: float = -1.0,
+        score_min: int = 0,
+        score_max: int = -1,
+        notes_min: int = 0,
+        notes_max: int = -1,
+        rank_min: int = 0,
+        rank_max: int = -1,
+        ok_min: int = 0,
+        ok_max: int = -1,
+        ng_min: int = 0,
+        ng_max: int = -1,
+        combo: str = "",
+        target_rank: str = "",
+        reached: str = "",
+        gap_max: int = -1,
+        sort: str = "rating",
+        order: str = "desc",
+        detail: str = "brief",
+        limit: int = 20,
+        offset: int = 0,
     ) -> str:
-        """按条件检索成绩：曲名/别名模糊匹配、难度、定数范围、评价下限。
+        """【通用检索】按任意条件组合检索成绩与谱面库，是回答各类成绩/曲目问题的首选工具。
+
+        条件之间是「且」的关系，全部可省略、可自由组合；未提供的条件不参与筛选。
+        用户问「有哪些…的歌」「我打得最好的定数 10 的歌」「哪些歌零不可」「哪些歌我没打过」
+        「离金雅最近的歌」「日文名含 xx 的曲目」这类问题时都用本工具，一次查全。
+
+        匹配方式：
+        - match_mode：contains(包含，默认) / exact(精确相等) / regex(正则) / all(空格分词全部命中) / any(任一分词命中)
+        - match_fields：any(曲名+日文名+分区+别名，默认) / title / titleJa / genre / alias
+        - scope：played(只看已有成绩并已评级，默认) / unrated(打过但未参与评级) / unplayed(只看没打过的) / all(全部 1393 张谱面)
+
+        数值条件的「不限」写法：下限用 0，上限用 -1 或直接省略；
+        定数／Rating／精度／分数／音符数的上限传 0 也按「不限」处理。
+        注意 ok_max=0 表示「一个『可』都没有」、ng_max=0 表示「零不可」、gap_max=0 表示「刚好达标」，
+        这几个 0 是有效条件。
 
         Args:
-            query(string): 曲名关键词或别名，可省略；可加难度前缀如「鬼夏祭」
-            level(string): 难度筛选，可省略。可选：4/鬼/魔王、5/里/里魔王、3/松/困难、2/竹/一般、1/梅/简单
+            query(string): 关键词，可省略；支持空格分词与「鬼夏祭」这类难度前缀组合名
+            match_mode(string): 匹配方式，见上。默认 contains
+            match_fields(string): 匹配字段，见上。默认 any
+            scope(string): played/unrated/unplayed/all，默认 played
+            level(string): 难度，可省略。4/鬼/魔王、5/里/里魔王；多个用逗号，如「4,5」
+            genre(string): 曲风分区关键词（如「ナムコ」「アニメ」「J-POP」），可省略
+            song_no(int): 精确曲目 ID，0 表示不限
             constant_min(float): 最低定数，0 表示不限
-            constant_max(float): 最高定数，0 表示不限
-            rank_min(int): 最低评价等级，0 表示不限
+            constant_max(float): 最高定数，0 或 -1 表示不限
+            rating_min(float): 最低单谱 Rating，0 表示不限
+            rating_max(float): 最高单谱 Rating，0 或 -1 表示不限
+            accuracy_min(float): 最低精度，可用 0~1 或 0~100，0 表示不限
+            accuracy_max(float): 最高精度，可用 0~1 或 0~100，0 或 -1 表示不限
+            score_min(int): 最低分数，0 表示不限
+            score_max(int): 最高分数，0 或 -1 表示不限
+            notes_min(int): 最低音符数，0 表示不限
+            notes_max(int): 最高音符数，0 或 -1 表示不限
+            rank_min(int): 最低评价等级 1-8（1 无 / 2 白粹 / 3 银粹 / 4 金雅 / 5 粉雅 / 6 紫雅 / 7 极 / 8 极+连打满），0 表示不限
+            rank_max(int): 最高评价等级 1-8，-1 表示不限
+            ok_min(int): 「可」数量下限，0 表示不限
+            ok_max(int): 「可」数量上限，-1 表示不限；0 = 零「可」
+            ng_min(int): 「不可」数量下限，0 表示不限
+            ng_max(int): 「不可」数量上限，-1 表示不限；0 = 零「不可」
+            combo(string): 连段条件，可省略。可选 full(已全连) / no-fc(未全连) / dondaful(已全良) / no-miss(零不可) / miss(有不可)
+            target_rank(string): 目标评价，填了会给每条结果算出距该评价的门槛、缺口、所需良数与连打数
+            reached(string): 是否已达 target_rank，可省略。no=只看还没达成的、yes=只看已达成的
+            gap_max(int): 距 target_rank 门槛的最大分数缺口，-1 表示不限（用它筛「差一点就能升评价」；填了会自动排除已达成）
+            sort(string): 排序字段：rating / score / accuracy / constant / notes / gap / rank / updated / title / id，默认 rating
+            order(string): desc(默认) 或 asc
+            detail(string): brief(默认，一行) 或 full(附良/可/不可/连打/全连/全良与更新时间)
+            limit(int): 返回条数，默认 20，上限 200
+            offset(int): 翻页偏移，默认 0
         """
-        return await self.service.search_scores_text(
-            event.get_sender_id(),
-            query=query or None,
-            level=parse_difficulty(level) if level else None,
-            constant_min=constant_min or None,
-            constant_max=constant_max or None,
-            rank_min=rank_min or None,
+        levels = self._parse_levels(level)
+        filters = {
+            "query": query or "",
+            "match_mode": match_mode or "contains",
+            "match_fields": match_fields or "any",
+            "scope": scope or "played",
+            "levels": levels,
+            "genre": genre or "",
+            "song_no": song_no or None,
+            "constant_min": constant_min or None,
+            "constant_max": constant_max if constant_max is not None and constant_max >= 0 else None,
+            "rating_min": rating_min or None,
+            "rating_max": rating_max if rating_max is not None and rating_max >= 0 else None,
+            "accuracy_min": accuracy_min or None,
+            "accuracy_max": accuracy_max if accuracy_max is not None and accuracy_max >= 0 else None,
+            "score_min": score_min or None,
+            "score_max": score_max if score_max is not None and score_max >= 0 else None,
+            "notes_min": notes_min or None,
+            "notes_max": notes_max if notes_max is not None and notes_max >= 0 else None,
+            "rank_min": rank_min or None,
+            "rank_max": rank_max if rank_max is not None and rank_max >= 1 else None,
+            "ok_min": ok_min or None,
+            "ok_max": ok_max if ok_max is not None and ok_max >= 0 else None,
+            "ng_min": ng_min or None,
+            "ng_max": ng_max if ng_max is not None and ng_max >= 0 else None,
+            "combo": combo or "",
+            "target_rank": parse_score_rank(target_rank) if target_rank else None,
+            "reached": reached or "",
+            "gap_max": gap_max if gap_max is not None and gap_max >= 0 else None,
+            "sort": sort or "rating",
+            "order": order or "desc",
+            "limit": limit or 20,
+            "offset": offset or 0,
+        }
+        return await self.service.query_scores_text(
+            event.get_sender_id(), detail or "brief", **filters
         )
 
     @filter.llm_tool(name="get_song_full")
@@ -511,6 +705,28 @@ class RTLinkPlugin(Star):
             alias(string): 要设置的别名
         """
         return await self.service.request_alias(event.get_sender_id(), song, alias)
+
+    @filter.llm_tool(name="find_rank_improvements")
+    async def find_rank_improvements(
+        self, event: AstrMessageEvent, target_rank: str = "", level: str = ""
+    ) -> str:
+        """查询「还差一点就能提升成绩评价」的曲目，按曲风分区列出所需分数、良数与连打打数。
+
+        用户询问「怎么提高评价」「哪些歌能升评价」「我离金雅还差多少」「刷评价推荐哪些歌」
+        「怎么把紫雅变成极」时调用本工具。
+
+        评价门槛：スコア = 良×基本点 + 可×⌊基本点/2⌋ + 黄色連打×100，
+        基本点 = 天井スコア ÷ 总音符数；除最高档外门槛为天井スコア的 50/60/70/80/90/95%。
+
+        Args:
+            target_rank(string): 目标评价，省略时取玩家最常拿到的评价的上一档。可选：白粹、银粹、金雅、粉雅、紫雅、极、极+连打满，或 2-8
+            level(string): 难度筛选，省略表示鬼/里都看。可选：4/鬼/魔王、5/里/里魔王
+        """
+        return await self.service.get_rank_improvement_text(
+            event.get_sender_id(),
+            parse_score_rank(target_rank) if target_rank else None,
+            parse_difficulty(level) if level else None,
+        )
 
     @filter.llm_tool(name="generate_rating_image")
     async def generate_rating_image(self, event: AstrMessageEvent):

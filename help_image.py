@@ -215,6 +215,7 @@ def render_help_image(out_path: str) -> str:
         ("/rtlink rating", "Rating、七维、强弱项与冷门配置"),
         ("/rtlink profile", "生成个人强项 / 弱项画像"),
         ("/rtlink weakness", "生成节奏型弱项与练习建议"),
+        ("/rtlink improve [评价]", "找最接近目标评价的谱面与所需良数"),
         ("/rtlink update", "重新拉取成绩并记录历史快照"),
         ("/rtlink alias <曲名> <别名>", "申请歌曲别名，等待管理员审核"),
         ("/rtlink help / 帮助", "查看本说明长图"),
