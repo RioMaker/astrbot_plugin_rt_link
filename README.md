@@ -57,6 +57,7 @@
 - 谱面元数据打包在 `resource/charts.v1.json.gz`（1393 张，覆盖 95% 谱面）。
 - Rating 历史保存在 AstrBot 的 `data/plugin_data/astrbot_plugin_rt_link/rt_link.db`，插件更新不会覆盖；快照不保存 apikey。
 - 每次菌菌同步都会记录同步批次；曲目成绩状态发生变化时追加到 `score_history`，相同状态不会重复占用空间。旧数据库启动时自动增量迁移。
+- 升级到新版后，旧 Rating 缓存不会被当作“全难度已同步”。首次发送 `/rtlink`、`/rtlink score <曲名>`、`/rtlink rating`、`/rtlink profile` 或 `/rtlink weakness` 会自动补同步；也可用 `/rtlink update` 手动强制同步。同步失败时会返回这些操作提示。
 - 每份快照记录 `algorithmVersion`、`catalogVersion` 和 `catalogSchemaVersion`；后续算法升级后可按版本区间标注曲线，避免把算法变化误判为玩家进步。
 
 ## 目录结构

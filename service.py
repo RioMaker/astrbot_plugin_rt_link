@@ -47,6 +47,7 @@ DIFFICULTY_NAMES = {
 RATING_CACHE_SCHEMA = 3
 RATING_HISTORY_SCHEMA = 2
 RATING_ALGORITHM_VERSION = "taiko-signal-rhythm-v2-r1"
+SCORE_STORAGE_SCHEMA = 2
 
 
 def _catalog_identity() -> tuple[str, int | None]:
@@ -376,7 +377,12 @@ class ScoreService:
         bindings = await self.store.load()
         bindings[qq] = {"apikey": apikey, "player_id": player_id, "server": server}
         await self.store.save(bindings)
-        return True, f"绑定成功：QQ {qq} ↔ 玩家 {player_id}（{server}）。现在可查询成绩。"
+        if self.db is not None:
+            await asyncio.to_thread(self.db.reset_current_player, qq)
+        return True, (
+            f"绑定成功：QQ {qq} ↔ 玩家 {player_id}（{server}）。"
+            "请发送 /rtlink 自动同步，或发送 /rtlink update 手动强制同步全部成绩。"
+        )
 
     async def unbind(self, qq) -> tuple[bool, str]:
         bindings = await self.store.load()
@@ -397,6 +403,37 @@ class ScoreService:
 
     async def _binding(self, qq) -> dict | None:
         return (await self.store.load()).get(qq)
+
+    @staticmethod
+    def _sync_required_message(detail: str = "") -> str:
+        prefix = (detail.strip() + "\n") if detail else ""
+        return prefix + (
+            "检测到插件更新后的全难度成绩数据尚未同步。请重新发送 /rtlink 自动同步，"
+            "或发送 /rtlink update 手动强制同步；/rtlink score <曲名>、"
+            "/rtlink rating、/rtlink profile、/rtlink weakness 也会按需自动同步。"
+        )
+
+    async def _score_storage_ready(self, qq, binding: dict | None = None) -> bool:
+        if self.db is None:
+            return False
+        binding = binding or await self._binding(qq)
+        if not binding:
+            return False
+        state = await asyncio.to_thread(
+            self.db.kv_get, f"score_storage_schema:{qq}", {}
+        )
+        if not isinstance(state, dict) or state.get("schema") != SCORE_STORAGE_SCHEMA:
+            return False
+        if str(state.get("playerId") or "") != str(binding.get("player_id") or ""):
+            return False
+        stored_server = str(state.get("server") or "")
+        return not stored_server or stored_server == str(binding.get("server") or self.default_server)
+
+    async def score_sync_reminder_text(self, qq) -> str:
+        binding = await self._binding(qq)
+        if not binding or await self._score_storage_ready(qq, binding):
+            return ""
+        return self._sync_required_message()
 
     # ------------------------------------------------------------------
     # 同步 / 分析
@@ -426,12 +463,16 @@ class ScoreService:
 
         if kinoko is not None:
             try:
-                await asyncio.to_thread(self._store_payload, qq, "kinoko", kinoko)
+                await asyncio.to_thread(
+                    self._store_payload, qq, "kinoko", kinoko, player_id, server
+                )
             except Exception:
                 kinoko = None
         if hiroba is not None:
             try:
-                await asyncio.to_thread(self._store_payload, qq, "hiroba", hiroba)
+                await asyncio.to_thread(
+                    self._store_payload, qq, "hiroba", hiroba, player_id, server
+                )
             except Exception:
                 hiroba = None
 
@@ -460,7 +501,10 @@ class ScoreService:
             self._logger.warning(warning)
         return True, "", slim
 
-    def _store_payload(self, player_id: str, source: str, payload: dict) -> int:
+    def _store_payload(
+        self, player_id: str, source: str, payload: dict,
+        expected_game_player_id: str | None = None, expected_server: str | None = None,
+    ) -> int:
         normalized = rating_mod.normalize_scores(payload, rated_only=False)
         rows = []
         for r in normalized["rows"]:
@@ -484,14 +528,20 @@ class ScoreService:
             })
         if self.db is None:
             return len(rows)
+        game_player_id = normalized["meta"].get("playerId") or expected_game_player_id
+        server = normalized["meta"].get("server") or expected_server
         count = self.db.replace_scores(
             player_id,
             source,
             rows,
-            game_player_id=normalized["meta"].get("playerId") or None,
-            server=normalized["meta"].get("server") or None,
+            game_player_id=game_player_id or None,
+            server=server or None,
         )
-        self.db.kv_set(f"score_storage_schema:{player_id}", 2)
+        self.db.kv_set(f"score_storage_schema:{player_id}", {
+            "schema": SCORE_STORAGE_SCHEMA,
+            "playerId": str(game_player_id or ""),
+            "server": str(server or ""),
+        })
         return count
 
     async def get_player_dan_capability_text(
@@ -505,15 +555,16 @@ class ScoreService:
             return "本地成绩存储未启用，无法评估段位课题曲。"
 
         _, error = await self._get_analysis(qq)
-        schema = await asyncio.to_thread(self.db.kv_get, f"score_storage_schema:{qq}", 0)
-        if schema != 2:
-            ok, message, _ = await self._sync(qq)
-            schema = await asyncio.to_thread(self.db.kv_get, f"score_storage_schema:{qq}", 0)
-            if not ok and schema != 2:
-                return message
+        if not await self._score_storage_ready(qq, binding):
+            return error or self._sync_required_message()
 
         effective_region = region or ("cn" if binding.get("server") == "cn" else "jp")
         rows = await asyncio.to_thread(self.db.get_scores, str(qq))
+        rows = [
+            row for row in rows
+            if str(row.get("game_player_id") or "") == str(binding.get("player_id") or "")
+            and (not row.get("server") or row.get("server") == binding.get("server"))
+        ]
         if not rows:
             return error or "同步完成，但没有可用于段位评估的成绩。"
         return evaluate_player_dan_text(
@@ -527,14 +578,18 @@ class ScoreService:
             return None, "你还没有绑定菌菌账号。请先私聊可可子发送：/rtlink bind <apikey> <player_id> [server]"
         if self.db is not None:
             cache = await asyncio.to_thread(self.db.get_rating_cache, qq)
+            storage_ready = await self._score_storage_ready(qq)
             if (
                 cache
                 and cache.get("_cacheSchema") == RATING_CACHE_SCHEMA
+                and storage_ready
                 and time.time() - float(cache.get("_ts") or 0) < self.sync_ttl
             ):
                 return cache, ""
         ok, msg, slim = await self._sync(qq)
         if not ok:
+            if self.db is not None and not await self._score_storage_ready(qq):
+                msg = self._sync_required_message(msg)
             return None, msg
         return slim, ""
 
@@ -553,6 +608,8 @@ class ScoreService:
         """跳过缓存，从菌菌重新拉取成绩、计算 Rating 并记录快照。"""
         ok, message, analysis = await self._sync(qq)
         if not ok or analysis is None:
+            if self.db is not None and not await self._score_storage_ready(qq):
+                message = self._sync_required_message(message)
             return False, message
         recorded = await self._record_rating_snapshot(qq, analysis, "update")
         rating = float((analysis.get("summary") or {}).get("rating") or 0)

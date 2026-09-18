@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
 
 import sqlite3
+import asyncio
+import time
 from pathlib import Path
 
 from rating import normalize_scores
-from service import MemoryBindingsStore, ScoreService
+from service import MemoryBindingsStore, RATING_CACHE_SCHEMA, ScoreService
 from storage import ScoreDatabase
 
 
@@ -130,7 +132,42 @@ def test_service_store_payload_persists_low_levels_and_full_counts(tmp_path: Pat
         assert rows[0]["pound_cnt"] == 30
         assert rows[0]["stage_cnt"] == 5
         assert rows[0]["full_combo_cnt"] == 1
-        assert db.kv_get("score_storage_schema:qq1") == 2
+        assert db.kv_get("score_storage_schema:qq1") == {
+            "schema": 2, "playerId": "game1", "server": "cn"
+        }
         assert db.storage_stats()["score_history_count"] == 2
+    finally:
+        db.close()
+
+
+def test_old_cache_is_bypassed_until_new_score_storage_is_ready(tmp_path: Path):
+    db = ScoreDatabase(tmp_path / "cache.db")
+    store = MemoryBindingsStore({
+        "qq1": {"apikey": "tk_test", "player_id": "game1", "server": "cn"}
+    })
+    service = ScoreService(store, lambda _key: None, charts={}, score_db=db)
+    db.put_rating_cache("qq1", {
+        "_cacheSchema": RATING_CACHE_SCHEMA, "_ts": time.time(), "records": [{}]
+    })
+    called = []
+
+    async def fake_sync(_qq):
+        called.append(True)
+        return False, "网络不可用", None
+
+    service._sync = fake_sync
+    try:
+        _, message = asyncio.run(service._get_analysis("qq1"))
+        assert called == [True]
+        assert "全难度成绩数据尚未同步" in message
+        assert "/rtlink update" in message
+
+        db.kv_set("score_storage_schema:qq1", {
+            "schema": 2, "playerId": "game1", "server": "cn"
+        })
+        called.clear()
+        cached, message = asyncio.run(service._get_analysis("qq1"))
+        assert cached is not None and message == ""
+        assert called == []
     finally:
         db.close()

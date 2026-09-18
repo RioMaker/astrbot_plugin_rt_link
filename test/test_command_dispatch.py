@@ -19,12 +19,16 @@ import main  # noqa: E402
 class FakeService:
     def __init__(self):
         self.bind_calls = []
+        self.sync_reminder = ""
 
     async def generate_report_image(self, qq):
         return True, f"report-{qq}.png"
 
     async def generate_help_image(self, qq):
         return True, f"help-{qq}.png"
+
+    async def score_sync_reminder_text(self, qq):
+        return self.sync_reminder
 
     async def generate_profile_image(self, qq):
         return True, f"profile-{qq}.png"
@@ -90,6 +94,12 @@ async def run_dispatch_cases():
         "10001", private=True, is_admin=False, message_str="rtlink help"
     )
     assert await invoke(plugin, private_help, "help") == ["help-10001.png"]
+
+    plugin.service.sync_reminder = "请先同步新版成绩"
+    assert await invoke(plugin, private_help, "help") == [
+        "请先同步新版成绩", "help-10001.png"
+    ]
+    plugin.service.sync_reminder = ""
 
     chinese_help = mock.AstrMessageEvent(
         "10001", private=True, is_admin=False, message_str="rtlink 帮助"

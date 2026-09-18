@@ -395,6 +395,16 @@ class ScoreDatabase:
                 )
             return [dict(r) for r in cur.fetchall()]
 
+    def reset_current_player(self, player_id: str) -> None:
+        """重新绑定时清除当前态与缓存，保留带游戏账号标识的历史记录。"""
+        with self._lock, self._conn:
+            self._conn.execute("DELETE FROM scores WHERE player_id=?", (str(player_id),))
+            self._conn.execute("DELETE FROM rating_cache WHERE player_id=?", (str(player_id),))
+            self._conn.execute("DELETE FROM sync_state WHERE player_id=?", (str(player_id),))
+            self._conn.execute(
+                "DELETE FROM kv WHERE key=?", (f"score_storage_schema:{player_id}",)
+            )
+
     def get_score_syncs(self, player_id: str, limit: int = 20) -> list:
         """读取最近同步批次，便于确认每次同步与新增历史状态数量。"""
         with self._lock:

@@ -133,7 +133,9 @@ def test_low_level_player_can_be_evaluated_even_when_rating_is_unavailable(tmp_p
             "high_score": 900000, "best_score_rank": 4, "raw": {},
         })
     db.replace_scores("10001", "hiroba", rows, game_player_id="game1", server="cn")
-    db.kv_set("score_storage_schema:10001", 2)
+    db.kv_set("score_storage_schema:10001", {
+        "schema": 2, "playerId": "game1", "server": "cn"
+    })
 
     async def rating_unavailable(_qq):
         return None, "该账号暂无鬼/里谱面成绩，无法评级。"

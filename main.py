@@ -182,6 +182,9 @@ class RTLinkPlugin(Star):
             yield result
 
     async def help(self, event: AstrMessageEvent):
+        reminder = await self.service.score_sync_reminder_text(event.get_sender_id())
+        if reminder:
+            yield event.plain_result(reminder)
         ok, result = await self.service.generate_help_image(event.get_sender_id())
         if not ok:
             yield event.plain_result(result)
