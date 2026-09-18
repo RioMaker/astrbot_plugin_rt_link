@@ -74,24 +74,17 @@ def difficulty_label(level) -> str:
     return f"难度{level}·{name}" if name else f"难度{level}"
 
 
-# 评价等级提示（best_score_rank 越高越好，8 为全良/咚大福）
-RANK_HINT = {
-    8: "全良/咚大福",
-    7: "极优秀",
-    6: "优秀",
-    5: "良好",
-    4: "及格",
-    3: "通过",
-    2: "可",
-    1: "不可",
-}
+# 评价等级名称统一取自 score_rank 模块（依据 wiki 配点与極スコア表实测反推），
+# 避免同一套档位在两处各写一份而分叉。
+SCORE_RANK_NAMES = score_rank_mod.SCORE_RANK_NAMES
 
 
 def _rank_text(rank) -> str:
     if rank is None:
         return "-"
-    hint = RANK_HINT.get(int(rank))
-    return f"{rank}" + (f"（{hint}）" if hint else "")
+    number = int(rank)
+    name = SCORE_RANK_NAMES.get(number) if score_rank_mod.SCORE_RANK_MIN <= number <= score_rank_mod.SCORE_RANK_MAX else None
+    return f"{number}" + (f"（{name}）" if name else "")
 
 
 # 难度别名（用户输入 / LLM 传参都归一化到这里）
