@@ -35,7 +35,13 @@ SCORE_RANK_SCHEMA_VERSION = 1
 # 每个黄色連打打数的固定得分（ニジイロ配点）。
 ROLL_UNIT = 100
 
-# 评价名称与比例门槛。rank 8 没有固定比例：门槛是该谱自己的極スコア。
+# 评价名称与分数门槛。
+#
+# 门槛是**绝对分数**，与该谱的天井スコア无关 —— 这一点由实测数据确定：
+# 各档之间的分数空隙精确跨过 50/60/70/80/90/95 万（下档最高分 472900 → 上档最低分 512890 等），
+# 而若按「天井 × 比例」解释，2 档最低分 512890 将要求该谱天井 ≥ 1025780，
+# 远超 wiki 的设定量级（天井スコア 设计为「接近 100 万」，全库最高约 100.8 万），因此比例模型不成立。
+# rank 8 没有固定门槛：要求达到该谱自己的極スコア。
 SCORE_RANK_NAMES = {
     1: "无",
     2: "白粹",
@@ -46,13 +52,13 @@ SCORE_RANK_NAMES = {
     7: "极",
     8: "极+连打满",
 }
-SCORE_RANK_RATIOS = {
-    2: 0.50,
-    3: 0.60,
-    4: 0.70,
-    5: 0.80,
-    6: 0.90,
-    7: 0.95,
+SCORE_RANK_BORDERS = {
+    2: 500_000,
+    3: 600_000,
+    4: 700_000,
+    5: 800_000,
+    6: 900_000,
+    7: 950_000,
 }
 SCORE_RANK_MIN = 1
 SCORE_RANK_MAX = 8
@@ -187,12 +193,12 @@ def score_rank_name(rank) -> str:
 
 
 def score_rank_label(rank) -> str:
-    """给 LLM/用户看的带档位说明的名称，例如「4·金雅（门槛 70% 天井）」。"""
+    """给 LLM/用户看的带档位说明的名称，例如「4·金雅（门槛 700000 分）」。"""
     name = score_rank_name(rank)
-    ratio = SCORE_RANK_RATIOS.get(rank)
-    if ratio is None:
+    border = SCORE_RANK_BORDERS.get(rank)
+    if border is None:
         return f"{rank}·{name}（门槛为该谱極スコア）"
-    return f"{rank}·{name}（门槛 {ratio*100:.0f}% 天井スコア）"
+    return f"{rank}·{name}（门槛 {border} 分）"
 
 
 # ---------------------------------------------------------------------------
@@ -223,8 +229,8 @@ def song_unit(song: dict | None, total_notes: int) -> tuple[int, int, bool]:
 def rank_threshold(song: dict | None, total_notes: int, rank: int) -> dict:
     """返回该谱达到指定评价所需的分数、基本点与连打要求。
 
-    rank 8 的门槛是该谱的極スコア（天井スコア + 规定连打打数 × 100），
-    并要求全良；rank 2-7 为天井スコア的固定比例。
+    rank 2-7 是固定的绝对分数门槛，与谱面无关；rank 8 的门槛是该谱的極スコア
+    （天井スコア + 规定连打打数 × 100），并要求全良。
     """
     ceiling, unit, exact = song_unit(song, total_notes)
     if ceiling <= 0:
@@ -242,29 +248,29 @@ def rank_threshold(song: dict | None, total_notes: int, rank: int) -> dict:
             "exact": exact and song is not None,
         }
 
-    ratio = SCORE_RANK_RATIOS.get(rank)
-    if ratio is None:
+    border = SCORE_RANK_BORDERS.get(rank)
+    if border is None:
         return {"score": None, "ceiling": ceiling, "unit": unit, "rolls": None, "exact": exact}
     return {
-        "score": int(math.ceil(ceiling * ratio)),
+        "score": int(border),
         "ceiling": ceiling,
         "unit": unit,
         "rolls": 0,
         "requiresAllGood": False,
-        "exact": exact,
+        "exact": True,
     }
 
 
 def rank_of_score(song: dict | None, total_notes: int, score: int) -> int:
     """按分数反推评价等级 1-8。"""
     ceiling, _, _ = song_unit(song, total_notes)
-    if ceiling <= 0 or score is None:
+    if score is None:
         return 0
     top = int(song["top"]) if song else ceiling
-    if score >= top:
+    if top and score >= top:
         return 8
     for rank in range(7, 1, -1):
-        if score >= math.ceil(ceiling * SCORE_RANK_RATIOS[rank]):
+        if score >= SCORE_RANK_BORDERS[rank]:
             return rank
     return 1
 
@@ -325,7 +331,10 @@ def analyze_rank_improvements(
             continue
 
         current_score = _to_int(record.get("highScore"))
-        if current_score >= target_score:
+        # 游戏返回的 best_score_rank 才是权威评价；本地门槛只是用来推算还需要多少分。
+        # 两者冲突时以游戏为准，否则会出现「游戏里已经是紫雅、这里还说没到」的自相矛盾。
+        api_rank = _to_int(record.get("bestScoreRank"))
+        if api_rank >= target_rank or current_score >= target_score:
             already += 1
             continue
 
@@ -410,7 +419,7 @@ def analyze_rank_improvements(
     return {
         "targetRank": target_rank,
         "targetName": score_rank_name(target_rank),
-        "targetRatio": SCORE_RANK_RATIOS.get(target_rank),
+        "targetBorder": SCORE_RANK_BORDERS.get(target_rank),
         "scanned": scanned,
         "alreadyAtTarget": already,
         "unavailable": unknown,

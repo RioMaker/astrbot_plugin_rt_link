@@ -69,9 +69,14 @@ def make_records():
 
 
 def records_ok():
-    """把夏祭（id 1 / 鬼）的分数压到 650000，便于验证缺口换算。"""
+    """把夏祭（id 1 / 鬼）压到 650000 分，便于验证缺口换算。
+
+    评价也要一并改成与分数一致的档位：游戏给的 best_score_rank 是权威，
+    留着 7（极）会让「已达目标」判断提前命中，测不到缺口换算。
+    """
     records = make_records()
     records[0]["highScore"] = 650_000
+    records[0]["bestScoreRank"] = 3          # 银粹档（60 万 ~ 70 万）
     return records
 
 

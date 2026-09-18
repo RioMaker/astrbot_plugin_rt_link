@@ -66,13 +66,18 @@ def test_song_unit_zero_notes_is_unavailable():
     assert sr.song_unit(None, 0) == (0, 0, False)
 
 
-@pytest.mark.parametrize("rank,ratio", [(2, .5), (3, .6), (4, .7), (5, .8), (6, .9), (7, .95)])
-def test_rank_threshold_uses_ratio_of_ceiling(rank, ratio):
+@pytest.mark.parametrize("rank,border", [
+    (2, 500_000), (3, 600_000), (4, 700_000), (5, 800_000), (6, 900_000), (7, 950_000),
+])
+def test_rank_threshold_is_a_fixed_score(rank, border):
+    """门槛是固定分数，与谱面无关 —— 换一张天井完全不同的谱面结果必须一致。"""
     song = {"ceiling": 1_000_000, "top": 1_005_000, "rolls": 50}
+    low_song = {"ceiling": 984_000, "top": 1_000_330, "rolls": 10}
     threshold = sr.rank_threshold(song, 500, rank)
-    assert threshold["score"] == int(1_000_000 * ratio)
+    assert threshold["score"] == border
     assert threshold["rolls"] == 0
     assert threshold["requiresAllGood"] is False
+    assert sr.rank_threshold(low_song, 300, rank)["score"] == border
 
 
 def test_rank_threshold_top_rank_uses_kiwami_score_and_rolls():
@@ -93,6 +98,34 @@ def test_rank_of_score_maps_borders():
     assert sr.rank_of_score(song, 500, 900_000) == 6
     assert sr.rank_of_score(song, 500, 950_000) == 7
     assert sr.rank_of_score(song, 500, 1_004_000) == 8
+
+
+def test_borders_are_fixed_scores_not_a_ratio_of_ceiling():
+    """回归：评价门槛是固定分数，与谱面天井无关。
+
+    实测数据里 2 档的最低分是 512890。若门槛为「天井スコア × 50%」，该谱天井需要
+    ≥ 1025780；而 wiki 的配点设计是让天井接近 100 万，全库最高约 100.8 万 —— 比例模型不成立。
+    固定 500000 门槛则完全吻合：各档分数空隙精确跨过 50/60/70/80/90/95 万。
+    """
+    assert sr.SCORE_RANK_BORDERS == {
+        2: 500_000, 3: 600_000, 4: 700_000, 5: 800_000, 6: 900_000, 7: 950_000,
+    }
+    # 同一个分数，在任意天井的谱面上都必须给出同一个评价。
+    high_ceiling = {"ceiling": 1_008_240, "top": 1_012_000, "rolls": 30}
+    low_ceiling = {"ceiling": 984_550, "top": 1_000_330, "rolls": 20}
+    for score in (500_000, 512_890, 600_000, 700_000, 800_000, 900_000, 950_000):
+        assert sr.rank_of_score(high_ceiling, 400, score) == sr.rank_of_score(low_ceiling, 800, score)
+    assert sr.rank_of_score(low_ceiling, 800, 512_890) == 2
+    assert sr.rank_of_score(low_ceiling, 800, 472_900) == 1
+
+
+def test_bundled_ceilings_rule_out_a_ratio_model():
+    """把上面的反证写成可执行断言：资源里没有任何谱面的天井能撑起 50% 比例门槛。"""
+    data = sr.load_score_rank(RESOURCE)
+    ceilings = [entry["ceiling"] for entry in data["songs"].values()]
+    assert ceilings
+    # 2 档最低实测分 512890 ÷ 50% = 1025780，比例模型要求天井至少这么高。
+    assert max(ceilings) < 512_890 / 0.5
 
 
 # ---------------------------------------------------------------------------
@@ -131,21 +164,29 @@ def test_analyze_converts_gap_into_ok_and_roll_requirements():
     assert result["scanned"] == 1
     assert result["candidateCount"] == 1
     item = result["items"][0]
-    # 天井 996000，粉雅门槛 80% = 796800，缺口 46800，基本点 2490。
-    assert item["targetScore"] == 796_800
-    assert item["gap"] == 46_800
-    assert item["okToGood"] == 38            # ceil(2 × 46800 / 2490)
-    assert item["ngToGood"] == 0             # 当前 40 个「可」够用
-    assert item["rollsNeeded"] == 468        # ceil(46800 / 100)
+    # 粉雅门槛固定 800000；缺口 50000；基本点 = 996000 ÷ 400 = 2490。
+    assert item["targetScore"] == 800_000
+    assert item["gap"] == 50_000
+    assert item["okToGood"] == 41            # ⌈2 × 50000 / 2490⌉
+    assert item["ngToGood"] == 1             # 40 个「可」全转「良」后仍差 200 分，需再补 1 个「不可」
+    assert item["rollsNeeded"] == 500        # ⌈50000 / 100⌉
     assert item["pathRequiresAllGood"] is False
 
 
 def test_analyze_asks_for_miss_conversion_when_ok_count_is_not_enough():
     records = [_record(1, 4, 750_000, 3, ok=2, ng=10)]
     item = sr.analyze_rank_improvements(records, _charts(), _rank_data(), 5)["items"][0]
-    assert item["okToGood"] == 38
-    # 把 2 个「可」全部打成「良」只补回 1 个基本点，剩余缺口仍需 18 个「不可」转「良」。
-    assert item["ngToGood"] == 18
+    assert item["okToGood"] == 41
+    # 2 个「可」全部转「良」只补回 1 个基本点，剩余缺口仍需「不可」转「良」。
+    assert item["ngToGood"] == 20
+
+
+def test_analyze_skips_songs_the_game_already_rated_at_target():
+    """游戏给的 best_score_rank 是权威；即使本地按分数算还没到，也不该列进待提升。"""
+    records = [_record(1, 4, 780_000, 6, ok=10)]     # 分数只到金雅档，但游戏已判紫雅
+    result = sr.analyze_rank_improvements(records, _charts(), _rank_data(), 6)
+    assert result["alreadyAtTarget"] == 1
+    assert result["candidateCount"] == 0
 
 
 def test_analyze_top_rank_requires_all_good_plus_rolls():
@@ -189,11 +230,20 @@ def test_analyze_groups_by_genre_and_sorts_by_median_gap():
 
 
 def test_analyze_marks_estimated_thresholds():
+    """金雅等档位是固定分数，即使谱面没有 wiki 数据，门槛本身依然精确。"""
     charts = {(9, 4): {"id": 9, "level": 4, "title": "丁", "titleJa": "丁", "genre": "X", "totalNotes": 500}}
     result = sr.analyze_rank_improvements([_record(9, 4, 400_000, 3)], charts, {"songs": {}}, 4)
     item = result["items"][0]
-    assert item["exact"] is False
-    assert item["targetScore"] == 700_000    # 估算天井 100 万 × 70%
+    assert item["targetScore"] == 700_000    # 金雅固定 70 万
+    assert item["exact"] is True
+
+
+def test_top_rank_without_wiki_data_falls_back_to_estimated_ceiling():
+    charts = {(9, 4): {"id": 9, "level": 4, "title": "丁", "titleJa": "丁", "genre": "X", "totalNotes": 500}}
+    result = sr.analyze_rank_improvements([_record(9, 4, 900_000, 7)], charts, {"songs": {}}, 8)
+    item = result["items"][0]
+    assert item["exact"] is False            # 極スコア 未知，只能用估算天井
+    assert item["targetScore"] == 1_000_000
 
 
 def test_analyze_gap_limit_filters_far_candidates():
@@ -322,7 +372,7 @@ def test_build_improve_data_caps_genres_and_items():
     assert len(data["genres"]) == improve_image.GENRE_CARDS
     assert all(len(row["closest"]) <= improve_image.ITEMS_PER_CARD for row in data["genres"])
     assert data["targetName"] == "极+连打满"
-    assert data["targetRatio"] is None       # 最高档没有固定比例
+    assert data["targetBorder"] is None      # 最高档没有固定分数门槛
 
 
 # ---------------------------------------------------------------------------
@@ -373,7 +423,7 @@ def test_service_get_rank_improvement_uses_cached_analysis(tmp_path):
     text, (ok, path), default_text = asyncio.run(scenario())
     db.close()
 
-    assert "紫雅" in text and "896400" in text
+    assert "紫雅" in text and "900000" in text
     assert "/rtlink improve" in text
     assert ok is True and Path(path).exists()
     with Image.open(path) as image:

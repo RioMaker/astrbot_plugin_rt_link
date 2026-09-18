@@ -17,13 +17,13 @@ if __package__:
         ACCENT, ACCENT_DARK, INK, INK_SOFT, LINE, MINT, MINT_DARK,
         MUTED, PAPER, QUIET, SURFACE, SURFACE_SOFT, _box, _text, _truncate,
     )
-    from .score_rank import SCORE_RANK_NAMES, SCORE_RANK_RATIOS
+    from .score_rank import SCORE_RANK_BORDERS, SCORE_RANK_NAMES
 else:
     from report_image import (
         ACCENT, ACCENT_DARK, INK, INK_SOFT, LINE, MINT, MINT_DARK,
         MUTED, PAPER, QUIET, SURFACE, SURFACE_SOFT, _box, _text, _truncate,
     )
-    from score_rank import SCORE_RANK_NAMES, SCORE_RANK_RATIOS
+    from score_rank import SCORE_RANK_BORDERS, SCORE_RANK_NAMES
 
 WIDTH, HEIGHT = 1440, 2020
 DARK, DARK_LINE = "#07101b", "#263547"
@@ -47,7 +47,7 @@ def build_improve_data(result: dict, generated_at: datetime | None = None) -> di
         "generatedAt": generated_at.strftime("%Y.%m.%d"),
         "target": target,
         "targetName": SCORE_RANK_NAMES.get(target, f"评价{target}"),
-        "targetRatio": SCORE_RANK_RATIOS.get(target),
+        "targetBorder": SCORE_RANK_BORDERS.get(target),
         "note": result.get("note") or "",
         "scanned": int(result.get("scanned") or 0),
         "already": int(result.get("alreadyAtTarget") or 0),
@@ -133,10 +133,10 @@ def render_improve_image(result: dict, out_path: str, generated_at: datetime | N
     _box(draw, 70, HERO_TOP, 1300, HERO_H, DARK, DARK_LINE, radius=28)
     _text(draw, "TARGET / 目标评价", 108, 186, 13, MINT, True)
     _text(draw, f"{data['target']}·{data['targetName']}", 108, 222, 44, "#ffffff", True)
-    ratio = data["targetRatio"]
+    border = data["targetBorder"]
     rule = (
-        f"门槛 = 天井スコア × {ratio*100:.0f}%"
-        if ratio is not None
+        f"门槛 = {border} 分（固定分数，与谱面无关）"
+        if border is not None
         else "门槛 = 该谱極スコア（全良 + 规定连打打数）"
     )
     _text(draw, rule, 108, 292, 20, "#b8c4d0", True)
@@ -153,7 +153,7 @@ def render_improve_image(result: dict, out_path: str, generated_at: datetime | N
 
     metrics = [
         ("涉及分区", str(data["genreCount"]), ACCENT),
-        ("实测天井门槛", f"{data['exactCount']} 张", MINT_DARK),
+        ("精确门槛", f"{data['exactCount']} 张", MINT_DARK),
         ("列出分区", f"{len(data['genres'])} 个", "#8565b3"),
     ]
     for index, (label, value, color) in enumerate(metrics):
@@ -187,7 +187,7 @@ def render_improve_image(result: dict, out_path: str, generated_at: datetime | N
     _text(
         draw,
         "算法：スコア = 良×基本点 + 可×⌊基本点/2⌋ + 黄色連打×100；基本点 = 天井スコア ÷ 总音符数；"
-        "评价门槛为天井スコア的 50/60/70/80/90/95%",
+        "评价门槛为固定分数 50/60/70/80/90/95 万，最高档需达到该谱極スコア",
         70, FOOTER_LINE_Y + 18, 12, MUTED,
     )
     _text(draw, "天井スコア / 極スコア 数据来源：太鼓の達人 譜面とか Wiki", 70, FOOTER_LINE_Y + 42, 12, MUTED)

@@ -396,7 +396,9 @@ def annotate_target(row: dict, charts: dict, rank_data: dict, target_rank) -> No
         row["gap"] = None
         row["reached"] = False
         return
-    row["reached"] = current >= target_score
+    # 游戏返回的 best_score_rank 是权威评价；本地门槛只用于推算还差多少分。
+    api_rank = int(row.get("bestScoreRank") or 0)
+    row["reached"] = api_rank >= target_rank or current >= target_score
     row["gap"] = max(0, target_score - current)
     if row["reached"]:
         return
