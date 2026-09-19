@@ -19,21 +19,23 @@ from astrbot.api.star import Context, Star, StarTools, register
 # 本地直接运行/测试 main.py 时（__package__ 为空），回退到同目录绝对导入。
 if __package__:
     from .api_client import KinokoClient
-    from .dan_query import query_dan_courses_text
+    from .dan_query import match_rank, match_region, query_dan_courses_text
     from .score_rank import empty_rolls, empty_score_rank, load_rolls, load_score_rank, parse_score_rank
     from .service import BindingsStore, ScoreService, parse_difficulty
+    from .song_alias import empty_aliases, load_aliases
     from .storage import ScoreDatabase, load_charts, load_dan_courses
 else:
     from api_client import KinokoClient
-    from dan_query import query_dan_courses_text
+    from dan_query import match_rank, match_region, query_dan_courses_text
     from score_rank import empty_rolls, empty_score_rank, load_rolls, load_score_rank, parse_score_rank
     from service import BindingsStore, ScoreService, parse_difficulty
+    from song_alias import empty_aliases, load_aliases
     from storage import ScoreDatabase, load_charts, load_dan_courses
 
 PLUGIN_NAME = "rt_link"
 PLUGIN_AUTHOR = "Rio"
 PLUGIN_DESC = "将 QQ 绑定到菌菌控制台 apikey，查询太鼓达人成绩并评估玩家实力"
-PLUGIN_VERSION = "v0.11.0"
+PLUGIN_VERSION = "v0.12.0"
 
 COMMAND_NAME = "rtlink"
 BINDINGS_KEY = "bindings"
@@ -123,6 +125,20 @@ class RTLinkPlugin(Star):
             self.rolls = empty_rolls()
             logger.warning(f"rt_link：连打资料加载失败，连打路线只报「资料未知」：{e}")
 
+        # 曲名别名索引（国服名 / 日文名 / 罗马字 / 常用别名）：段位查询与成绩检索共用。
+        try:
+            self.aliases = load_aliases(
+                self.plugin_dir / "resource" / "aliases.v1.json.gz",
+                self.charts,
+            )
+            logger.info(
+                f"rt_link：已加载曲名别名 {len(self.aliases['songs'])} 个谱面"
+                f"（{len(self.aliases['index'])} 种写法，版本 {self.aliases['data_version']}）"
+            )
+        except Exception as e:
+            self.aliases = empty_aliases()
+            logger.warning(f"rt_link：曲名别名加载失败，只按谱面库曲名匹配：{e}")
+
         self.service = ScoreService(
             store=KvBindingsStore(self),
             client_factory=self._make_client,
@@ -130,6 +146,7 @@ class RTLinkPlugin(Star):
             score_db=self.db,
             score_rank=self.score_rank,
             rolls=self.rolls,
+            aliases=self.aliases,
             default_server=self.cfg.get("default_server") or "cn",
             sync_ttl=int(self.cfg.get("sync_ttl", 300) or 300),
             quota_mb=int(self.cfg.get("storage_quota_mb", 256) or 256),
@@ -200,6 +217,8 @@ class RTLinkPlugin(Star):
             "weakness": self.weakness_cmd,
             "improve": self.improve_cmd,
             "提升": self.improve_cmd,
+            "dan": self.dan_cmd,
+            "段位": self.dan_cmd,
             "storage": self.storage_cmd,
             "cleanup": self.cleanup_cmd,
             "alias": self.alias_cmd,
@@ -296,6 +315,44 @@ class RTLinkPlugin(Star):
             yield event.plain_result(result)
             return
         yield event.image_result(result)
+
+    async def dan_cmd(self, event: AstrMessageEvent):
+        """段位道场课题曲查询：`/rtlink dan [年份] [区域] [段位] [曲名]`，参数顺序不限。
+
+        曲名支持国服名、日文名、罗马字与常用别名；不带参数时列出可查询的年份与段位。
+        """
+        match = re.search(r"(?:dan|段位)\s+(.+)$", event.get_message_str() or "", re.IGNORECASE)
+        args = self._parse_dan_args(match.group(1) if match else "")
+        yield event.plain_result(
+            query_dan_courses_text(
+                self.dan_courses,
+                alias_data=getattr(self, "aliases", None),
+                **args,
+            )
+        )
+
+    @staticmethod
+    def _parse_dan_args(text: str) -> dict:
+        """解析段位查询参数：年份、区域、段位、曲名，顺序不限。"""
+        args = {"year": 0, "region": "", "rank": "", "song_name": ""}
+        song_parts = []
+        for token in re.split(r"[\s,，、]+", str(text or "").strip()):
+            if not token:
+                continue
+            if re.fullmatch(r"20\d{2}", token) and not args["year"]:
+                args["year"] = int(token)
+                continue
+            if not args["rank"]:
+                rank = match_rank(token)
+                if rank:
+                    args["rank"] = rank
+                    continue
+            if not args["region"] and match_region(token):
+                args["region"] = token
+                continue
+            song_parts.append(token)
+        args["song_name"] = " ".join(song_parts).strip()
+        return args
 
     async def storage_cmd(self, event: AstrMessageEvent):
         if not event.is_admin():
@@ -459,7 +516,9 @@ class RTLinkPlugin(Star):
             year(int): 年份，可选 2022、2023、2024、2025；0 表示不限
             region(string): 区域，可选 cn/国服/中国大陆 或 jp/日版/国际版；空表示不限
             rank(string): 段位，如 五级、初段、十段、玄人、达人；空表示不限
-            song_name(string): 按课题曲名称反查段位，可省略
+            song_name(string): 按课题曲名称反查段位，可省略。支持国服曲名、日文曲名、罗马字与常用别名
+                （例如「北埼玉」「きたさいたま2000」「六天」「罗特」「顿卡马」），
+                也可以写成「鬼 天竺2000」这样带难度前缀
             song_no(int): 按 RTLink 曲目 ID 反查段位，0 表示不用 ID 筛选
         """
         return query_dan_courses_text(
@@ -469,6 +528,7 @@ class RTLinkPlugin(Star):
             rank=rank,
             song_name=song_name,
             song_no=song_no,
+            alias_data=getattr(self, "aliases", None),
         )
 
     @filter.llm_tool(name="evaluate_player_dan")

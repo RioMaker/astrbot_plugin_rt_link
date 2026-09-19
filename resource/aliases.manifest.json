@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "dataVersion": "2026-09-19.1",
+  "catalogCharts": 1393,
+  "aliasEntries": 5507,
+  "averageNamesPerChart": 3.95,
+  "ambiguousKeys": 49,
+  "ambiguousSamples": {
+    "braveswordbraversoul": [
+      "1222",
+      "69"
+    ],
+    "manywowbang": [
+      "109",
+      "1239"
+    ],
+    "famireswars": [
+      "1259",
+      "137"
+    ],
+    "ふぁみれすうぉず": [
+      "1259",
+      "137"
+    ],
+    "flyaway": [
+      "1258",
+      "141"
+    ],
+    "えんじぇるどりむ": [
+      "1265",
+      "153",
+      "433"
+    ],
+    "kagekiyo": [
+      "1223",
+      "156"
+    ],
+    "我是合成器": [
+      "1266",
+      "191"
+    ],
+    "ぼくはしんせ": [
+      "1266",
+      "191"
+    ],
+    "bokuwasynth": [
+      "1266",
+      "191"
+    ]
+  },
+  "sources": {
+    "charts": 1393,
+    "romaji": 880,
+    "danTitles": 7,
+    "curated": 371,
+    "missingCurated": []
+  },
+  "compressedBytes": 48601,
+  "rawBytes": 164321
+}

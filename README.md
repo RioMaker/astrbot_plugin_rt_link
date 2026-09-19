@@ -6,6 +6,7 @@
 
 - 绑定管理：`bind` / `unbind` / `list`（管理员）
 - 成绩查询：按曲名/别名模糊匹配（中文/日文/英文）
+- **曲名别名索引**：内置别名表收「国服曲名 + 日文曲名 + 罗马字（ESE 谱面）+ 人工整理简称/黑话」，段位查询、查分、别名申请共用同一套匹配；`北埼玉`、`六天`、`罗特`、`顿卡马`、`天狗囃子` 这类叫法都能直接查到
 - **难度筛选**：支持难度别名（鬼/魔王/里/里魔王/松/困难/竹/一般/梅/简单）与组合名（如「鬼夏祭」「里夏祭」）
 - **歌曲别名**：两步确认（发起 → 管理员审核），审核通过后可用别名查询
 - **玩家实力评级**：综合 Rating + 七维能力（谱面底力/持续耐力/爆发手速/击打精度/配置处理/节奏适应/读谱）+ 强项/弱项
@@ -17,7 +18,8 @@
 - **成长记录**：每次获取 Rating 或执行 `/rtlink update` 都会追加一份轻量历史快照，完整保留七维、全部常见/冷门节奏配置，以及算法和谱面库版本
 - **完整帮助长图**：`/rtlink help` 或 `/rtlink 帮助` 返回同一张说明图片，包含菌菌 apikey 四步绑定实图、常用指令、评级与安全说明
 - LLM 工具：注册多个查询工具，模型可在自然对话中自动调用
-- **AI 段位资料查询**：LLM 工具 `query_dan_course` 可按年份、区域、段位、曲名或 `song_no` 查询 2022–2025 日版/国际版与国服课题曲、条件和来源
+- **段位道场查询**：`/rtlink dan [年份] [区域] [段位] [曲名]`（或 `/rtlink 段位 …`）查 2022–2025 日版/国际版与国服课题曲、普通/金合格条件、开放时间与来源；按曲名反查时同时给出国服名、日文名与 RTLink 曲目 ID，支持「鬼 天竺2000」这样带难度前缀
+- **AI 段位资料查询**：LLM 工具 `query_dan_course` 与上面的命令走同一套查询（同样支持别名）
 - **AI 过段能力参考**：LLM 工具 `evaluate_player_dan` 将三首课题曲的实际良/可/不可/连打与普通、金合格条件逐项对照，并明确标注魂槽及连续演奏无法验证
 - 本地存储：SQLite 持久化全部 1–5 难度成绩；当前最佳、同步批次、去重变化历史分表保存，原始字段完整保留
 - 空间监管：`/rtlink storage` 查询用量，接近配额自动提醒管理员
@@ -34,6 +36,7 @@
 /rtlink weakness                            生成节奏型弱项与练习建议图片（冷门配置单列）
 /rtlink improve [评价] [难度]                生成「提升评价」图片（分区列出最接近目标的谱面）
 /rtlink <评价> [难度]                        等价于 /rtlink improve，省略 improve 的简写
+/rtlink dan [年份] [区域] [段位] [曲名]       查段位道场课题曲、合格条件与来源（支持曲名别名）
 /rtlink alias <ID或曲名> <别名>              申请歌曲别名（待管理员审核）
 /rtlink help                                查看帮助
 /rtlink 帮助                                查看同一张完整帮助长图
@@ -41,6 +44,7 @@
 
 裸 `/rtlink`（不带子命令）默认返回实力画像图片，等价于 `/rtlink rating`。
 评价简写示例：`/rtlink 金雅`、`/rtlink 紫雅 鬼`、`/rtlink 极`。
+段位查询示例：`/rtlink dan 2025 十段`、`/rtlink dan 十段 国服`、`/rtlink dan 六天`、`/rtlink dan 鬼 天狗囃子`。
 
 管理员指令不在此列出，完整指令（含管理员）见 [docs/commands.md](docs/commands.md)。
 ```
@@ -130,12 +134,30 @@ LLM 工具 `search_scores` 是一个通用检索入口：曲名/日文名/分区
 - 连打打数超过該谱連打理論値时，说明这条路打不出来，文案会给出「理論値共 N 打，还差 M 打」。
 - 国服接口的結算連打数包含风船打数，插件按谱面资料把风船部分扣除后再算秒速（`BALLOON_NOMINAL_SPEED` 兜底封顶）。
 
+### 曲名与别名
+
+同一首歌在不同资料里叫法不同：国服（菌菌）用国服曲名，日文 wiki 与段位道场用日文曲名，
+ESE 谱面里还带一份罗马字/英文曲名，玩家口语又常简称（北埼玉、六天、罗特、顿卡马…）。
+
+```
+归一化 key = NFKC → 大小写折叠 → 片假名折平假名 → 繁简折算 → 去掉空白与标点
+匹配优先级 = 完全相等 > 前缀 > 包含（同级按难度与曲目 ID 排序）
+```
+
+- 全部写法打包在 `resource/aliases.v1.json.gz`（1393 张谱面、5500+ 条写法），
+  由 `scripts/build_aliases.py` 合并「谱面库 + ESE 谱面 + 段位资料 + 人工别名表」生成；
+  人工整理部分在 [`scripts/data/song_aliases.json`](scripts/data/song_aliases.json)，可直接编辑后重跑脚本。
+- 段位查询、`/rtlink score`、成绩检索 `search_scores`、别名申请解析共用这张表；
+  用户通过 `/rtlink alias` 提交且审核通过的别名优先级更高。
+- 详细规则、来源与维护方式见 [docs/song-aliases.md](docs/song-aliases.md)。
+
 ## 目录结构
 
 ```
 astrbot_plugin_rt_link/
 ├── main.py             # 插件入口（Star 类 + 命令 + LLM 工具）
-├── dan_query.py        # 段位资料查询与 LLM 文本格式化
+├── dan_query.py        # 段位资料查询与 LLM 文本格式化（曲名走别名索引）
+├── song_alias.py       # 曲名/别名归一化索引（国服名 / 日文名 / 罗马字 / 简称）
 ├── rating.py           # 玩家 Rating 算法（AI v2 主 + OurTaiko-v1 参考 + 节奏型画像）
 ├── score_rank.py       # スコアランク（成绩评价）门槛、「提升评价」候选分析与连打路线计算
 ├── improve_text.py     # 「还差多少 / 怎么补」的文案渲染（判定路线 + 连打路线）
@@ -147,8 +169,9 @@ astrbot_plugin_rt_link/
 ├── storage.py          # SQLite 成绩、Rating 历史快照与空间计量
 ├── service.py          # 核心服务（绑定/同步/评级/查询）
 ├── api_client.py       # 菌菌公开 API 客户端（标准库实现）
-├── resource/           # 谱面、段位道场、评价门槛与连打资料静态资源（压缩 JSON + manifest）
+├── resource/           # 谱面、段位道场、评价门槛、连打与别名静态资源（压缩 JSON + manifest）
 ├── scripts/            # 静态资源构建脚本（联网/读本地 TJA，仅构建期使用）
+│   └── data/           # 人工维护的数据（曲名别名表）
 ├── test_api.py         # API 连通性测试（读取 apikey.key）
 ├── metadata.yaml       # 插件元数据
 ├── _conf_schema.json   # WebUI 配置项
@@ -156,7 +179,8 @@ astrbot_plugin_rt_link/
 │   ├── agent-tasks.md  # 开发任务清单
 │   ├── commands.md     # 完整指令清单（含管理员）
 │   ├── data-fields.md  # 菌菌成绩数据字段含义
-│   └── score-rank.md   # スコアランク 算分公式、门槛推导、连打秒速与数据来源
+│   ├── score-rank.md   # スコアランク 算分公式、门槛推导、连打秒速与数据来源
+│   └── song-aliases.md # 曲名别名索引：来源、构建、匹配规则与维护
 └── test/               # mock AstrBot + 本地模拟测试
 ```
 

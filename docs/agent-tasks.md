@@ -127,6 +127,9 @@
 ## 5. 执行约定
 
 - 每个任务完成后更新上表状态与验收证据（截图/日志/测试结果）。
+- **改完即本地提交**：每完成一项修改（代码 / 资源 / 文档）并通过测试后，立即在本仓库执行
+  `git commit`（只提交本地，不做 push）。提交信息用中文说明「改了什么、为什么、如何验证」，
+  一次提交对应一件事，不要把无关改动混在一起。
 - 被阻塞的任务在「开放问题」中记录阻塞原因，不臆造需求。
 - 优先完成 P1 的需求确认（尤其 Q1 API 细节），再进入 P2 实现，避免返工。
 
@@ -143,3 +146,13 @@
 | 计算 | `score_rank.roll_plan()` / `judgment_plan()` / `improvement_plan()`：还差几打、总打数、秒速（黄条打数 ÷ 合计黄条秒数，风船不计入）、是否超理論値、是否必须全良、是否连全良＋打满都达不到 |
 | 文案 | 新增 `improve_text.py`：判定路线 + 连打路线统一说法，`/rtlink improve` 文本/图片、`/rtlink score ... target_rank`、LLM 工具 `find_rank_improvements` 共用 |
 | 验收 | `python -m pytest test -q`（`test/test_rolls.py` 27 条新用例）；`test_bundled_roll_resource_matches_wiki_for_known_songs` 对照 wiki 公布秒数；预览图见 `test/tmp/improve_roll_preview.txt` 与 `test/tmp/improve_10001_*.png` |
+
+### 2026-09-19 · 曲名别名索引 + 段位查询优化
+
+| 项 | 内容 |
+| --- | --- |
+| 问题 | 段位资料里 399 条课题曲只有 142 条与国服曲名同写法（247 条是日文写法），玩家用国服名或口语简称反问段位时大多查不到；查询结果也只有日文曲名，没法直接接着查成绩 |
+| 数据 | 新增 `resource/aliases.v1.json.gz`（构建脚本 `scripts/build_aliases.py`）：合并国服曲名、日文曲名、ESE 谱面罗马字曲名、段位资料写法与人工别名表 `scripts/data/song_aliases.json`，含派生写法（去括号/主标题/去 2000 尾缀/紧凑写法），覆盖 1393 张谱面、5435 条写法 |
+| 匹配 | 新增 `song_alias.py`：统一归一化（NFKC + 大小写 + 片假名折平假名 + 繁简折算 + 去符号）与 `exact > prefix > contains` 解析；段位查询、`/rtlink score`、`search_scores`、别名申请共用 |
+| 段位查询 | `dan_query.query_dan_courses_text` 支持别名与「鬼 天竺2000」难度前缀；结果统一展示「《国服名》（日文名）· 鬼★10｜音符｜ID」；曲目不在段位里时说明「没有出现记录」并给出候选 ID；新增用户命令 `/rtlink dan [年份] [区域] [段位] [曲名]`（`/rtlink 段位` 同义） |
+| 验收 | `python -m pytest test -q`（新增 `test/test_song_alias.py` 34 条 + `test_dan_query.py` 11 条）；预览见 `test/tmp/dan_alias_preview.txt`、`test/tmp/alias_e2e.txt`；规则与维护见 `docs/song-aliases.md` |

@@ -20,6 +20,7 @@ if __package__:
     from . import rating as rating_mod
     from . import score_query as score_query_mod
     from . import score_rank as score_rank_mod
+    from . import song_alias as song_alias_mod
     from .api_client import KinokoClient, KinokoAPIError
     from .dan_query import evaluate_player_dan_text
     from .help_image import render_help_image
@@ -33,6 +34,7 @@ else:
     import rating as rating_mod
     import score_query as score_query_mod
     import score_rank as score_rank_mod
+    import song_alias as song_alias_mod
     from api_client import KinokoClient, KinokoAPIError
     from dan_query import evaluate_player_dan_text
     from help_image import render_help_image
@@ -355,6 +357,7 @@ class ScoreService:
         score_db: ScoreDatabase | None = None,
         score_rank: dict | None = None,
         rolls: dict | None = None,
+        aliases: dict | None = None,
         default_server: str = "cn",
         sync_ttl: int = 300,
         quota_mb: int = 256,
@@ -369,6 +372,9 @@ class ScoreService:
         self.score_rank = score_rank or score_rank_mod.empty_score_rank()
         # 连打资料（黄色連打秒数 / 風船）：用来把「还差几打连打」换算成秒速。
         self.rolls = rolls or score_rank_mod.empty_rolls()
+        # 曲名别名索引（国服名 / 日文名 / 罗马字 / 常用别名）：段位查询与成绩检索共用。
+        self.aliases = aliases or song_alias_mod.empty_aliases()
+        self._builtin_alias_map = None
         self.default_server = default_server
         self.sync_ttl = sync_ttl
         self.quota_mb = quota_mb
@@ -591,7 +597,8 @@ class ScoreService:
         if not rows:
             return error or "同步完成，但没有可用于段位评估的成绩。"
         return evaluate_player_dan_text(
-            catalog, rows, year=year, region=effective_region, rank=rank
+            catalog, rows, year=year, region=effective_region, rank=rank,
+            alias_data=self.aliases,
         )
 
     async def _get_analysis(self, qq) -> tuple[dict | None, str]:
@@ -706,9 +713,23 @@ class ScoreService:
     # 查询：单曲（沿用 /rtlink score 语义）
     # ------------------------------------------------------------------
     async def _get_alias_map(self) -> dict:
-        if self.db is None:
-            return {}
-        return await asyncio.to_thread(self.db.get_approved_aliases)
+        """{别名(小写): song_no}：内置别名打底，用户提交并通过审核的别名优先。"""
+        if self._builtin_alias_map is None:
+            index = {}
+            for song_no, names in (self.aliases.get("song_index") or {}).items():
+                for name in names:
+                    key = str(name).strip().lower()
+                    if key:
+                        index.setdefault(key, int(song_no))
+            self._builtin_alias_map = index
+        index = dict(self._builtin_alias_map)
+        if self.db is not None:
+            approved = await asyncio.to_thread(self.db.get_approved_aliases)
+            for alias, song_no in (approved or {}).items():
+                key = str(alias or "").strip().lower()
+                if key:
+                    index[key] = int(song_no)
+        return index
 
     def _song_index(self) -> dict:
         """{song_no: {title, titleJa, genre}}，来自谱面数据。"""
@@ -722,22 +743,57 @@ class ScoreService:
                 }
         return idx
 
+    def _alias_names(self, song_no) -> list:
+        """该曲目的所有写法（国服名 / 日文名 / 罗马字 / 别名）。"""
+        return list((self.aliases.get("song_index") or {}).get(str(song_no)) or [])
+
+    def _song_summary(self, song_no: int) -> dict:
+        info = self._song_index().get(song_no) or {}
+        return {
+            "id": song_no,
+            "title": info.get("title") or f"Song {song_no}",
+            "titleJa": info.get("titleJa"),
+        }
+
     def _resolve_song(self, target: str) -> tuple[dict | None, str | None]:
-        """按精准 ID 或曲名解析歌曲；返回 (song, 提示)。song 为 None 时提示非空。"""
+        """按精准 ID、曲名或别名解析歌曲；返回 (song, 提示)。song 为 None 时提示非空。"""
         idx = self._song_index()
-        t = (target or "").strip()
-        if t.isdigit():
-            song_no = int(t)
+        text = (target or "").strip()
+        if text.isdigit():
+            song_no = int(text)
             info = idx.get(song_no)
             if info is None:
                 return None, f"歌曲 ID {song_no} 不在谱面库中。"
-            return {"id": song_no, "title": info.get("title") or f"Song {song_no}", "titleJa": info.get("titleJa")}, None
-        q = t.lower()
+            return self._song_summary(song_no), None
+
+        # 1) 精确别名优先（含罗马字/日文名/常用简称），避免「北埼玉」这类查询被拆成多首。
+        exact = song_alias_mod.match_names(self.aliases, text)
+        if len(exact) == 1:
+            return self._song_summary(next(iter(exact))), None
+        if len(exact) > 1:
+            options = "、".join(
+                f"《{self._song_summary(value)['title']}》(ID {value})" for value in sorted(exact)[:8]
+            )
+            return None, f"「{target}」匹配到多首歌曲：{options}。请用更精确的名称或 ID 重新提交。"
+
+        # 2) 前缀 / 包含匹配（别名索引里带派生写法）
+        hits = song_alias_mod.resolve(self.aliases, text, limit=8)
+        if len(hits) == 1:
+            return self._song_summary(hits[0]["song_no"]), None
+        if len(hits) > 1:
+            options = "、".join(
+                f"《{self._song_summary(hit['song_no'])['title']}》(ID {hit['song_no']})"
+                for hit in hits[:8]
+            )
+            return None, f"「{target}」匹配到多首歌曲：{options}。请用更精确的名称或 ID 重新提交。"
+
+        # 3) 退回谱面库原本的曲名匹配
+        query = text.lower()
         matches = []
         for song_no, info in idx.items():
             hay = " | ".join(str(x or "") for x in (info.get("title"), info.get("titleJa"))).lower()
-            if q in hay:
-                matches.append({"id": song_no, "title": info.get("title") or f"Song {song_no}", "titleJa": info.get("titleJa")})
+            if query in hay:
+                matches.append(self._song_summary(song_no))
         if not matches:
             return None, f"未找到与「{target}」匹配的歌曲，请用更精确的名称或歌曲 ID。"
         if len(matches) == 1:
@@ -746,14 +802,28 @@ class ScoreService:
         return None, f"「{target}」匹配到多首歌曲：{options}。请用更精确的名称或 ID 重新提交。"
 
     async def _resolve_query_to_records(self, records: list, query: str) -> list:
-        """别名优先，其次按 title/titleJa 模糊匹配。"""
+        """别名（内置 + 已审核）优先，其次按 title/titleJa/罗马字模糊匹配。"""
         q = (query or "").strip()
         if not q:
             return []
+        normalized = song_alias_mod.normalize(q)
+        matched_ids = set()
+        for song_no, names in (self.aliases.get("song_index") or {}).items():
+            if any(song_alias_mod.normalize(name) == normalized for name in names):
+                matched_ids.add(int(song_no))
         alias_map = await self._get_alias_map()
         song_no = alias_map.get(q.lower())
         if song_no is not None:
-            return [r for r in records if r.get("id") == song_no]
+            matched_ids.add(int(song_no))
+        if matched_ids:
+            found = [r for r in records if r.get("id") in matched_ids]
+            if found:
+                return found
+        hits = song_alias_mod.resolve(self.aliases, q, limit=12)
+        if hits:
+            found = [r for r in records if r.get("id") in {hit["song_no"] for hit in hits}]
+            if found:
+                return found
         return self._match_records(records, q)
 
     async def query_score_text(self, qq, song_name, level=None) -> str:
@@ -769,8 +839,23 @@ class ScoreService:
                 return f"{difficulty_label(lvl)} 不在评级范围内（本系统仅评估鬼/里）。"
             matched = [r for r in matched if r.get("level") == lvl]
         if not matched:
-            return f"未找到与「{clean or song_name}」匹配的曲目，试试更精确的曲名或别名。"
+            return self._no_score_message(clean or song_name, lvl, records)
         return self._format_song_rows(matched)
+
+    def _no_score_message(self, query: str, level, records: list) -> str:
+        """没查到成绩时区分「没这首歌」和「有这首歌但你还没打」。"""
+        hits = [hit for hit in song_alias_mod.resolve(self.aliases, query, limit=5)
+                if level is None or hit["level"] == level]
+        if hits:
+            names = "、".join(
+                f"《{self._song_summary(hit['song_no'])['title']}》(ID {hit['song_no']})" for hit in hits[:3]
+            )
+            return (
+                f"{names} 暂无你的成绩记录（同步的鬼/里成绩里没有这张谱）。"
+                "可用 /rtlink update 重新同步，或换一首已打过的曲目。"
+            )
+        hint = "，试试更精确的曲名或别名" if not query else ""
+        return f"未找到与「{query}」匹配的曲目{hint}。可用 /rtlink alias 提交常用别名。"
 
     @staticmethod
     def _match_records(records: list, query: str) -> list:
@@ -1084,14 +1169,11 @@ class ScoreService:
     }
 
     async def _alias_index(self) -> dict:
-        """{song_no: [别名, ...]}，供检索时按别名匹配。"""
-        if self.db is None:
-            return {}
-        approved = await asyncio.to_thread(self.db.get_approved_aliases)
-        index = defaultdict(list)
-        for alias, song_no in approved.items():
-            index[song_no].append(alias)
-        return dict(index)
+        """{song_no: [别名, ...]}，供检索时按别名匹配（内置别名 + 已审核别名）。"""
+        approved = {}
+        if self.db is not None:
+            approved = await asyncio.to_thread(self.db.get_approved_aliases)
+        return song_alias_mod.build_alias_index(self.aliases, approved)
 
     async def query_scores(self, qq, **filters) -> tuple[dict | None, str]:
         """按自定义条件检索成绩／谱面库，返回 (结构化结果, 错误信息)。"""

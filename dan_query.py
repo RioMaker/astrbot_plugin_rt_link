@@ -1,10 +1,23 @@
 # -*- coding: utf-8 -*-
-"""段位道场资料的只读查询与 LLM 友好文本格式化。"""
+"""段位道场资料的只读查询与 LLM 友好文本格式化。
+
+曲名匹配走 `song_alias`：段位资料里存的多是日文写法，而玩家通常按国服曲名或常用别名提问
+（「北埼玉」「六天」「罗特」…）。这里把「段位曲名 + 谱面库曲名 + 别名」合成一张写法集合后
+再匹配，并在结果里同时给出国服曲名、日文曲名与 RTLink 曲目 ID。
+"""
 
 from __future__ import annotations
 
 import re
 import unicodedata
+from pathlib import Path
+import sys
+
+if __package__:
+    from . import song_alias as song_alias_mod
+else:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import song_alias as song_alias_mod
 
 
 REGION_LABELS = {"jp_worldwide": "日版/国际版", "cn": "中国大陆版"}
@@ -23,17 +36,70 @@ METRIC_LABELS = {
 SCOPE_LABELS = {"course": "三曲合计", "per_song": "逐曲"}
 UNIT_SUFFIXES = {"percent": "%", "count": ""}
 
+# 谱面难度写法（段位资料里的 difficulty 是「普通/玄人/达人」分支，不能用它判断难度）。
+LEVEL_WORDS = {
+    "1": 1, "梅": 1, "easy": 1,
+    "2": 2, "竹": 2, "normal": 2,
+    "3": 3, "松": 3, "hard": 3,
+    "4": 4, "鬼": 4, "魔王": 4, "oni": 4, "mania": 4,
+    "5": 5, "里": 5, "里鬼": 5, "里魔王": 5, "ura": 5,
+}
+LEVEL_LABELS = {1: "梅", 2: "竹", 3: "松", 4: "鬼", 5: "里"}
+# 分歧谱的三个分支写法；与难度同名时（非分歧谱）不重复展示。
+BRANCH_LABELS = ("普通", "玄人", "达人")
+
+
+def _difficulty_text(song: dict) -> str:
+    level_label = LEVEL_LABELS.get(song.get("level"), str(song.get("level")))
+    text = f"{level_label}★{song.get('stars')}"
+    difficulty = str(song.get("difficulty") or "").strip()
+    if difficulty in BRANCH_LABELS and difficulty != level_label:
+        text += f"·{difficulty}"
+    return text
+
 
 def _norm(value: str) -> str:
-    value = unicodedata.normalize("NFKC", value or "").casefold()
-    value = value.translate(str.maketrans({"級": "级", "達": "达", "國": "国"}))
-    return re.sub(r"[^0-9a-z一-龥ぁ-んァ-ヶ]+", "", value)
+    return song_alias_mod.normalize(value)
+
+
+def split_level(text: str) -> tuple[int | None, str]:
+    """从曲名里剥出难度前缀（鬼/里/松/竹/梅/数字），返回 (level, 剩余曲名)。"""
+    raw = unicodedata.normalize("NFKC", str(text or "")).strip()
+    if not raw:
+        return None, ""
+    match = re.match(r"^(梅|竹|松|鬼|里鬼|里魔王|里|魔王|easy|normal|hard|oni|mania|ura|[1-5])\s*[：:·\-—\s]+(.+)$",
+                     raw, re.IGNORECASE)
+    if not match:
+        return None, raw
+    level = LEVEL_WORDS.get(match.group(1).lower())
+    if level is None:
+        return None, raw
+    return level, match.group(2).strip()
 
 
 def _region(value: str) -> str | None:
+    return match_region(value)
+
+
+def match_region(value: str) -> str | None:
+    """把区域写法解析成 cn / jp_worldwide；无法识别返回 None。"""
     if not value:
         return None
     return REGION_ALIASES.get(_norm(value))
+
+
+# 段位名称（五级…一级、初段…十段、玄人/名人/超人/达人）。
+RANK_WORDS = (
+    "五级", "四级", "三级", "二级", "一级",
+    "初段", "一段", "二段", "三段", "四段", "五段", "六段", "七段", "八段", "九段", "十段",
+    "玄人", "名人", "超人", "达人",
+)
+_RANK_KEYS = {_norm(word): word for word in RANK_WORDS}
+
+
+def match_rank(value: str) -> str:
+    """把段位写法解析成资料里的标准段位名；无法识别返回空串。"""
+    return _RANK_KEYS.get(_norm(value), "")
 
 
 def _value_text(value, unit: str) -> str:
@@ -57,7 +123,38 @@ def _header(catalog: dict) -> str:
     return f"段位道场资料版本：{catalog.get('data_version', 'unknown')}"
 
 
-def _format_course(catalog: dict, course: dict) -> str:
+def _song_labels(song: dict, alias_data: dict | None) -> tuple[str, str, int | None]:
+    """返回 (展示曲名, 备注, 当前曲库 ID)。
+
+    展示曲名优先用别名资源里的国服/日文写法（段位资料本身多为日文），
+    再退回段位资料里的写法；解析不到当前曲库时给出提示。
+    """
+    title = str(song.get("title") or "").strip()
+    level = song.get("level")
+    resolved = None
+    for song_no in song.get("song_no_candidates") or []:
+        if alias_data and f"{song_no}|{level}" in (alias_data.get("songs") or {}):
+            resolved = song_no
+            break
+    if resolved is None:
+        for song_no in song.get("song_no_candidates") or []:
+            if alias_data and song_no in (alias_data.get("song_index") or {}):
+                resolved = song_no
+                break
+    if resolved is None:
+        return title, "（当前曲库无此曲）", None
+    # 展示用「国服名（日文名）」：只看规范曲名，不拿简称/黑话当第二名字。
+    item = ((alias_data or {}).get("songs") or {}).get(f"{resolved}|{level}") or {}
+    canonical = [name for name in (item.get("names") or []) if name]
+    display = canonical[0] if canonical else title
+    other = next((name for name in canonical[1:] if name != display), "")
+    label = f"《{display}》"
+    if other:
+        label += f"（{other}）"
+    return label, "", resolved
+
+
+def _format_course(catalog: dict, course: dict, alias_data: dict | None = None) -> str:
     region = REGION_LABELS.get(course["region"], course["region"])
     closes = course.get("closes_at") or "未记录"
     lines = [
@@ -66,11 +163,13 @@ def _format_course(catalog: dict, course: dict) -> str:
         "课题曲：",
     ]
     for song in course["songs"]:
-        ids = song.get("song_no_candidates") or []
-        id_text = ",".join(str(value) for value in ids) if ids else "当前曲库无 ID"
+        label, note, song_no = _song_labels(song, alias_data)
+        id_text = f"ID {song_no}" if song_no else "、".join(
+            str(value) for value in (song.get("song_no_candidates") or [])
+        ) or "无 ID"
         lines.append(
-            f"{song['order']}. {song['title']}（{song['difficulty']}★{song['stars']}，"
-            f"{song['total_notes']} 音符，song_no={id_text}）"
+            f"{song['order']}. {label}{note} · {_difficulty_text(song)}"
+            f"｜{song['total_notes']} 音符｜{id_text}"
         )
     lines.append("合格条件（普通 / 金）：")
     lines.extend(_condition_text(condition) for condition in course["conditions"])
@@ -80,6 +179,26 @@ def _format_course(catalog: dict, course: dict) -> str:
     return "\n".join(lines)
 
 
+def _match_song(song: dict, title_key: str, song_ids: set, alias_data: dict | None,
+                level: int | None) -> bool:
+    """判断段位课题曲是否命中查询：难度前缀 → ID 直配 → 段位曲名 → 该曲任一别名。"""
+    if level is not None and song.get("level") != level:
+        return False
+    candidates = set(song.get("song_no_candidates") or [])
+    if song_ids and candidates & song_ids:
+        return True
+    if not title_key:
+        return False
+    if title_key in _norm(song.get("title")):
+        return True
+    for song_no in candidates:
+        for name in song_alias_mod.names_of(alias_data, song_no, song.get("level")):
+            key = _norm(name)
+            if key and (title_key in key or key in title_key):
+                return True
+    return False
+
+
 def query_dan_courses_text(
     catalog: dict,
     year: int = 0,
@@ -87,8 +206,13 @@ def query_dan_courses_text(
     rank: str = "",
     song_name: str = "",
     song_no: int = 0,
+    alias_data: dict | None = None,
 ) -> str:
-    """按条件查询段位课程，返回适合模型直接引用的紧凑文本。"""
+    """按条件查询段位课程，返回适合模型直接引用的紧凑文本。
+
+    song_name / song_no 支持国服曲名、日文曲名、罗马字与常用别名（见 `song_alias`），
+    也可以写成「鬼 天竺2000」这样带难度前缀的形式。
+    """
     courses = catalog.get("courses", [])
     if not courses:
         return "段位道场资料当前不可用。"
@@ -97,19 +221,32 @@ def query_dan_courses_text(
     if region and region_key is None:
         return "区域参数无法识别。可用：cn/国服/中国大陆，jp/日版/国际版。"
 
-    filters_used = bool(year or region or rank or song_name or song_no)
+    level_filter, clean_name = split_level(song_name)
+    title_key = _norm(clean_name)
+    song_ids: set = set()
+    if song_no:
+        song_ids.add(int(song_no))
+    elif title_key:
+        for hit in song_alias_mod.resolve(alias_data, clean_name, limit=12):
+            song_ids.add(int(hit["song_no"]))
+
+    filters_used = bool(year or region or rank or title_key or song_no)
     if not filters_used:
         years = sorted({course["year"] for course in courses})
+        ranks = sorted({course["rank"] for course in courses},
+                       key=lambda value: min(course["rank_order"] for course in courses
+                                             if course["rank"] == value))
         return (
             f"{_header(catalog)}\n"
             f"可查询年份：{', '.join(map(str, years))}\n"
             "区域：cn（中国大陆版）、jp_worldwide（日版/国际版）\n"
-            "段位：五级、四级、三级、二级、一级、初段至十段、玄人、名人、超人、达人。\n"
-            "请按年份+区域+段位查询完整课题曲与条件；也可用 song_name 或 song_no 反查段位。"
+            f"段位：{'、'.join(ranks)}。\n"
+            "请按年份+区域+段位查询完整课题曲与条件；也可用 song_name 或 song_no 反查段位。\n"
+            "曲名支持国服名、日文名、罗马字与常用别名（例如「北埼玉」「六天」「罗特」），"
+            "也可以写「鬼 天竺2000」指定难度。"
         )
 
     rank_key = _norm(rank)
-    title_key = _norm(song_name)
     matched = []
     for course in courses:
         if year and course["year"] != year:
@@ -120,34 +257,44 @@ def query_dan_courses_text(
             continue
         song_matches = []
         for song in course["songs"]:
-            title_match = title_key and title_key in _norm(song["title"])
-            id_match = song_no and song_no in song.get("song_no_candidates", [])
-            if title_match or id_match:
-                song_matches.append(song)
+            if (title_key or song_no) and not _match_song(
+                song, title_key, song_ids, alias_data, level_filter
+            ):
+                continue
+            song_matches.append(song)
         if (title_key or song_no) and not song_matches:
             continue
         matched.append((course, song_matches))
 
     if not matched:
-        return f"{_header(catalog)}\n没有找到符合条件的段位资料。"
+        return _no_match_text(catalog, title_key or song_name, song_ids, level_filter)
 
     exact_course_query = bool(rank_key) and len(matched) <= 2 and not (title_key or song_no)
     if exact_course_query:
         return _header(catalog) + "\n\n" + "\n\n".join(
-            _format_course(catalog, course) for course, _ in matched
+            _format_course(catalog, course, alias_data) for course, _ in matched
         ) + "\n\n说明：单曲历史成绩只能作为段位能力参考，不能据此断言玩家已通过段位。"
 
     if title_key or song_no:
-        lines = [_header(catalog), f"找到 {len(matched)} 条段位出现记录："]
-        for course, songs in matched[:30]:
+        matched.sort(key=lambda item: (-item[0]["year"], item[0]["region"], item[0]["rank_order"]))
+        total = sum(len(songs) for _, songs in matched)
+        lines = [_header(catalog), f"找到 {total} 条段位出现记录（按年份倒序）："]
+        shown = 0
+        for course, songs in matched:
             region_label = REGION_LABELS.get(course["region"], course["region"])
             for song in songs:
+                if shown >= 30:
+                    break
+                label, note, resolved = _song_labels(song, alias_data)
+                id_text = f"｜ID {resolved}" if resolved else ""
                 lines.append(
                     f"- {course['year']} {region_label} {course['rank']} 第{song['order']}曲："
-                    f"{song['title']}（{song['difficulty']}★{song['stars']}，{song['total_notes']} 音符）"
+                    f"{label}{note} · {_difficulty_text(song)}"
+                    f"｜{song['total_notes']} 音符{id_text}"
                 )
-        if len(matched) > 30:
-            lines.append("结果较多，仅显示前 30 条；请增加年份、区域或段位筛选。")
+                shown += 1
+        if total > shown:
+            lines.append(f"结果较多，仅显示前 {shown} 条；请增加年份、区域或段位筛选。")
         return "\n".join(lines)
 
     years = sorted({course["year"] for course, _ in matched})
@@ -162,6 +309,20 @@ def query_dan_courses_text(
         f"可用段位：{', '.join(ranks)}\n"
         "请补充 rank 获取完整三曲、合格条件与来源。"
     )
+
+
+def _no_match_text(catalog: dict, query: str, song_ids: set, level: int | None) -> str:
+    """没匹配上时给出可用的写法提示，而不是一句「没找到」。"""
+    lines = [f"{_header(catalog)}", f"没有找到符合条件的段位资料（查询：{query}）。"]
+    if song_ids:
+        lines.append(
+            f"其中 {', '.join(str(value) for value in sorted(song_ids))} 号曲目在当前段位资料里没有出现记录。"
+        )
+    if level is not None:
+        lines.append(f"已按 {LEVEL_LABELS.get(level, level)} 难度筛选；去掉难度前缀可以查全部难度。")
+    lines.append("提示：曲名支持国服名、日文名、罗马字与常用别名；也可以直接用 song_no。"
+                 "若确认该曲名没被收录，可用 /rtlink alias <曲名或ID> <别名> 提交补充。")
+    return "\n".join(lines)
 
 
 def _best_score(rows: list[dict]) -> dict | None:
@@ -242,6 +403,7 @@ def evaluate_player_dan_text(
     year: int,
     region: str,
     rank: str,
+    alias_data: dict | None = None,
 ) -> str:
     """用玩家各课题谱面的当前最佳记录核对可计算的段位条件。"""
     region_key = _region(region)
@@ -269,14 +431,15 @@ def evaluate_player_dan_text(
         ]
         best = _best_score(matches)
         selected.append(best)
+        label, _note, _resolved = _song_labels(song, alias_data)
         if best is None:
             reason = "当前段位曲库无可关联 ID" if not candidates else "尚无同步成绩"
             lines.append(
-                f"{song['order']}. {song['title']}（{song['difficulty']}★{song['stars']}）：{reason}"
+                f"{song['order']}. {label}（{_difficulty_text(song)}）：{reason}"
             )
             continue
         lines.append(
-            f"{song['order']}. {song['title']}（{song['difficulty']}★{song['stars']}）："
+            f"{song['order']}. {label}（{_difficulty_text(song)}）："
             f"良 {best.get('good_cnt')} / 可 {best.get('ok_cnt')} / 不可 {best.get('ng_cnt')} / "
             f"连打 {best.get('pound_cnt')} / 最高连击 {best.get('combo_cnt')} / "
             f"分数 {best.get('high_score')}（{best.get('source')}，"

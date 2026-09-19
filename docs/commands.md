@@ -12,7 +12,9 @@
 | --- | --- | --- |
 | `/rtlink bind <apikey> <player_id> [server]` | 绑定当前 QQ 到菌菌账号（**仅私聊**）。`server` 默认 `cn`，可选 `cn`/`jp`/`custom` | `/rtlink bind tk_xxx 30053354 cn` |
 | `/rtlink unbind` | 解绑当前 QQ | `/rtlink unbind` |
-| `/rtlink score <曲名\|别名\|鬼夏祭>` | 查询指定曲目成绩；支持难度前缀组合名（`鬼夏祭`→鬼难度+夏祭）与别名 | `/rtlink score 鬼夏祭` |
+| `/rtlink score <曲名\|别名\|鬼夏祭>` | 查询指定曲目成绩；支持难度前缀组合名（`鬼夏祭`→鬼难度+夏祭）与别名（国服名/日文名/罗马字/常用简称） | `/rtlink score 鬼夏祭`、`/rtlink score 六天` |
+| `/rtlink dan [年份] [区域] [段位] [曲名]` | 查段位道场课题曲、普通/金合格条件、开放时间与来源。参数顺序不限，均可省略：只给曲名时反查该曲出现过的段位；只给年份+段位时列出完整三曲。曲名支持别名，也可写「鬼 天竺2000」限定难度 | `/rtlink dan 2025 十段`、`/rtlink dan 十段 国服`、`/rtlink dan 六天` |
+| `/rtlink 段位 …` | 上一条的中文写法 | `/rtlink 段位 2024 达人` |
 | `/rtlink rating` | 生成完整实力画像图片（Rating 环 + 七维能力 + 强弱项 + 表现证据 + 冷门配置观察） | `/rtlink rating` |
 | `/rtlink update` | 跳过缓存，立即从菌菌重新拉取成绩、计算 Rating 并追加历史快照 | `/rtlink update` |
 | `/rtlink profile` | 生成个人画像图片：Rating、七维、强项/弱项、全连/咚大福与代表谱面 | `/rtlink profile` |
@@ -54,6 +56,8 @@
 | `get_improvement_candidates` | 「差一点全连/咚大福」清单 | `level` |
 | `find_rank_improvements` | 「还差一点就能提升成绩评价」的曲目，按分区给出判定路线与连打路线（还差几打 / 总打数 / 秒速 / 是否打得出来；无黄条与必须全良会明确标注） | `target_rank`（可选，白粹/铜粹/银粹/金雅/粉雅/紫雅/极或 2-8）、`level`（可选） |
 | `set_song_alias` | 发起歌曲别名设置（两步确认第一步） | `song`、`alias` |
+| `query_dan_course` | 查段位道场课题曲、普通/金合格条件、开放时间与来源（曲名支持别名与难度前缀） | `year`、`region`、`rank`、`song_name`、`song_no`（均可省略） |
+| `evaluate_player_dan` | 用玩家三首课题曲的最佳记录核对可计算的合格条件 | `year`、`rank`、`region`
 | `generate_rating_image` | 生成实力画像图片并发送 | 无 |
 
 ---
@@ -69,6 +73,9 @@
 | 梅（简单） | `1` / `梅` / `简单` / `easy` |
 
 - 组合名：查询时可写 `鬼夏祭`、`里夏祭`（难度前缀 + 曲名）。
+- 曲名支持**别名**：国服名、日文名、罗马字（ESE 谱面）与人工整理的简称/黑话，
+  例如 `六天`（第六天魔王）、`北埼玉`、`罗特`、`顿卡马`、`天狗囃子`。
+  匹配规则与维护方式见 [song-aliases.md](song-aliases.md)。
 - 仅鬼/里（4/5）参与评级，1–3 难度查询会提示「不在评级范围内」。
 - 节奏配置按内置谱面库覆盖率分组；覆盖率低于 3% 的冷门配置不进入核心弱项排行，仅单列观察。
 - 每次使用裸 `/rtlink`、`/rtlink rating`、`/rtlink update` 或文本 Rating 工具，都会在 AstrBot 持久化数据目录追加快照；快照包含综合 Rating、七维、配置家族、全部节奏配置，以及算法/谱面库版本。未来绘制成长曲线时可按版本区间分段标注。
