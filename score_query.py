@@ -388,8 +388,7 @@ def annotate_target(row: dict, charts: dict, rank_data: dict, target_rank) -> No
     row["targetName"] = score_rank_mod.score_rank_name(target_rank)
     row["targetScore"] = target_score
     row["targetExact"] = bool(threshold["exact"])
-    row["targetRequiresAllGood"] = bool(threshold.get("requiresAllGood"))
-    row["targetRolls"] = threshold.get("rolls") or 0
+    row["allGoodRolls"] = threshold.get("rolls") or 0
 
     current = row.get("highScore")
     if current is None:
@@ -402,21 +401,16 @@ def annotate_target(row: dict, charts: dict, rank_data: dict, target_rank) -> No
     row["gap"] = max(0, target_score - current)
     if row["reached"]:
         return
+    # 所有档位（含最高档「极」）同一套换算：判定提升 或 补连打。
+    # 「极」不要求全良 —— 極スコア 只是分数门槛，判定亏的分可以用连打补回来。
     unit = threshold["unit"] or 1
-    if row["targetRequiresAllGood"]:
-        row["okToGood"] = row.get("okCount") or 0
-        row["ngToGood"] = row.get("ngCount") or 0
-        row["rollsNeeded"] = row["targetRolls"]
-        row["rollsAlternative"] = False
-    else:
-        ok_to_good = int(math.ceil(2 * row["gap"] / unit)) if unit else 0
-        row["okToGood"] = ok_to_good
-        row["ngToGood"] = 0
-        if ok_to_good > (row.get("okCount") or 0):
-            remainder = row["gap"] - (row.get("okCount") or 0) * (unit / 2.0)
-            row["ngToGood"] = int(math.ceil(remainder / unit)) if unit else 0
-        row["rollsNeeded"] = int(math.ceil(row["gap"] / score_rank_mod.ROLL_UNIT))
-        row["rollsAlternative"] = True
+    ok_to_good = int(math.ceil(2 * row["gap"] / unit)) if unit else 0
+    row["okToGood"] = ok_to_good
+    row["ngToGood"] = 0
+    if ok_to_good > (row.get("okCount") or 0):
+        remainder = row["gap"] - (row.get("okCount") or 0) * (unit / 2.0)
+        row["ngToGood"] = int(math.ceil(remainder / unit)) if unit else 0
+    row["rollsNeeded"] = int(math.ceil(row["gap"] / score_rank_mod.ROLL_UNIT))
 
 
 # ---------------------------------------------------------------------------

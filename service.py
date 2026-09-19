@@ -1154,16 +1154,10 @@ class ScoreService:
                 lines.append(f"      已达成「{row['targetName']}」")
             else:
                 gap_text = f"距「{row['targetName']}」门槛 {row['targetScore']} 还差 {row['gap']}"
-                if row.get("targetRequiresAllGood"):
-                    gap_text += (
-                        f"；需全良（现有 {row.get('okCount') or 0} 可 / {row.get('ngCount') or 0} 不可）"
-                        + (f"，并补 {row['rollsNeeded']} 打连打" if row.get("rollsNeeded") else "，精度曲无需连打")
-                    )
-                else:
-                    gap_text += f"；把 {row.get('okToGood')} 个「可」打成「良」"
-                    if row.get("ngToGood"):
-                        gap_text += f"，其中「可」不够，还需 {row['ngToGood']} 个「不可」转「良」"
-                    gap_text += f"，或补 {row.get('rollsNeeded')} 打连打"
+                gap_text += f"；把 {row.get('okToGood')} 个「可」打成「良」"
+                if row.get("ngToGood"):
+                    gap_text += f"（「可」不够，还需 {row['ngToGood']} 个「不可」转「良」）"
+                gap_text += f"，或补 {row.get('rollsNeeded')} 打连打"
                 if not row.get("targetExact"):
                     gap_text += "（门槛为估算值）"
                 lines.append(f"      {gap_text}")
@@ -1391,18 +1385,11 @@ class ScoreService:
             f"{item['currentScore']}（{item['currentRankName']}）→ {item['targetScore']}｜"
             f"差 {item['gap']}"
         )
-        if item["pathRequiresAllGood"]:
-            path = f"需全良（现有 {item['okCount']} 个「可」、{item['ngCount']} 个「不可」）"
-            path += (
-                f"，并补足 {item['rollsNeeded']} 打连打"
-                if item["rollsNeeded"]
-                else "；该谱为精度曲，无需连打"
-            )
-            return f"{head}\n      {path}"
+        # 判定提升与连打补足是两条并行的路，对「极」也一样 —— 極スコア 只是分数门槛。
         path = f"把 {item['okToGood']} 个「可」打成「良」"
         if item["ngToGood"]:
-            path += f"，其中「可」不够，还需把 {item['ngToGood']} 个「不可」打成「良」"
-        path += f"；或等量改补 {item['rollsNeeded']} 打连打"
+            path += f"（「可」不够，还需把 {item['ngToGood']} 个「不可」打成「良」）"
+        path += f"，或改补 {item['rollsNeeded']} 打连打"
         return f"{head}\n      {path}"
 
     def format_rank_improvement_text(self, result: dict, note: str = "") -> str:
@@ -1431,8 +1418,9 @@ class ScoreService:
         lines.append(
             "算法：スコア = 良×基本点 + 可×⌊基本点/2⌋ + 黄色連打×100，"
             "基本点 = 天井スコア ÷ 总音符数；"
-            "评价门槛是固定分数（白粹 50 万 / 银粹 60 万 / 金雅 70 万 / 粉雅 80 万 / 紫雅 90 万 / 极 95 万），"
-            "最高档「极+连打满」需达到该谱極スコア。"
+            "评价门槛 = 该谱極スコア × 50/60/70/80/90/95/100%"
+            "（白粹 50% / 铜粹 60% / 银粹 70% / 金雅 80% / 粉雅 90% / 紫雅 95% / 极 100%）。"
+            "「极」只看分数，不要求全良 —— 黄条每打固定 100 分，判定留下的「可」可以用连打补。"
         )
         lines.append(
             "提示：可加目标评价与难度，例如 /rtlink improve 金雅、/rtlink improve 紫雅 鬼。"

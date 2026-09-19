@@ -76,7 +76,7 @@ def records_ok():
     """
     records = make_records()
     records[0]["highScore"] = 650_000
-    records[0]["bestScoreRank"] = 3          # 银粹档（60 万 ~ 70 万）
+    records[0]["bestScoreRank"] = 3          # 铜粹档（60 万 ~ 70 万）
     return records
 
 
@@ -250,12 +250,14 @@ def test_level_and_genre_and_song_no_filters():
 def test_target_rank_annotates_gap_and_requirements():
     row = [r for r in select_with(records_ok(), target_rank=5)["rows"]
            if r["id"] == 1 and r["level"] == 4][0]
-    assert row["targetRank"] == 5 and row["targetName"] == "粉雅"
-    assert row["targetScore"] == 800_000          # 天井 100 万 × 80%
+    assert row["targetRank"] == 5 and row["targetName"] == "金雅"
+    # 金雅门槛 = 該譜極スコア 1004000 × 80% = 803200（基本点 = 100万 ÷ 400 音符 = 2500）
+    assert row["targetScore"] == 803_200
     assert row["reached"] is False
-    assert row["gap"] == 150_000                  # 650000 → 800000
-    assert row["okToGood"] == 120                 # ⌈2 × 150000 ÷ 2500⌉，基本点 = 100万/400
-    assert row["rollsNeeded"] == 1500             # ⌈150000 ÷ 100⌉
+    assert row["gap"] == 153_200                  # 650000 → 803200
+    assert row["okToGood"] == 123                 # ⌈2 × 153200 ÷ 2500⌉
+    assert row["ngToGood"] == 52                  # 20 个「可」全转「良」后仍差 128200 分
+    assert row["rollsNeeded"] == 1532             # ⌈153200 ÷ 100⌉
 
 
 def test_gap_max_excludes_already_reached_rows():
@@ -271,13 +273,18 @@ def test_reached_filter_can_select_finished_songs():
     assert "1|4" not in titles(result)
 
 
-def test_top_rank_requires_all_good_and_rolls():
+def test_top_rank_is_a_score_threshold_not_all_good():
+    """「极」只要求分数 ≥ 極スコア，不要求全良；判定亏的分可以用连打补。"""
     row = [r for r in select_with(records_ok(), target_rank=8)["rows"]
            if r["id"] == 2 and r["level"] == 4][0]
-    assert row["targetRequiresAllGood"] is True
-    assert row["targetScore"] == 1_000_000        # 该谱精度曲：极 = 天井
-    assert row["okToGood"] == 31                  # 必须把残留的「可」全部打成「良」
-    assert row["rollsNeeded"] == 0                # 精度曲无需连打
+    assert row["targetScore"] == 1_000_000        # 该谱为精度曲，極スコア = 天井
+    assert row["gap"] == 1_000
+    # 该谱天井 996000 ÷ 500 音符 = 基本点 1990，所以 ⌈2×1000/1990⌉ = 2。
+    assert row["okToGood"] == 2                   # 只需补 2 个「可」，不是「必须全良」
+    assert row["ngToGood"] == 0
+    assert row["rollsNeeded"] == 10               # 或不动判定，补 10 打连打
+    assert row["allGoodRolls"] == 0               # 精度曲全良时无需连打
+    assert "targetRequiresAllGood" not in row
 
 
 # ---------------------------------------------------------------------------
@@ -321,7 +328,7 @@ def test_describe_filters_lists_every_active_condition():
     result = select(query="天", match_mode="all", levels=(4,), constant_min=10.0,
                     rank_min=6, combo="no-miss", target_rank=6, gap_max=5000)
     text = "；".join(result["filterText"])
-    for fragment in ("同时包含", "难度 4", "定数 10.0", "评价 紫雅~-", "零不可", "目标评价「紫雅」", "缺口 ≤5000"):
+    for fragment in ("同时包含", "难度 4", "定数 10.0", "评价 粉雅~-", "零不可", "目标评价「粉雅」", "缺口 ≤5000"):
         assert fragment in text, fragment
 
 
@@ -400,11 +407,11 @@ def _run(plugin, message):
 
 
 @pytest.mark.parametrize("message,expected", [
-    ("/rtlink 金雅", (4, None)),
-    ("/rtlink 紫雅 鬼", (6, 4)),
-    ("/rtlink improve 紫雅 里", (6, 5)),
+    ("/rtlink 金雅", (5, None)),
+    ("/rtlink 紫雅 鬼", (7, 4)),
+    ("/rtlink improve 紫雅 里", (7, 5)),
     ("/rtlink 极+连打满", (8, None)),
-    ("/rtlink 提升 银粹", (3, None)),
+    ("/rtlink 提升 银粹", (4, None)),
 ])
 def test_rank_shorthand_dispatches_to_improve(message, expected):
     plugin = _plugin()

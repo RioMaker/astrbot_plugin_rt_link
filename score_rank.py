@@ -5,19 +5,27 @@
 
     スコア = 良 × 基本点 + 可 × ⌊基本点 / 2⌋ + 黄色連打打数 × 100
     基本点 = 天井スコア ÷ 总音符数     （每谱固定、10 的整数倍）
-    天井スコア = 全良且连打打满时的分数上限，约 1,000,000（各曲 98.4 万 ~ 100.5 万）
-    極スコア  = 天井スコア + 必要連打打数 × 100
+    天井スコア = 全良且连打打满时的分数上限，约 1,000,000（各曲 98.5 万 ~ 100.8 万）
+    極スコア  = 天井スコア + 必要連打打数 × 100   （「必要連打打数」是全良前提下的参考值）
 
-評価（スコアランク）门槛按「达成分 ÷ 天井スコア」的比例设定：
+評価（スコアランク）共 8 档，门槛是该谱**極スコア**的固定比例，比较值是**总分数**：
 
-    1 无          < 50%
+    1 无          < 50%  極スコア
     2 白粹        ≥ 50%
-    3 银粹        ≥ 60%
-    4 金雅        ≥ 70%
-    5 粉雅        ≥ 80%
-    6 紫雅        ≥ 90%
-    7 极          ≥ 95%
-    8 极+连打满    ≥ 極スコア（全良 + 该谱规定打数的黄色连打）
+    3 铜粹        ≥ 60%
+    4 银粹        ≥ 70%
+    5 金雅        ≥ 80%
+    6 粉雅        ≥ 90%
+    7 紫雅        ≥ 95%
+    8 极          ≥ 100%（即 極スコア 本身）
+
+锚点是 極スコア（＝天井スコア + 必要連打打数 × 100），**不是**天井スコア。
+由于 極スコア ≈ 100 万（各曲约 99.75 ~ 101.1 万），这套门槛在数值上接近
+「50/60/…/95 万」，但各曲之间有 ±1% 的浮动；用固定绝对值会造成约 1.6% 的错判，
+用「極スコア × 比例」则只剩 0.14%（1390 条实测记录；wiki 子集 1341 条零错判）。
+
+「极」**不要求全良**：極スコア 是分数门槛，黄条每打固定 100 分，
+判定上留下的「可」可以用多打连打补回来。
 
 本模块为纯计算实现，只依赖标准库；AstrBot 解耦，可独立测试。
 """
@@ -35,30 +43,37 @@ SCORE_RANK_SCHEMA_VERSION = 1
 # 每个黄色連打打数的固定得分（ニジイロ配点）。
 ROLL_UNIT = 100
 
-# 评价名称与分数门槛。
+# 评价名称与门槛比例。
 #
-# 门槛是**绝对分数**，与该谱的天井スコア无关 —— 这一点由实测数据确定：
-# 各档之间的分数空隙精确跨过 50/60/70/80/90/95 万（下档最高分 472900 → 上档最低分 512890 等），
-# 而若按「天井 × 比例」解释，2 档最低分 512890 将要求该谱天井 ≥ 1025780，
-# 远超 wiki 的设定量级（天井スコア 设计为「接近 100 万」，全库最高约 100.8 万），因此比例模型不成立。
-# rank 8 没有固定门槛：要求达到该谱自己的極スコア。
+# 门槛 = **该谱極スコア × 比例**，比较值是**总分数**（含黄色连打）。
+# 锚点是 極スコア 而不是天井スコア —— 这一点由 1390 条实测记录确定：
+#   基准=極スコア + 比例 + 总分数        → 错判 2 / 1390（wiki 子集 1341 条零错判）
+#   基准=天井スコア + 比例 + 总分数      → 错判 24
+#   固定绝对值 50/60/…/95 万 + 总分数    → 错判 22
+#   任何「扣除连打后再比」的变体         → 错判 156 ~ 245
+# 各档的「分数 ÷ 極スコア」分布零重叠，边界精确落在整数百分比上
+# （金雅下界 80.007%、粉雅 90.001%、紫雅 95.003%、极 100.000%）。
+#
+# 八档：无 → 白粹 → 铜粹 → 银粹 → 金雅 → 粉雅 → 紫雅 → 极。
+# 注意第 3 档是「铜粹」，不要与第 4 档「银粹」写反。
 SCORE_RANK_NAMES = {
     1: "无",
     2: "白粹",
-    3: "银粹",
-    4: "金雅",
-    5: "粉雅",
-    6: "紫雅",
-    7: "极",
-    8: "极+连打满",
+    3: "铜粹",
+    4: "银粹",
+    5: "金雅",
+    6: "粉雅",
+    7: "紫雅",
+    8: "极",
 }
-SCORE_RANK_BORDERS = {
-    2: 500_000,
-    3: 600_000,
-    4: 700_000,
-    5: 800_000,
-    6: 900_000,
-    7: 950_000,
+SCORE_RANK_RATIOS = {
+    2: 0.50,
+    3: 0.60,
+    4: 0.70,
+    5: 0.80,
+    6: 0.90,
+    7: 0.95,
+    8: 1.00,
 }
 SCORE_RANK_MIN = 1
 SCORE_RANK_MAX = 8
@@ -67,16 +82,16 @@ SCORE_RANK_MAX = 8
 SCORE_RANK_ALIASES = {
     1: {"1", "无", "無", "なし", "none", "未达成"},
     2: {"2", "白粹", "白粋", "shirosui", "しろすい"},
-    3: {"3", "银粹", "銀粹", "銀粋", "ginsui", "ぎんすい"},
-    4: {"4", "金雅", "kinga", "きんが"},
-    5: {"5", "粉雅", "funga", "ふんが"},
-    6: {"6", "紫雅", "shiga", "しが"},
-    7: {"7", "极", "極", "kiwami", "きわみ"},
-    8: {"8", "极+连打满", "极满", "極+連打満", "全良", "kiwami_full", "極スコア"},
+    3: {"3", "铜粹", "銅粹", "铜粋", "銅粋", "dousui", "どうすい"},
+    4: {"4", "银粹", "銀粹", "银粋", "銀粋", "ginsui", "ぎんすい"},
+    5: {"5", "金雅", "kinga", "きんが"},
+    6: {"6", "粉雅", "funga", "ふんが"},
+    7: {"7", "紫雅", "shiga", "しが"},
+    8: {"8", "极", "極", "kiwami", "きわみ", "極スコア", "极满", "极+连打满"},
 }
 
 # 谱面库覆盖不到的曲目（以及 wiki 未收录的曲目）用估算值兜底：
-# 基本点取 100 万 ÷ 总音符数 最近的 10 的整数倍。
+# 基本点取 100 万 ÷ 总音符数 最近的 10 的整数倍，该估算值同时充当極スコア 锚点。
 ESTIMATE_TOTAL_SCORE = 1_000_000
 
 
@@ -193,12 +208,14 @@ def score_rank_name(rank) -> str:
 
 
 def score_rank_label(rank) -> str:
-    """给 LLM/用户看的带档位说明的名称，例如「4·金雅（门槛 700000 分）」。"""
+    """给 LLM/用户看的带档位说明的名称，例如「5·金雅（門槛為極スコア的 80%）」。"""
     name = score_rank_name(rank)
-    border = SCORE_RANK_BORDERS.get(rank)
-    if border is None:
-        return f"{rank}·{name}（门槛为该谱極スコア）"
-    return f"{rank}·{name}（门槛 {border} 分）"
+    ratio = SCORE_RANK_RATIOS.get(rank)
+    if ratio is None:
+        return f"{rank}·{name}"
+    if ratio >= 1.0:
+        return f"{rank}·{name}（門槛為該譜極スコア）"
+    return f"{rank}·{name}（門槛為該譜極スコア的 {ratio*100:.0f}%）"
 
 
 # ---------------------------------------------------------------------------
@@ -226,51 +243,60 @@ def song_unit(song: dict | None, total_notes: int) -> tuple[int, int, bool]:
     return unit * notes, unit, False
 
 
-def rank_threshold(song: dict | None, total_notes: int, rank: int) -> dict:
-    """返回该谱达到指定评价所需的分数、基本点与连打要求。
+def kiwami_anchor(song: dict | None, ceiling: int) -> int:
+    """该谱的 極スコア 锚点 —— 八档门槛都是它的固定比例。
 
-    rank 2-7 是固定的绝对分数门槛，与谱面无关；rank 8 的门槛是该谱的極スコア
-    （天井スコア + 规定连打打数 × 100），并要求全良。
+    有 wiki 数据时用实测的 極スコア；否则用估算天井（≈100 万）顶替。
+
+    注意这里**不要**再乘「極スコア ÷ 天井スコア」的中位比例（实测 1.00411）：
+    估算天井本身已经是按「≈100 万」标的，再乘一次会把门槛整体推高 0.4%，
+    实测错判反而从 2 条增加到 6 条。
+    """
+    if song:
+        return int(song["top"])
+    return int(ceiling)
+
+
+def rank_threshold(song: dict | None, total_notes: int, rank: int) -> dict:
+    """返回该谱达到指定评价所需的分数、基本点与连打参考值。
+
+    八档统一为「该谱極スコア × 比例」：50 / 60 / 70 / 80 / 90 / 95 / 100%。
+    最高档（100%）就是極スコア 本身。
+
+    注意「极」**不要求全良**：極スコア 是一个分数门槛，黄条每打固定 100 分，
+    判定上留下的「可」可以用多打连打补回来。`rolls` 只是「全良时所需的连打打数」，
+    作为参考值返回。
     """
     ceiling, unit, exact = song_unit(song, total_notes)
     if ceiling <= 0:
-        return {"score": None, "ceiling": 0, "unit": 0, "rolls": None, "exact": False}
+        return {"score": None, "ceiling": 0, "unit": 0, "rolls": None, "anchor": 0, "exact": False}
 
-    if rank >= SCORE_RANK_MAX:
-        score = int(song["top"]) if song else ceiling
-        rolls = int(song["rolls"]) if song else 0
-        return {
-            "score": score,
-            "ceiling": ceiling,
-            "unit": unit,
-            "rolls": rolls,
-            "requiresAllGood": True,
-            "exact": exact and song is not None,
-        }
-
-    border = SCORE_RANK_BORDERS.get(rank)
-    if border is None:
-        return {"score": None, "ceiling": ceiling, "unit": unit, "rolls": None, "exact": exact}
+    anchor = kiwami_anchor(song, ceiling)
+    rolls = int(song["rolls"]) if song else 0
+    ratio = SCORE_RANK_RATIOS.get(rank)
+    if ratio is None or anchor <= 0:
+        return {"score": None, "ceiling": ceiling, "unit": unit, "rolls": rolls,
+                "anchor": anchor, "exact": exact}
     return {
-        "score": int(border),
+        "score": int(math.ceil(anchor * ratio)),
         "ceiling": ceiling,
         "unit": unit,
-        "rolls": 0,
-        "requiresAllGood": False,
-        "exact": True,
+        "rolls": rolls,
+        "anchor": anchor,
+        "exact": exact,
     }
 
 
 def rank_of_score(song: dict | None, total_notes: int, score: int) -> int:
     """按分数反推评价等级 1-8。"""
-    ceiling, _, _ = song_unit(song, total_notes)
     if score is None:
         return 0
-    top = int(song["top"]) if song else ceiling
-    if top and score >= top:
-        return 8
-    for rank in range(7, 1, -1):
-        if score >= SCORE_RANK_BORDERS[rank]:
+    ceiling, _, _ = song_unit(song, total_notes)
+    anchor = kiwami_anchor(song, ceiling)
+    if anchor <= 0:
+        return 0
+    for rank in range(SCORE_RANK_MAX, 1, -1):
+        if score >= math.ceil(anchor * SCORE_RANK_RATIOS[rank]):
             return rank
     return 1
 
@@ -305,7 +331,11 @@ def analyze_rank_improvements(
       - 目标分数 targetScore 与还需提升的 gap
       - okToGood：把这么多个「可」打成「良」即可（等效换算，按基本点计）
       - ngToGood：若「可」不够用，还需把这么多个「不可」打成「良」
-      - rollsNeeded：或者改为补这么多打黄色连打
+      - rollsNeeded：或者改为补这么多打黄色连打（每打固定 100 分）
+      - allGoodRolls：该谱「全良时所需连打打数」，仅供参考值
+
+    判定提升与连打补足是两条**并行**的路，对最高档「极」也一样 ——
+    極スコア 只是分数门槛，并不会强制要求全良。
     """
     songs = rank_data.get("songs") or {}
     candidates = []
@@ -346,25 +376,17 @@ def analyze_rank_improvements(
 
         ok_count = _to_int(record.get("okCount"))
         ng_count = _to_int(record.get("ngCount"))
-        requires_all_good = bool(threshold.get("requiresAllGood"))
-        target_rolls = threshold.get("rolls") or 0
 
-        if requires_all_good:
-            # 最高档（极+连打满）只能全良到达：先把残留的「可」「不可」全部打成「良」，
-            # 再补足该谱规定的黄色连打打数。两者是「且」的关系，不是二选一。
-            ok_to_good, ng_to_good = ok_count, ng_count
-            rolls_needed = target_rolls
-            rolls_alternative = False
-        else:
-            # 一个「可 → 良」增加半个基本点，因此所需良数 = ⌈2 × 分数缺口 ÷ 基本点⌉。
-            ok_to_good = int(math.ceil(2 * gap / unit)) if unit else 0
-            ng_to_good = 0
-            if ok_to_good > ok_count:
-                remainder = gap - ok_count * (unit / 2.0)
-                ng_to_good = int(math.ceil(remainder / unit)) if unit else 0
-            # 另一条路：不动判定，改靠黄色连打（每打固定 100 分）补足缺口。
-            rolls_needed = int(math.ceil(gap / ROLL_UNIT))
-            rolls_alternative = True
+        # 所有档位（含最高档「极」）都走同一套换算：
+        # 一个「可 → 良」增加半个基本点，因此所需良数 = ⌈2 × 分数缺口 ÷ 基本点⌉；
+        # 另一条路是不动判定、靠黄色连打补足（每打固定 100 分）。
+        # 「极」不是「必须全良」—— 極スコア 只是分数门槛，判定亏的分可以用连打补回来。
+        ok_to_good = int(math.ceil(2 * gap / unit)) if unit else 0
+        ng_to_good = 0
+        if ok_to_good > ok_count:
+            remainder = gap - ok_count * (unit / 2.0)
+            ng_to_good = int(math.ceil(remainder / unit)) if unit else 0
+        rolls_needed = int(math.ceil(gap / ROLL_UNIT))
 
         if threshold["exact"]:
             exact_count += 1
@@ -387,13 +409,11 @@ def analyze_rank_improvements(
             "okToGood": ok_to_good,
             "ngToGood": ng_to_good,
             "rollsNeeded": rolls_needed,
-            "rollsAlternative": rolls_alternative,
+            "allGoodRolls": threshold.get("rolls") or 0,
             "okCount": ok_count,
             "ngCount": ng_count,
             "goodCount": _to_int(record.get("goodCount")),
             "poundCount": _to_int(record.get("poundCount")),
-            "pathRequiresAllGood": requires_all_good,
-            "targetRolls": target_rolls,
             "exact": bool(threshold["exact"]),
         })
 
@@ -419,7 +439,7 @@ def analyze_rank_improvements(
     return {
         "targetRank": target_rank,
         "targetName": score_rank_name(target_rank),
-        "targetBorder": SCORE_RANK_BORDERS.get(target_rank),
+        "targetRatio": SCORE_RANK_RATIOS.get(target_rank),
         "scanned": scanned,
         "alreadyAtTarget": already,
         "unavailable": unknown,
