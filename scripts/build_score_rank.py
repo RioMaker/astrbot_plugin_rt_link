@@ -29,8 +29,8 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-SCHEMA_VERSION = 1
-DATA_VERSION = "2026-09-16.1"
+SCHEMA_VERSION = 2
+DATA_VERSION = "2026-09-19.1"
 
 WIKI_BASE = "https://wikiwiki.jp/taiko-fumen/"
 WIKI_PAGES = [
@@ -78,6 +78,12 @@ def _int_last(value: str) -> int | None:
     return int(matches[-1]) if matches else None
 
 
+def _speed(value: str) -> float | None:
+    """从「約17.23打/秒」里取出要求连打速度；非速度单元格返回 None。"""
+    match = re.search(r"(\d+(?:\.\d+)?)\s*打\s*/\s*秒", value or "")
+    return float(match.group(1)) if match else None
+
+
 def parse_page(page_html: str) -> list[dict]:
     """解析一页中所有 5 列表格，返回条目列表。"""
     entries: list[dict] = []
@@ -112,6 +118,11 @@ def parse_page(page_html: str) -> list[dict]:
                 "ceiling": ceiling,
                 "level": 5 if any(m in title for m in URA_MARKERS) else 4,
             }
+            # 要求連打速度：wiki 表里由「必要連打数 ÷ 合计黄色連打秒数」算出，
+            # 用来和 ESE 谱面解析出的秒数交叉校验（見 scripts/build_rolls.py）。
+            speed = None
+            for cell in cells[3:]:
+                speed = speed or _speed(cell)
             if 'colspan="2"' in attrs[1]:
                 # 精度曲 / 完全精度曲：极スコア与天井スコア相同，且不需要连打。
                 entry.update(top_lo=ceiling, top_hi=ceiling, rolls_lo=0, rolls_hi=0,
@@ -124,6 +135,7 @@ def parse_page(page_html: str) -> list[dict]:
                     rolls_hi=_int_last(cells[3]) if len(cells) > 3 else None,
                     kind="",
                 )
+            entry["speed"] = speed
             if entry["top_lo"] in (0, None):
                 # 极スコア缺失或标 0：退化为天井スコア。
                 entry["top_lo"] = entry["top_hi"] = ceiling
@@ -199,6 +211,8 @@ def match(entries: list[dict], index: dict[str, set[tuple[int, int]]]) -> tuple[
             "top": entry["top_lo"],
             "rolls": entry["rolls_lo"],
         }
+        if entry.get("speed"):
+            record["speed"] = entry["speed"]
         if entry["top_hi"] is not None and entry["top_hi"] != entry["top_lo"]:
             record["topMax"] = entry["top_hi"]
         if entry["rolls_hi"] is not None and entry["rolls_hi"] != entry["rolls_lo"]:
@@ -253,7 +267,10 @@ def main() -> int:
         "schema_version": SCHEMA_VERSION,
         "data_version": DATA_VERSION,
         "source": SOURCE,
-        "note": "ceiling=天井スコア，top=極スコア，rolls=达到极所需的黄色連打打数",
+        "note": (
+            "ceiling=天井スコア，top=極スコア，rolls=达到极所需的黄色連打打数，"
+            "speed=wiki 给出的极要求連打速度（打/秒，必要連打数 ÷ 合计黄色連打秒数）"
+        ),
         "songs": songs,
     }
     raw = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
@@ -271,7 +288,8 @@ def main() -> int:
         "wikiEntries": len(entries),
         "unmatchedWikiEntries": stats["missing"],
         "ambiguousEntries": stats["ambiguous"],
-        "fields": ["ceiling", "top", "topMax", "rolls", "rollsMax", "kind"],
+        "songsWithSpeed": sum(1 for record in songs.values() if record.get("speed")),
+        "fields": ["ceiling", "top", "topMax", "rolls", "rollsMax", "kind", "speed"],
         "compressedBytes": gz_path.stat().st_size,
         "rawBytes": len(raw),
     }

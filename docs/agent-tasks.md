@@ -129,3 +129,17 @@
 - 每个任务完成后更新上表状态与验收证据（截图/日志/测试结果）。
 - 被阻塞的任务在「开放问题」中记录阻塞原因，不臆造需求。
 - 优先完成 P1 的需求确认（尤其 Q1 API 细节），再进入 P2 实现，避免返工。
+
+---
+
+## 6. 变更记录
+
+### 2026-09-19 · 提升评价补齐「连打路线」的可行性与秒速
+
+| 项 | 内容 |
+| --- | --- |
+| 背景 | 原实现一律给出「或改补 N 打连打」，但有的谱面**根本没有黄条**，也有的谱面黄条容量不足以补上缺口；玩家需要知道还差几打、总共几打、对应秒速多少 |
+| 数据 | 新增 `resource/rolls.v1.json.gz`（构建脚本 `scripts/build_rolls.py`）：从 ESE 的 TJA 谱面按 wiki「連打秒数表」公式算出每谱黄条条数、合計連打秒数、連打理論値与风船资料，再用 wiki 極スコア 表的「要求連打速度」交叉校验；覆盖 1326/1393 谱面 |
+| 计算 | `score_rank.roll_plan()` / `judgment_plan()` / `improvement_plan()`：还差几打、总打数、秒速（黄条打数 ÷ 合计黄条秒数，风船不计入）、是否超理論値、是否必须全良、是否连全良＋打满都达不到 |
+| 文案 | 新增 `improve_text.py`：判定路线 + 连打路线统一说法，`/rtlink improve` 文本/图片、`/rtlink score ... target_rank`、LLM 工具 `find_rank_improvements` 共用 |
+| 验收 | `python -m pytest test -q`（`test/test_rolls.py` 27 条新用例）；`test_bundled_roll_resource_matches_wiki_for_known_songs` 对照 wiki 公布秒数；预览图见 `test/tmp/improve_roll_preview.txt` 与 `test/tmp/improve_10001_*.png` |

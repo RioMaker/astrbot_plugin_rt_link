@@ -27,6 +27,16 @@
 「极」**不要求全良**：極スコア 是分数门槛，黄条每打固定 100 分，
 判定上留下的「可」可以用多打连打补回来。
 
+连打（黄色連打）相关规则来自同一份 wiki 的「連打秒数表」：
+
+    連打秒数   = 60 ÷ BPM起点 × (拍数 - 1/12)      （黄色連打比拍数短 1/12 拍）
+    連打速度   = 黄色連打打数 ÷ 合计連打秒数        （风船连打不计入）
+    連打理論値 = ⌈(連打秒数 + 0.001) × 60⌉          （即每秒最多约 60 打）
+
+也就是说：某张谱面的黄条总长（合計連打秒数）是固定的，想把分数补上去就得在这些
+黄条里多打进若干打，平均秒速就是「总打数 ÷ 合计秒数」。风船（風船連打）的打数与
+秒数都不参与秒速计算。
+
 本模块为纯计算实现，只依赖标准库；AstrBot 解耦，可独立测试。
 """
 
@@ -38,10 +48,21 @@ import math
 import unicodedata
 from pathlib import Path
 
-SCORE_RANK_SCHEMA_VERSION = 1
+SCORE_RANK_SCHEMA_VERSION = 2
+# 兼容早期的 schema 1 资源（缺少 speed 字段时按未知处理）。
+SUPPORTED_SCHEMA_VERSIONS = (1, 2)
 
 # 每个黄色連打打数的固定得分（ニジイロ配点）。
 ROLL_UNIT = 100
+
+# 連打理論値：单位换算上限，即每打最快 1/60 秒 → 每秒最多约 60 打。
+ROLL_THEORY_HIT_RATE = 60
+
+# おに 谱面拿「极」时要求连打速度的常见区间（wiki 实测约 16.6 ~ 18 打/秒）。
+KIWAMI_SPEED_RANGE = (16.6, 18.0)
+
+# 风船打数缺失时的估算基准：おに 常规秒速中值。
+BALLOON_NOMINAL_SPEED = 17.0
 
 # 评价名称与门槛比例。
 #
@@ -115,7 +136,7 @@ def load_score_rank(path, charts: dict | None = None) -> dict:
     payload = json.loads(raw.decode("utf-8"))
     if not isinstance(payload, dict):
         raise ScoreRankDataError("评分资源根节点必须是对象")
-    if payload.get("schema_version") != SCORE_RANK_SCHEMA_VERSION:
+    if payload.get("schema_version") not in SUPPORTED_SCHEMA_VERSIONS:
         raise ScoreRankDataError(f"不支持的评分资源版本：{payload.get('schema_version')}")
 
     songs = payload.get("songs")
@@ -143,6 +164,8 @@ def load_score_rank(path, charts: dict | None = None) -> dict:
             top = ceiling
         rolls = value.get("rolls")
         rolls = rolls if isinstance(rolls, int) and rolls >= 0 else 0
+        speed = value.get("speed")
+        speed = float(speed) if isinstance(speed, (int, float)) and speed > 0 else None
         cleaned[key] = {
             "ceiling": ceiling,
             "top": top,
@@ -150,6 +173,7 @@ def load_score_rank(path, charts: dict | None = None) -> dict:
             "rolls": rolls,
             "rollsMax": value.get("rollsMax") if isinstance(value.get("rollsMax"), int) else None,
             "kind": value.get("kind") or "",
+            "speed": speed,
         }
 
     by_genre: dict[str, list] = {}
@@ -302,6 +326,216 @@ def rank_of_score(song: dict | None, total_notes: int, score: int) -> int:
 
 
 # ---------------------------------------------------------------------------
+# 连打资源（合計連打秒数 / 理論値）与「补连打」路线
+# ---------------------------------------------------------------------------
+
+def empty_rolls() -> dict:
+    """连打资源不可用时的空表；此时连打路线一律按「资料缺失」处理。"""
+    return {
+        "schema_version": 1,
+        "data_version": "unavailable",
+        "source": "",
+        "songs": {},
+        "catalog_charts": 0,
+    }
+
+
+def load_rolls(path, charts: dict | None = None) -> dict:
+    """加载并校验 resource/rolls.v1.json.gz。
+
+    每个谱面条目：
+        seconds        黄色連打合计秒数（不含风船）
+        rolls          黄色连打条数
+        maxHits        連打理論値合计（Σ⌈(秒数+0.001)×60⌉）
+        balloonSeconds 风船连打合计秒数（仅作参考，不参与秒速）
+        balloons       风船个数
+        balloonHits    风船需要打进的总打数（用于从结算连打数里扣除）
+        speed          wiki 给出的「极」要求连打速度（打/秒，可选）
+        source         seconds 的来源：tja（谱面解析）/ wiki（用要求速度反推）
+    """
+    raw = Path(path).read_bytes()
+    if str(path).endswith(".gz"):
+        raw = gzip.decompress(raw)
+    payload = json.loads(raw.decode("utf-8"))
+    if not isinstance(payload, dict):
+        raise ScoreRankDataError("连打资源根节点必须是对象")
+    if payload.get("schema_version") != 1:
+        raise ScoreRankDataError(f"不支持的连打资源版本：{payload.get('schema_version')}")
+
+    songs = payload.get("songs")
+    if not isinstance(songs, dict):
+        raise ScoreRankDataError("连打资源缺少 songs")
+
+    cleaned: dict[str, dict] = {}
+    for key, value in songs.items():
+        if not isinstance(value, dict):
+            raise ScoreRankDataError(f"连打条目必须是对象：{key}")
+        song_no_text, _, level_text = str(key).partition("|")
+        if not song_no_text.isdigit() or not level_text.isdigit():
+            raise ScoreRankDataError(f"连打条目的键格式无效：{key}")
+        seconds = value.get("seconds")
+        seconds = float(seconds) if isinstance(seconds, (int, float)) and seconds > 0 else 0.0
+        item = {
+            "seconds": seconds,
+            "rolls": _to_int(value.get("rolls")),
+            "maxHits": _to_int(value.get("maxHits")),
+            "balloonSeconds": float(value.get("balloonSeconds") or 0.0),
+            "balloons": _to_int(value.get("balloons")),
+            "balloonHits": _to_int(value.get("balloonHits")),
+            "speed": float(value["speed"]) if isinstance(value.get("speed"), (int, float)) else None,
+            "source": str(value.get("source") or ""),
+        }
+        if item["rolls"] and seconds <= 0:
+            # 有黄条却没有秒数：无法算秒速，按未收录处理。
+            item["seconds"] = 0.0
+        if item["seconds"] and item["maxHits"] <= 0:
+            item["maxHits"] = theoretical_hits(item["seconds"])
+        cleaned[key] = item
+
+    return {
+        "schema_version": payload.get("schema_version"),
+        "data_version": payload.get("data_version") or "unknown",
+        "source": payload.get("source") or "",
+        "songs": cleaned,
+        "catalog_charts": len(charts) if charts else 0,
+    }
+
+
+def theoretical_hits(seconds: float) -> int:
+    """連打理論値 上限：⌈(秒数 + 0.001) × 60⌉（多本连打要逐本取整后再相加）。"""
+    return int(math.ceil((float(seconds or 0) + 0.001) * ROLL_THEORY_HIT_RATE))
+
+
+def roll_entry(rolls_data: dict | None, song_no, level) -> dict | None:
+    """取某谱面的连打资料；没有则返回 None。"""
+    if not rolls_data:
+        return None
+    return (rolls_data.get("songs") or {}).get(f"{song_no}|{level}")
+
+
+def judgment_plan(gap: int, unit: int, ok_count: int, ng_count: int) -> dict:
+    """判定路线：把缺口换算成「可 → 良」与「不可 → 良」，并判断是否必须全良。
+
+    - 一个「可 → 良」补半个基本点，一个「不可 → 良」补一个基本点。
+    - `requiresAllGood`：只靠判定达到目标时，现有的「可」和「不可」必须全部打成良，
+      也就是这张谱必须全良。
+    - `covers`：判定路线的分数上限（全良）是否够补上缺口。
+    """
+    gap = max(0, int(gap or 0))
+    unit = int(unit or 0)
+    ok_count = max(0, int(ok_count or 0))
+    ng_count = max(0, int(ng_count or 0))
+    if gap <= 0:
+        return {"okToGood": 0, "ngToGood": 0, "requiresAllGood": False, "covers": True,
+                "maxGain": ok_count * unit / 2.0 + ng_count * unit}
+    if unit <= 0:
+        return {"okToGood": 0, "ngToGood": 0, "requiresAllGood": False, "covers": False,
+                "maxGain": 0.0}
+    ok_to_good = int(math.ceil(2 * gap / unit))
+    ng_to_good = 0
+    if ok_to_good > ok_count:
+        remainder = gap - ok_count * (unit / 2.0)
+        ng_to_good = int(math.ceil(remainder / unit))
+    max_gain = ok_count * unit / 2.0 + ng_count * unit
+    # 「必须全良」= 现有的「可」和「不可」得一个不留地全打成良（本来就没有可/不可时不算）。
+    all_good_needed = bool(ok_count or ng_count) and ok_to_good >= ok_count and ng_to_good >= ng_count
+    return {
+        "okToGood": ok_to_good,
+        "ngToGood": ng_to_good,
+        "requiresAllGood": all_good_needed,
+        "covers": max_gain + 1e-9 >= gap,
+        "maxGain": max_gain,
+    }
+
+
+def roll_plan(
+    entry: dict | None,
+    gap: int,
+    pound_count: int = 0,
+    ceiling: int = 0,
+) -> dict:
+    """连打路线：还差几打、总连打数、要求秒速、是否打得出来。
+
+    - `hitsNeeded`：⌈缺口 ÷ 100⌉，即需要多打进几打黄色连打。
+    - `currentHits`：本局已有的黄色连打打数（= 结算连打数 − 风船打数）。
+    - `totalHits`：补分后这一局的黄色连打总打数。
+    - `speed`：totalHits ÷ 合計連打秒数（按 wiki 规定，风船不计入）。
+    - `feasible`：totalHits 是否在該谱的連打理論値以内。
+    """
+    gap = max(0, int(gap or 0))
+    hits_needed = int(math.ceil(gap / ROLL_UNIT)) if gap > 0 else 0
+    plan = {
+        "known": bool(entry),
+        "hasRolls": False,
+        "rollCount": 0,
+        "seconds": 0.0,
+        "maxHits": 0,
+        "balloons": 0,
+        "balloonSeconds": 0.0,
+        "balloonHits": 0,
+        "hitsNeeded": hits_needed,
+        "currentHits": 0,
+        "totalHits": 0,
+        "speed": None,
+        "speedRaw": None,
+        "kiwamiSpeed": None,
+        "feasible": False,
+        "shortfall": 0,
+        "ceiling": int(ceiling or 0),
+        "maxScore": int(ceiling or 0),
+        "source": "",
+    }
+    if not entry:
+        return plan
+
+    seconds = float(entry.get("seconds") or 0.0)
+    max_hits = int(entry.get("maxHits") or 0)
+    balloon_hits = balloon_hit_estimate(entry)
+    current = max(0, int(pound_count or 0) - balloon_hits)
+    total = current + hits_needed
+    plan.update({
+        "hasRolls": bool(entry.get("rolls")) and seconds > 0,
+        "rollCount": int(entry.get("rolls") or 0),
+        "seconds": seconds,
+        "maxHits": max_hits,
+        "balloons": int(entry.get("balloons") or 0),
+        "balloonSeconds": float(entry.get("balloonSeconds") or 0.0),
+        "balloonHits": balloon_hits,
+        "currentHits": current,
+        "totalHits": total,
+        "kiwamiSpeed": entry.get("speed"),
+        "source": str(entry.get("source") or ""),
+        "ceiling": int(ceiling or 0),
+        # 理论最高分 = 全良天井 + 黄条打满 + 风船打满。
+        "maxScore": int(ceiling or 0) + ROLL_UNIT * (max_hits + balloon_hits),
+    })
+    if plan["hasRolls"]:
+        plan["speedRaw"] = total / seconds
+        plan["speed"] = round(plan["speedRaw"] + 1e-9, 2)
+        plan["feasible"] = total <= max_hits
+        plan["shortfall"] = max(0, total - max_hits)
+    # 没有黄条（可能只有风船）时，黄条路线直接不成立：`feasible` 保持 False，
+    # 由调用方按「只能靠判定 / 风船」来提示。
+    return plan
+
+
+def balloon_hit_estimate(entry: dict | None) -> int:
+    """估算结算连打数中属于风船的部分。
+
+    wiki 的秒速规定要求把风船打数从结算连打数里减掉，但国服接口不区分两者，
+    所以这里用「谱面数据里的风船要求打数」估：超过常规秒速能打出的量时按常规量封顶
+    （部分大風船的要求数远高于实际可打数，例如 Rotter Tarmination 的 999）。
+    """
+    if not entry:
+        return 0
+    declared = max(0, int(entry.get("balloonHits") or 0))
+    cap = int(math.ceil(float(entry.get("balloonSeconds") or 0.0) * BALLOON_NOMINAL_SPEED))
+    if declared and cap:
+        return min(declared, cap)
+    return declared or cap
+
+
+# ---------------------------------------------------------------------------
 # 「提升评价」候选分析
 # ---------------------------------------------------------------------------
 
@@ -312,6 +546,79 @@ def _to_int(value) -> int:
         return 0
 
 
+def _roll_fields(plan: dict, judgment: dict) -> dict:
+    """把连打路线与判定路线的结论摊平成候选条目的字段。
+
+    - `judgmentRequiresAllGood`：只走判定就必须全良（可/不可全部打成良）。
+    - `mustAllGood`：连打路线走不通（无黄条 / 超理論値 / 资料缺失），因此必须全良。
+    """
+    known = bool(plan["known"])
+    feasible = bool(plan["feasible"])
+    return {
+        "rollKnown": known,
+        "hasRolls": bool(plan["hasRolls"]),
+        "rollCount": plan["rollCount"],
+        "rollSeconds": plan["seconds"],
+        "rollMaxHits": plan["maxHits"],
+        "rollBalloons": plan["balloons"],
+        "balloonSeconds": plan["balloonSeconds"],
+        "balloonHits": plan["balloonHits"],
+        "rollSource": plan["source"],
+        "rollCurrentHits": plan["currentHits"],
+        "rollTotalHits": plan["totalHits"],
+        "rollSpeed": plan["speed"],
+        "rollSpeedRaw": plan["speedRaw"],
+        "rollKiwamiSpeed": plan["kiwamiSpeed"],
+        "rollFeasible": feasible,
+        "rollShortfall": plan["shortfall"],
+        "maxScore": plan["maxScore"] if known else None,
+        "allGoodScore": plan["ceiling"] or None,
+        "judgmentRequiresAllGood": bool(judgment["requiresAllGood"]),
+        "mustAllGood": bool(judgment["requiresAllGood"]) and not feasible,
+    }
+
+
+def improvement_plan(
+    target_score,
+    current_score,
+    ceiling,
+    unit,
+    ok_count,
+    ng_count,
+    pound_count=0,
+    entry: dict | None = None,
+    all_good_rolls=0,
+) -> dict:
+    """把「离目标评价还差多少」一次算成判定路线 + 连打路线。
+
+    分析层（analyze_rank_improvements）与检索层（score_query.annotate_target）共用本函数，
+    避免两边各写一套换算。
+    """
+    target_score = _to_int(target_score)
+    current_score = _to_int(current_score)
+    gap = max(0, target_score - current_score)
+    judgment = judgment_plan(gap, unit, ok_count, ng_count)
+    plan = roll_plan(entry, gap, pound_count, ceiling)
+    fields = {
+        "gap": gap,
+        "okToGood": judgment["okToGood"],
+        "ngToGood": judgment["ngToGood"],
+        "requiresAllGood": bool(judgment["requiresAllGood"]),
+        "judgmentCovers": bool(judgment["covers"]),
+        "rollsNeeded": plan["hitsNeeded"],
+        "allGoodRolls": _to_int(all_good_rolls),
+    }
+    fields.update(_roll_fields(plan, judgment))
+    # 判定路线的上限与缺口：全良也补不满时，文案里要说清楚还差多少。
+    fields["judgmentGain"] = int(math.floor(judgment["maxGain"] + 1e-9))
+    fields["judgmentShortfall"] = max(0, gap - fields["judgmentGain"])
+    # 连理论最高分（全良 + 黄条打满 + 风船打满）都够不到门槛时，这一档就真的不可达。
+    fields["unreachable"] = bool(
+        plan["known"] and plan["maxScore"] and plan["maxScore"] < target_score
+    )
+    return fields
+
+
 def analyze_rank_improvements(
     records: list,
     charts: dict,
@@ -320,19 +627,25 @@ def analyze_rank_improvements(
     levels: tuple = (4, 5),
     per_genre: int = 5,
     gap_limit_ratio: float = 0.0,
+    rolls_data: dict | None = None,
 ) -> dict:
     """找出「离目标评价最近」的谱面，并按分区聚合。
 
     charts: {(song_no, level): chart}，提供 totalNotes 与 genre。
     records: analyze() 的 records（含 highScore / bestScoreRank / 良可不可 / 连打）。
     gap_limit_ratio: 只保留分数缺口不超过天井该比例的谱面（0 表示不限）。
+    rolls_data: 连打资源；缺失时连打路线按「资料未知」处理。
 
     每首候选曲目给出：
       - 目标分数 targetScore 与还需提升的 gap
       - okToGood：把这么多个「可」打成「良」即可（等效换算，按基本点计）
       - ngToGood：若「可」不够用，还需把这么多个「不可」打成「良」
+      - requiresAllGood：只靠判定达成就**必须全良**（可/不可要全部打成良）
       - rollsNeeded：或者改为补这么多打黄色连打（每打固定 100 分）
       - allGoodRolls：该谱「全良时所需连打打数」，仅供参考值
+      - hasRolls / rollCount / rollSeconds：该谱有没有黄条、几条、合计多少秒
+      - rollTotalHits / rollSpeed：补分后这一局的黄色连打总打数与要求秒速（不含风船）
+      - rollFeasible / rollShortfall：这么多打在不在该谱的連打理論値以内
 
     判定提升与连打补足是两条**并行**的路，对最高档「极」也一样 ——
     極スコア 只是分数门槛，并不会强制要求全良。
@@ -341,6 +654,7 @@ def analyze_rank_improvements(
     candidates = []
     scanned = already = unknown = 0
     exact_count = 0
+    no_roll_count = roll_unknown = 0
 
     for record in records:
         level = record.get("level")
@@ -376,17 +690,22 @@ def analyze_rank_improvements(
 
         ok_count = _to_int(record.get("okCount"))
         ng_count = _to_int(record.get("ngCount"))
-
-        # 所有档位（含最高档「极」）都走同一套换算：
-        # 一个「可 → 良」增加半个基本点，因此所需良数 = ⌈2 × 分数缺口 ÷ 基本点⌉；
-        # 另一条路是不动判定、靠黄色连打补足（每打固定 100 分）。
-        # 「极」不是「必须全良」—— 極スコア 只是分数门槛，判定亏的分可以用连打补回来。
-        ok_to_good = int(math.ceil(2 * gap / unit)) if unit else 0
-        ng_to_good = 0
-        if ok_to_good > ok_count:
-            remainder = gap - ok_count * (unit / 2.0)
-            ng_to_good = int(math.ceil(remainder / unit)) if unit else 0
-        rolls_needed = int(math.ceil(gap / ROLL_UNIT))
+        entry = roll_entry(rolls_data, record.get("id"), level)
+        plan = improvement_plan(
+            target_score,
+            current_score,
+            ceiling,
+            unit,
+            ok_count,
+            ng_count,
+            pound_count=_to_int(record.get("poundCount")),
+            entry=entry,
+            all_good_rolls=threshold.get("rolls") or 0,
+        )
+        if entry is None:
+            roll_unknown += 1
+        elif not plan["hasRolls"]:
+            no_roll_count += 1
 
         if threshold["exact"]:
             exact_count += 1
@@ -404,17 +723,13 @@ def analyze_rank_improvements(
             "currentScore": current_score,
             "currentRank": _to_int(record.get("bestScoreRank")) or rank_of_score(song, total_notes, current_score),
             "targetScore": target_score,
-            "gap": gap,
             "gapRatio": round(gap / ceiling, 4) if ceiling else 0.0,
-            "okToGood": ok_to_good,
-            "ngToGood": ng_to_good,
-            "rollsNeeded": rolls_needed,
-            "allGoodRolls": threshold.get("rolls") or 0,
             "okCount": ok_count,
             "ngCount": ng_count,
             "goodCount": _to_int(record.get("goodCount")),
             "poundCount": _to_int(record.get("poundCount")),
             "exact": bool(threshold["exact"]),
+            **plan,
         })
 
     for item in candidates:
@@ -445,6 +760,10 @@ def analyze_rank_improvements(
         "unavailable": unknown,
         "candidateCount": len(candidates),
         "exactCount": exact_count,
+        "noRollCount": no_roll_count,
+        "rollUnknownCount": roll_unknown,
+        "allGoodRequiredCount": sum(1 for item in candidates if item["mustAllGood"]),
+        "unreachableCount": sum(1 for item in candidates if item["unreachable"]),
         "genres": genre_rows,
         "items": candidates,
     }

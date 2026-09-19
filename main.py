@@ -20,20 +20,20 @@ from astrbot.api.star import Context, Star, StarTools, register
 if __package__:
     from .api_client import KinokoClient
     from .dan_query import query_dan_courses_text
-    from .score_rank import empty_score_rank, load_score_rank, parse_score_rank
+    from .score_rank import empty_rolls, empty_score_rank, load_rolls, load_score_rank, parse_score_rank
     from .service import BindingsStore, ScoreService, parse_difficulty
     from .storage import ScoreDatabase, load_charts, load_dan_courses
 else:
     from api_client import KinokoClient
     from dan_query import query_dan_courses_text
-    from score_rank import empty_score_rank, load_score_rank, parse_score_rank
+    from score_rank import empty_rolls, empty_score_rank, load_rolls, load_score_rank, parse_score_rank
     from service import BindingsStore, ScoreService, parse_difficulty
     from storage import ScoreDatabase, load_charts, load_dan_courses
 
 PLUGIN_NAME = "rt_link"
 PLUGIN_AUTHOR = "Rio"
 PLUGIN_DESC = "将 QQ 绑定到菌菌控制台 apikey，查询太鼓达人成绩并评估玩家实力"
-PLUGIN_VERSION = "v0.10.0"
+PLUGIN_VERSION = "v0.11.0"
 
 COMMAND_NAME = "rtlink"
 BINDINGS_KEY = "bindings"
@@ -108,12 +108,28 @@ class RTLinkPlugin(Star):
             self.score_rank = empty_score_rank()
             logger.warning(f"rt_link：评价门槛数据加载失败，评价提升分析将使用估算门槛：{e}")
 
+        # 连打资料（黄色連打秒数 / 風船）：把「还差几打连打」换算成秒速与可行性。
+        try:
+            self.rolls = load_rolls(
+                self.plugin_dir / "resource" / "rolls.v1.json.gz",
+                self.charts,
+            )
+            with_rolls = sum(1 for item in self.rolls["songs"].values() if item["rolls"] > 0)
+            logger.info(
+                f"rt_link：已加载连打资料 {len(self.rolls['songs'])} 个谱面"
+                f"（其中有黄条 {with_rolls} 张，版本 {self.rolls['data_version']}）"
+            )
+        except Exception as e:
+            self.rolls = empty_rolls()
+            logger.warning(f"rt_link：连打资料加载失败，连打路线只报「资料未知」：{e}")
+
         self.service = ScoreService(
             store=KvBindingsStore(self),
             client_factory=self._make_client,
             charts=self.charts,
             score_db=self.db,
             score_rank=self.score_rank,
+            rolls=self.rolls,
             default_server=self.cfg.get("default_server") or "cn",
             sync_ttl=int(self.cfg.get("sync_ttl", 300) or 300),
             quota_mb=int(self.cfg.get("storage_quota_mb", 256) or 256),
@@ -267,7 +283,7 @@ class RTLinkPlugin(Star):
         yield event.image_result(result)
 
     async def improve_cmd(self, event: AstrMessageEvent, target=None, level=None):
-        """提升评价候选曲目：按分区列出离目标评价最近的谱面与所需分数/良数/连打数。
+        """提升评价候选曲目：按分区列出离目标评价最近的谱面与判定/连打两条补分路线。
 
         作为子指令调用时参数从消息里解析；作为 `/rtlink <评价>` 简写调用时由分发层直接传入。
         """
@@ -614,6 +630,8 @@ class RTLinkPlugin(Star):
             ng_max(int): 「不可」数量上限，-1 表示不限；0 = 零「不可」
             combo(string): 连段条件，可省略。可选 full(已全连) / no-fc(未全连) / dondaful(已全良) / no-miss(零不可) / miss(有不可)
             target_rank(string): 目标评价，填了会给每条结果算出距该评价的门槛、缺口、所需良数与连打数
+                                    （连打部分含：还差几打、总打数、要求秒速、是否打得出来；
+                                    没有黄条的曲目会明确标出）
             reached(string): 是否已达 target_rank，可省略。no=只看还没达成的、yes=只看已达成的
             gap_max(int): 距 target_rank 门槛的最大分数缺口，-1 表示不限（用它筛「差一点就能升评价」；填了会自动排除已达成）
             sort(string): 排序字段：rating / score / accuracy / constant / notes / gap / rank / updated / title / id，默认 rating
@@ -710,7 +728,7 @@ class RTLinkPlugin(Star):
     async def find_rank_improvements(
         self, event: AstrMessageEvent, target_rank: str = "", level: str = ""
     ) -> str:
-        """查询「还差一点就能提升成绩评价」的曲目，按曲风分区列出所需分数、良数与连打打数。
+        """查询「还差一点就能提升成绩评价」的曲目，按曲风分区列出所需分数、良数与连打打数/秒速。
 
         用户询问「怎么提高评价」「哪些歌能升评价」「我离金雅还差多少」「刷评价推荐哪些歌」
         「怎么把紫雅变成极」时调用本工具。
@@ -720,8 +738,15 @@ class RTLinkPlugin(Star):
         评价门槛 = **该谱極スコア × 50/60/70/80/90/95/100%**：
         白粹 50% / 铜粹 60% / 银粹 70% / 金雅 80% / 粉雅 90% / 紫雅 95% / 极 100%
         （極スコア ≈ 100 万，所以数值上接近 50/60/70/80/90/95/100 万，但各曲有 ±1% 浮动）。
-        注意「极」**不要求全良**：極スコア 是分数门槛，黄条每打固定 100 分，
-        判定上留着的「可」可以用多打连打补回来；「必要連打打数」只是全良前提下的参考值。
+
+        两条路线：
+        - 判定路线：把「可」/「不可」打成「良」；若必须把全部「可」「不可」都转成良，
+          结果里会写「走判定就得全良」。
+        - 连打路线：黄条每打固定 100 分。结果会给出还差几打、补完这局一共几打、
+          以及对应秒速（= 黄色連打打数 ÷ 合计黄色連打秒数，风船连打不计入）。
+          没有黄条的曲目会明确写「本曲没有黄条」，连打补不满（超过該谱連打理論値）的
+          也会写「已超上限」，这时只能靠判定提升。若连全良＋黄条打满都够不到门槛，
+          会直接写「本曲上限约 X，达不到门槛」。
 
         Args:
             target_rank(string): 目标评价，省略时取玩家最常拿到的评价的上一档。可选：白粹、铜粹、银粹、金雅、粉雅、紫雅、极，或 2-8

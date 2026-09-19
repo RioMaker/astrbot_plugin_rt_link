@@ -16,6 +16,7 @@ from pathlib import Path
 
 # 包加载（AstrBot）时用相对导入；本地直接运行 service.py 时回退到绝对导入。
 if __package__:
+    from . import improve_text as improve_text_mod
     from . import rating as rating_mod
     from . import score_query as score_query_mod
     from . import score_rank as score_rank_mod
@@ -28,6 +29,7 @@ if __package__:
     from .weakness_image import render_weakness_image
     from .storage import ScoreDatabase, load_charts
 else:
+    import improve_text as improve_text_mod
     import rating as rating_mod
     import score_query as score_query_mod
     import score_rank as score_rank_mod
@@ -352,6 +354,7 @@ class ScoreService:
         charts: dict | None = None,
         score_db: ScoreDatabase | None = None,
         score_rank: dict | None = None,
+        rolls: dict | None = None,
         default_server: str = "cn",
         sync_ttl: int = 300,
         quota_mb: int = 256,
@@ -364,6 +367,8 @@ class ScoreService:
         self.charts = charts or {}
         self.db = score_db
         self.score_rank = score_rank or score_rank_mod.empty_score_rank()
+        # 连打资料（黄色連打秒数 / 風船）：用来把「还差几打连打」换算成秒速。
+        self.rolls = rolls or score_rank_mod.empty_rolls()
         self.default_server = default_server
         self.sync_ttl = sync_ttl
         self.quota_mb = quota_mb
@@ -1099,6 +1104,7 @@ class ScoreService:
             self.score_rank,
             alias_index=await self._alias_index(),
             unrated=analysis.get("unrated") or [],
+            rolls_data=self.rolls,
             **filters,
         )
         return result, ""
@@ -1154,13 +1160,10 @@ class ScoreService:
                 lines.append(f"      已达成「{row['targetName']}」")
             else:
                 gap_text = f"距「{row['targetName']}」门槛 {row['targetScore']} 还差 {row['gap']}"
-                gap_text += f"；把 {row.get('okToGood')} 个「可」打成「良」"
-                if row.get("ngToGood"):
-                    gap_text += f"（「可」不够，还需 {row['ngToGood']} 个「不可」转「良」）"
-                gap_text += f"，或补 {row.get('rollsNeeded')} 打连打"
                 if not row.get("targetExact"):
                     gap_text += "（门槛为估算值）"
                 lines.append(f"      {gap_text}")
+                lines.extend(f"      {text}" for text in improve_text_mod.gap_route_lines(row))
         return "\n".join(lines)
 
     def format_query_result(self, result: dict, detail: str = "brief") -> str:
@@ -1373,6 +1376,7 @@ class ScoreService:
             levels=levels,
             per_genre=per_genre,
             gap_limit_ratio=gap_limit_ratio,
+            rolls_data=self.rolls,
         )
         result["meta"] = analysis.get("meta") or {}
         return result, "", note
@@ -1385,12 +1389,10 @@ class ScoreService:
             f"{item['currentScore']}（{item['currentRankName']}）→ {item['targetScore']}｜"
             f"差 {item['gap']}"
         )
-        # 判定提升与连打补足是两条并行的路，对「极」也一样 —— 極スコア 只是分数门槛。
-        path = f"把 {item['okToGood']} 个「可」打成「良」"
-        if item["ngToGood"]:
-            path += f"（「可」不够，还需把 {item['ngToGood']} 个「不可」打成「良」）"
-        path += f"，或改补 {item['rollsNeeded']} 打连打"
-        return f"{head}\n      {path}"
+        # 判定提升与连打补足是两条并行的路；没有黄条 / 打不满时如实说明。
+        lines = [head]
+        lines.extend(f"      {text}" for text in improve_text_mod.gap_route_lines(item))
+        return "\n".join(lines)
 
     def format_rank_improvement_text(self, result: dict, note: str = "") -> str:
         label = score_rank_mod.score_rank_label(result["targetRank"])
@@ -1408,6 +1410,17 @@ class ScoreService:
             f"{result['candidateCount']} 张可提升"
             f"（{result['exactCount']} 张使用 wiki 实测天井スコア，其余为估算门槛）。"
         )
+        hints = []
+        if result.get("noRollCount"):
+            hints.append(f"{result['noRollCount']} 张没有黄条（只能靠判定）")
+        if result.get("allGoodRequiredCount"):
+            hints.append(f"{result['allGoodRequiredCount']} 张必须全良")
+        if result.get("unreachableCount"):
+            hints.append(f"{result['unreachableCount']} 张即使全良也达不到")
+        if result.get("rollUnknownCount"):
+            hints.append(f"{result['rollUnknownCount']} 张缺少连打秒数资料")
+        if hints:
+            lines.append("其中：" + "；".join(hints) + "。")
         lines.append("下列按分区列出「离目标最近」的谱面，差距越小越容易达成：")
         for row in result["genres"]:
             lines.append("")
@@ -1421,6 +1434,10 @@ class ScoreService:
             "评价门槛 = 该谱極スコア × 50/60/70/80/90/95/100%"
             "（白粹 50% / 铜粹 60% / 银粹 70% / 金雅 80% / 粉雅 90% / 紫雅 95% / 极 100%）。"
             "「极」只看分数，不要求全良 —— 黄条每打固定 100 分，判定留下的「可」可以用连打补。"
+        )
+        lines.append(
+            "连打：秒速 = 黄色連打打数 ÷ 合计黄色連打秒数（60 ÷ BPM起点 × (拍数 − 1/12)，风船不计入）；"
+            "上限为该谱連打理論値 Σ⌈(秒数+0.001)×60⌉。"
         )
         lines.append(
             "提示：可加目标评价与难度，例如 /rtlink improve 金雅、/rtlink improve 紫雅 鬼。"

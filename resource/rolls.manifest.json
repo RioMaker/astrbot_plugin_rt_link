@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "dataVersion": "2026-09-19.1",
+  "source": "https://wikiwiki.jp/taiko-fumen/%E4%BD%9C%E5%93%81/%E6%96%B0AC/%E6%A5%B5%E3%82%B9%E3%82%B3%E3%82%A2/%E3%81%8A%E3%81%AB",
+  "formula": {
+    "seconds": "60 / BPM起点 * (拍数 - 1/12)",
+    "maxHits": "ceil((seconds + 0.001) * 60) 逐条求和",
+    "speed": "黄色連打打数 / 合计連打秒数（不含风船）"
+  },
+  "eseRoot": "D:\\taiko\\_程序类\\20260320-taiko-ratingpro-v1\\ESE",
+  "mappingReport": "D:\\taiko\\_程序类\\20260728-raiting_analysis_by_ai-ai计算rating\\ml\\artifacts\\parser-v5\\mapping-report.v1.json",
+  "catalogCharts": 1393,
+  "coveredSongs": 1326,
+  "coverageRatio": 0.9519,
+  "songsWithRolls": 1088,
+  "balloonOnlySongs": 130,
+  "songsWithoutLongNotes": 108,
+  "skipped": 67,
+  "mergeStats": {
+    "tja": 1009,
+    "tjaWithBalloon": 2,
+    "wiki": 37,
+    "noWikiSpeed": 40,
+    "noRolls": 238
+  },
+  "compressedBytes": 29615,
+  "rawBytes": 218577
+}

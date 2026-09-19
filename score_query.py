@@ -22,7 +22,6 @@
 
 from __future__ import annotations
 
-import math
 import re
 import unicodedata
 
@@ -370,8 +369,8 @@ def _passes_song_no(row: dict, song_no) -> bool:
 # 目标评价差距
 # ---------------------------------------------------------------------------
 
-def annotate_target(row: dict, charts: dict, rank_data: dict, target_rank) -> None:
-    """就地补上目标评价、门槛分数、缺口、所需良数与所需连打数。"""
+def annotate_target(row: dict, charts: dict, rank_data: dict, target_rank, rolls_data: dict | None = None) -> None:
+    """就地补上目标评价、门槛分数、缺口、所需良数与所需连打数（含秒速与可行性）。"""
     if not target_rank:
         return
     song_no = row.get("id")
@@ -401,16 +400,21 @@ def annotate_target(row: dict, charts: dict, rank_data: dict, target_rank) -> No
     row["gap"] = max(0, target_score - current)
     if row["reached"]:
         return
-    # 所有档位（含最高档「极」）同一套换算：判定提升 或 补连打。
-    # 「极」不要求全良 —— 極スコア 只是分数门槛，判定亏的分可以用连打补回来。
-    unit = threshold["unit"] or 1
-    ok_to_good = int(math.ceil(2 * row["gap"] / unit)) if unit else 0
-    row["okToGood"] = ok_to_good
-    row["ngToGood"] = 0
-    if ok_to_good > (row.get("okCount") or 0):
-        remainder = row["gap"] - (row.get("okCount") or 0) * (unit / 2.0)
-        row["ngToGood"] = int(math.ceil(remainder / unit)) if unit else 0
-    row["rollsNeeded"] = int(math.ceil(row["gap"] / score_rank_mod.ROLL_UNIT))
+    # 判定提升与连打补足是两条并行的路；「极」不要求全良，黄条每打固定 100 分。
+    # 连打资源缺失时，连打路线按「资料未知」处理，只给判定路线。
+    entry = score_rank_mod.roll_entry(rolls_data, song_no, level)
+    plan = score_rank_mod.improvement_plan(
+        target_score,
+        current,
+        threshold["ceiling"],
+        threshold["unit"] or 1,
+        row.get("okCount") or 0,
+        row.get("ngCount") or 0,
+        pound_count=row.get("poundCount") or 0,
+        entry=entry,
+        all_good_rolls=threshold.get("rolls") or 0,
+    )
+    row.update({key: value for key, value in plan.items() if key not in ("gap", "allGoodRolls")})
 
 
 # ---------------------------------------------------------------------------
@@ -539,6 +543,7 @@ def select(
     rank_data: dict,
     alias_index: dict | None = None,
     unrated: list | None = None,
+    rolls_data: dict | None = None,
     **raw_filters,
 ) -> dict:
     """按条件检索成绩／谱面，返回 {total, rows, filters, notes, ...}。
@@ -548,6 +553,7 @@ def select(
     alias_index: {song_no: [别名, ...]}，用于 match_fields 含 alias 时匹配。
     unrated: 玩家打过但未进入评级的曲目 [{id, level, code, reason}, ...]；
              这些键会被排除出 unplayed，避免把打过的歌报成「没打过」。
+    rolls_data: 连打资源（黄色連打秒数 / 風船），用于把「还差几打连打」换算成秒速。
     """
     spec = normalize_filters(raw_filters)
     notes = []
@@ -612,7 +618,7 @@ def select(
 
     if spec["target_rank"]:
         for row in filtered:
-            annotate_target(row, charts, rank_data, spec["target_rank"])
+            annotate_target(row, charts, rank_data, spec["target_rank"], rolls_data)
         if spec["reached"] in ("yes", "no"):
             want = spec["reached"] == "yes"
             filtered = [row for row in filtered if bool(row.get("reached")) is want]

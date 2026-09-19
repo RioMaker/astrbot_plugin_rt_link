@@ -139,6 +139,7 @@ wiki 覆盖的子集是 **0 错判**。
    黄条多的谱面因此可以留着若干「可」仍然拿到极。
    代码中「极」与其他档位走同一套换算：`okToGood = ⌈2 × 缺口 ÷ 基本点⌉` 与
    `rollsNeeded = ⌈缺口 ÷ 100⌉` 两条并行路径。
+   不过「留着可、靠连打补」只在这张谱的黄条容量够用时成立，见第 6 节的連打理論値。
 4. **游戏给的评价优先于本地门槛**：判断「是否已达某评价」时以 API 的 `best_score_rank` 为准
    （`analyze_rank_improvements` 与 `annotate_target`），本地门槛只用来推算「还需要多少分」。
    这样即使门槛仍有偏差，也不会把游戏里已经升档的歌列进「待提升」。
@@ -148,11 +149,81 @@ wiki 覆盖的子集是 **0 错判**。
 
 ---
 
-## 5. 如何修正或更新
+## 6. 连打（黄色連打）与秒速
+
+「把分数缺口换算成连打」需要三个谱面量：黄条条数、合計連打秒数、連打理論値。
+公式取自 [連打秒数表](https://wikiwiki.jp/taiko-fumen/収録曲/連打秒数表) 与
+[極スコア表](https://wikiwiki.jp/taiko-fumen/作品/新AC/極スコア/おに) 的「要求連打速度」列：
+
+```
+連打秒数   = 60 ÷ BPM起点 × (拍数 − 1/12)         # 黄条比拍数短 1/12 拍（48 分音符 1 个）
+連打理論値 = ⌈(連打秒数 + 0.001) × 60⌉             # 逐条取整后求和；即每秒最多约 60 打
+秒速       = 黄色連打打数 ÷ 合計黄色連打秒数        # 風船連打不计入打数与秒数
+```
+
+- 要求速度的常见区间：おに 谱面拿「极」约需 **16.6 ~ 18 打/秒**（wiki 实测），
+  所以文案里超过 30 打/秒会额外标记「偏高」。
+- wiki 的「連打の途中で BPM が変化している場合、長さは始点の BPM を基準に決まる」也照此实现：
+  每条黄条用**起点 BPM** 计算，拍数按小节结构累加（含 `#MEASURE` 变化与空小节）。
+- 分歧谱固定取**达人线**（`#M` > `#E` > `#N`），风船要求打数取 `BALLOONMAS` / `BALLOONEXP` / `BALLOONNOR`。
+
+### 6.1 数据来源与构建
+
+| 数据 | 来源 |
+| --- | --- |
+| 黄条条数 / 合計秒数 / 理論値 / 风船 | ESE（TJADB）TJA 谱面，`scripts/build_rolls.py` 解析 |
+| 交叉校验 | wiki 極スコア表的「要求連打速度」＝ 必要連打数 ÷ 合計連打秒数，反推 `T_wiki = 必要連打数 ÷ 要求速度` |
+| 谱面身份映射 | rating 工程 `mapping-report.v1.json`（song_no + level ↔ TJA 文件） |
+
+```powershell
+python scripts/build_rolls.py `
+  --ese-root "<ESE 根目录>" `
+  --mapping "<mapping-report.v1.json>"
+```
+
+产物：`resource/rolls.v1.json.gz` + `resource/rolls.manifest.json`。
+脚本会统计秒数来源：
+
+| 来源 | 含义 |
+| --- | --- |
+| `tja` | TJA 解析值与 wiki 反推值相差 ≤ 15%，直接用 TJA 的（逐条连打更精确） |
+| `tja` + 风船 | 与「黄条 + 风船」秒数吻合：说明 wiki 那条要求速度把风船也算进去了，秒速仍只用黄条 |
+| `wiki` | 两边都对不上（通常是 TJA 版本与当前街机谱面不一致），改用 wiki 反推的秒数 |
+| 无黄条 | TJA 里没有黄条，`seconds = 0`：结构以 TJA 为准，不拿 wiki 的必要連打数当黄条 |
+
+当前构建结果：**1326 / 1393 = 95.2%** 谱面有连打资料，其中
+1088 张有黄条、130 张只有风船、108 张两者都没有（这 238 张无法靠连打补分）。
+
+### 6.2 计算与展示
+
+`score_rank.roll_plan()` 把缺口换算成：
+
+| 字段 | 含义 |
+| --- | --- |
+| `hitsNeeded` | ⌈缺口 ÷ 100⌉，还要补几打 |
+| `currentHits` | 本局已有的黄色连打打数 = 结算连打数 − 风船打数 |
+| `totalHits` | 补分后这局的黄条总打数 |
+| `speed` | `totalHits ÷ seconds`，四舍五入到小数点后 2 位（wiki 规定） |
+| `feasible` / `shortfall` | 是否在該谱連打理論値以内；超出多少打 |
+| `maxScore` | 理论最高分 = 天井 + 100 ×（黄条理論値 + 风船打数），用于判断「不可达」 |
+
+- 国服接口不区分黄条与风船打数，插件用谱面资料里的风船要求打数扣除；
+  大風船的要求数可能远高于实际可打数（例如 Rotter Tarmination 表记 999），
+  超过「风船秒数 × 17 打/秒」时按后者封顶（`BALLOON_NOMINAL_SPEED`）。
+- 没有黄条、或连打超上限时，不给出做不到的建议，改为明确写「只能靠判定」「已超上限」。
+- 只靠判定就必须把现有「可」「不可」全部打成良时，`judgmentRequiresAllGood` 为真，
+  文案写「必须全良」；连打也走不通时 `mustAllGood` 为真。
+
+---
+
+## 7. 如何修正或更新
 
 1. 只改门槛：编辑 `score_rank.py` 的 `SCORE_RANK_RATIOS` / `SCORE_RANK_NAMES`。
 2. 更新每曲数据：重跑 `python scripts/build_score_rank.py`，会刷新
    `resource/score_rank.v1.json.gz` 与 manifest 中的覆盖率统计。
-3. 谱面库换代后：先按 README「重新构建谱面数据」更新 `charts.v1.json.gz`，再重跑上面的脚本，
+3. 更新连打资料：重跑 `python scripts/build_rolls.py --ese-root ... --mapping ...`，
+   manifest 里的 `mergeStats` 会显示多少谱面用了 wiki 反推值（数值突然变大＝TJA 版本偏旧）。
+4. 谱面库换代后：先按 README「重新构建谱面数据」更新 `charts.v1.json.gz`，再重跑上面两个脚本，
    匹配率会随之提高。
-4. 回归验证：`python -m pytest test/test_score_rank.py -q`。
+5. 回归验证：`python -m pytest test/test_score_rank.py test/test_rolls.py -q`。
+   其中 `test_bundled_roll_resource_matches_wiki_for_known_songs` 用 wiki 公布过秒数的曲目做对照。

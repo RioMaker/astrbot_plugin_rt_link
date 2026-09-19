@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """Fixed-size score-rank improvement image for ``/rtlink improve``.
 
-按分区展示「离目标评价最近」的谱面，并给出达成目标所需的分数、良数与连打打数。
+按分区展示「离目标评价最近」的谱面，并给出判定路线（转几个「可」「不可」、是否必须全良）
+与连打路线（还差几打、黄条总打数、秒速、是否打得出来）。
 版式与 report/profile/weakness 同源：固定 1440 像素宽、随插件携带的中文字体。
 """
 
@@ -13,12 +14,14 @@ from datetime import datetime
 from PIL import Image, ImageDraw
 
 if __package__:
+    from . import improve_text as improve_text_mod
     from .report_image import (
         ACCENT, ACCENT_DARK, INK, INK_SOFT, LINE, MINT, MINT_DARK,
         MUTED, PAPER, QUIET, SURFACE, SURFACE_SOFT, _box, _text, _truncate,
     )
     from .score_rank import SCORE_RANK_NAMES, SCORE_RANK_RATIOS
 else:
+    import improve_text as improve_text_mod
     from report_image import (
         ACCENT, ACCENT_DARK, INK, INK_SOFT, LINE, MINT, MINT_DARK,
         MUTED, PAPER, QUIET, SURFACE, SURFACE_SOFT, _box, _text, _truncate,
@@ -53,6 +56,9 @@ def build_improve_data(result: dict, generated_at: datetime | None = None) -> di
         "already": int(result.get("alreadyAtTarget") or 0),
         "candidateCount": int(result.get("candidateCount") or 0),
         "exactCount": int(result.get("exactCount") or 0),
+        "noRollCount": int(result.get("noRollCount") or 0),
+        "allGoodCount": int(result.get("allGoodRequiredCount") or 0),
+        "unreachableCount": int(result.get("unreachableCount") or 0),
         "genreCount": len(result.get("genres") or []),
         "genres": [
             {
@@ -83,12 +89,17 @@ def _item_row(draw, x, y, width, item):
     _text(draw, f"→ {int(item.get('targetScore') or 0)}", x + 118, y + 26, 15, ACCENT_DARK, True)
     _text(draw, f"差 {int(item.get('gap') or 0)}", x + width, y + 26, 15, ACCENT_DARK, True, "right")
 
-    # 判定提升与连打补足是两条并行的路；「极」也一样，極スコア 只是分数门槛。
-    path = f"「可」→「良」{int(item.get('okToGood') or 0)} 个"
-    if item.get("ngToGood"):
-        path += f" +「不可」→「良」{int(item.get('ngToGood') or 0)} 个"
-    path += f"，或改补 {int(item.get('rollsNeeded') or 0)} 打连打"
-    _text(draw, _truncate(draw, path, width, 13), x, y + 54, 13, MUTED)
+    # 判定路线 + 连打路线；没有黄条 / 打不满时用强调色标出来。
+    lines = improve_text_mod.gap_route_lines(item, compact=True)
+    warning = bool(item.get("mustAllGood") or item.get("unreachable")
+                   or (item.get("rollKnown") and not item.get("hasRolls")))
+    for index, line in enumerate(lines[:2]):
+        _text(
+            draw,
+            _truncate(draw, line, width, 12),
+            x, y + 50 + index * 19, 12,
+            ACCENT_DARK if warning else MUTED,
+        )
 
 
 def _genre_card(draw, x, y, row, index):
@@ -150,8 +161,8 @@ def render_improve_image(result: dict, out_path: str, generated_at: datetime | N
 
     metrics = [
         ("涉及分区", str(data["genreCount"]), ACCENT),
-        ("精确门槛", f"{data['exactCount']} 张", MINT_DARK),
-        ("列出分区", f"{len(data['genres'])} 个", "#8565b3"),
+        ("无黄条", f"{data['noRollCount']} 张", MINT_DARK),
+        ("必须全良", f"{data['allGoodCount']} 张", "#ff8a6b"),
     ]
     for index, (label, value, color) in enumerate(metrics):
         x = 680 + index * 218
@@ -168,16 +179,17 @@ def render_improve_image(result: dict, out_path: str, generated_at: datetime | N
     if not data["genres"]:
         _box(draw, GRID_LEFT, GRID_TOP, 1300, 200, SURFACE, LINE, radius=22)
         _text(draw, "全部谱面都已达到目标评价，暂时没有可提升的曲目。", 720, GRID_TOP + 90, 18, MUTED, False, "center")
-    for index in range(GENRE_CARDS):
-        col, row = index % 2, index // 2
-        x = GRID_LEFT + col * (CARD_W + CARD_GAP_X)
-        y = GRID_TOP + row * (CARD_H + CARD_GAP_Y)
-        if index < len(data["genres"]):
-            _genre_card(draw, x, y, data["genres"][index], index)
-        elif index == len(data["genres"]):
-            _empty_card(draw, x, y, "其余分区暂无待提升谱面")
-        else:
-            _empty_card(draw, x, y, "—")
+    else:
+        for index in range(GENRE_CARDS):
+            col, row = index % 2, index // 2
+            x = GRID_LEFT + col * (CARD_W + CARD_GAP_X)
+            y = GRID_TOP + row * (CARD_H + CARD_GAP_Y)
+            if index < len(data["genres"]):
+                _genre_card(draw, x, y, data["genres"][index], index)
+            elif index == len(data["genres"]):
+                _empty_card(draw, x, y, "其余分区暂无待提升谱面")
+            else:
+                _empty_card(draw, x, y, "—")
 
     # --- 页脚 -------------------------------------------------------------
     draw.line((70, FOOTER_LINE_Y, 1370, FOOTER_LINE_Y), fill=LINE, width=2)
@@ -187,8 +199,14 @@ def render_improve_image(result: dict, out_path: str, generated_at: datetime | N
         "评价门槛 = 该谱極スコア × 50/60/70/80/90/95/100%（约 50/60/70/80/90/95/100 万）",
         70, FOOTER_LINE_Y + 18, 12, MUTED,
     )
-    _text(draw, "天井スコア / 極スコア 数据来源：太鼓の達人 譜面とか Wiki", 70, FOOTER_LINE_Y + 42, 12, MUTED)
-    _text(draw, f"{data['generatedAt']} · SCORE RANK", 1370, FOOTER_LINE_Y + 30, 12, ACCENT_DARK, True, "right")
+    _text(
+        draw,
+        "连打：連打秒数 = 60 ÷ BPM起点 × (拍数 − 1/12)，秒速 = 黄色連打打数 ÷ 合计秒数（风船不计入），"
+        "上限 = Σ⌈(秒数+0.001)×60⌉",
+        70, FOOTER_LINE_Y + 42, 12, MUTED,
+    )
+    _text(draw, "天井スコア / 極スコア / 連打秒数 数据来源：太鼓の達人 譜面とか Wiki + ESE 谱面", 70, FOOTER_LINE_Y + 66, 12, MUTED)
+    _text(draw, f"{data['generatedAt']} · SCORE RANK", 1370, FOOTER_LINE_Y + 42, 12, ACCENT_DARK, True, "right")
 
     output = os.path.abspath(out_path)
     os.makedirs(os.path.dirname(output), exist_ok=True)
