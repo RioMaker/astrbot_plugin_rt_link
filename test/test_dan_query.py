@@ -39,7 +39,7 @@ def _aliases():
 def test_summary_and_exact_course_query():
     catalog = _catalog()
     summary = query_dan_courses_text(catalog)
-    assert "2022, 2023, 2024, 2025" in summary
+    assert "2022, 2023, 2024, 2025, 2026" in summary
     assert "song_name 或 song_no" in summary
 
     result = query_dan_courses_text(catalog, year=2025, region="国服", rank="十段")
@@ -114,10 +114,18 @@ def test_romaji_and_jp_names_match_the_same_song():
 
 def test_song_not_in_dan_reports_candidates_instead_of_blank_miss():
     """曲目存在但没进过段位时，要说明是「没有出现记录」而不是「没找到这首歌」。"""
-    result = query_dan_courses_text(_catalog(), song_name="北埼玉", alias_data=_aliases())
+    # 天竺2000（ID 1）在 2022–2026 五届里都没当过课题曲
+    result = query_dan_courses_text(_catalog(), song_name="天竺2000", alias_data=_aliases())
     assert "没有找到符合条件的段位资料" in result
-    assert "338" in result and "没有出现记录" in result
+    assert "1" in result and "没有出现记录" in result
     assert "/rtlink alias" in result
+
+
+def test_song_that_entered_dan_only_in_2026_is_found():
+    """さいたま2000 在 2026 届首次成为课题曲（二级第 3 曲）。"""
+    result = query_dan_courses_text(_catalog(), song_name="さいたま2000", alias_data=_aliases())
+    assert "2026 日版/国际版 二级" in result
+    assert "第3曲" in result
 
 
 def test_level_prefix_filters_the_song_lookup():

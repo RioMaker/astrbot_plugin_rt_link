@@ -210,7 +210,8 @@ def main() -> int:
     raw = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     out_dir.mkdir(parents=True, exist_ok=True)
     gz_path = out_dir / "aliases.v1.json.gz"
-    gz_path.write_bytes(gzip.compress(raw, 9))
+    # mtime=0 让同样输入的重复构建产出完全一致的字节，便于比对与提交审阅
+    gz_path.write_bytes(gzip.compress(raw, 9, mtime=0))
 
     total_names = sum(len(item["names"]) + len(item["aliases"]) for item in songs.values())
     manifest = {

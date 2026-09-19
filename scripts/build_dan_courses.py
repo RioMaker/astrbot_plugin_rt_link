@@ -15,7 +15,7 @@ from pathlib import Path
 
 
 SCHEMA_VERSION = 1
-DATA_VERSION = "2026-09-04.1"
+DATA_VERSION = "2026-09-19.1"
 RANK_ORDER = [
     "五级", "四级", "三级", "二级", "一级",
     "初段", "二段", "三段", "四段", "五段",
@@ -34,6 +34,7 @@ SOURCES = {
     "official_jp_2024_high": "https://taiko-ch.net/blog/?m=202409",
     "official_jp_2025": "https://taiko-ch.net/blog/?p=14433",
     "official_jp_2025_high": "https://taiko-ch.net/blog/?m=202509",
+    "official_jp_2026": "https://taiko-ch.net/blog/?p=16229",
     "official_cn_2024": "https://www.weibo.com/ttarticle/p/show?id=2309405133996530204714",
     "official_cn_2025": "https://www.bilibili.com/opus/1119843577790201863",
     "official_cn_2025_high": "https://www.bilibili.com/opus/1158790890953637891",
@@ -42,7 +43,25 @@ SOURCES = {
     "reference_2023": "https://wikiwiki.jp/taiko-fumen/段位道場/過去バージョン/ニジイロ2023",
     "reference_2024": "https://wikiwiki.jp/taiko-fumen/段位道場/過去バージョン/ニジイロ2024",
     "reference_2025": "https://wikiwiki.jp/taiko-fumen/段位道場/過去バージョン/ニジイロ2025",
+    "reference_2026": "https://wikiwiki.jp/taiko-fumen/段位道場",
 }
+
+# 2026 届各段位攻略页：URL 里的段位名用日文写法（級 / 達人），逐段位登记，
+# 这样每门课程的「来源」都指向自己那一页，而不是笼统指向十段页。
+RANK_PAGE_BASE_2026 = "https://wikiwiki.jp/taiko-fumen/段位道場/ニジイロ2026/"
+RANK_PAGE_SLUGS = {
+    "五级": "五級", "四级": "四級", "三级": "三級", "二级": "二級", "一级": "一級",
+    "初段": "初段", "二段": "二段", "三段": "三段", "四段": "四段", "五段": "五段",
+    "六段": "六段", "七段": "七段", "八段": "八段", "九段": "九段", "十段": "十段",
+    "玄人": "玄人", "名人": "名人", "超人": "超人", "达人": "達人",
+}
+
+
+def rank_source_id(rank: str) -> str:
+    return f"reference_2026_{rank}"
+
+
+SOURCES.update({rank_source_id(rank): RANK_PAGE_BASE_2026 + slug for rank, slug in RANK_PAGE_SLUGS.items()})
 
 # Only use aliases for typographic or known localized-name differences.
 TITLE_ALIASES = {
@@ -57,10 +76,22 @@ TITLE_ALIASES = {
 
 # These songs are present in the reviewed Dan-i tables but absent from the
 # bundled rating chart catalog. Keep them readable instead of guessing an ID.
+# They stay `not_in_chart_resource` until the catalog catches up; once the song
+# appears in charts.v1, the title lookup maps it automatically again.
 KNOWN_MISSING_TITLES = {
+    # 2022–2025 tables
     "チュリングラブfeatsouナナヲアカリ",
     "vialactea",
     "brainpower",
+    # 2026 tables（2026-09-19 追加；曲库快照只到 song_no 1499，新曲尚未进入评级曲库）
+    "鈍響ライクリフド",
+    "活声ライクリフド",
+    "resumestory",
+    "hypernova",
+    "vrykolakas",
+    "nivalisanima",
+    "魔宵月",
+    "銀の黎明か黒の晶華か",
 }
 
 
@@ -168,17 +199,38 @@ def _chart_index(charts: list[dict]) -> dict[str, list[dict]]:
     return index
 
 
+def _candidate_rank(chart: dict, level: int, notes: int) -> tuple:
+    """候选谱面可信度排序：难度一致 → 音符数一致 → ID 最小（保证结果稳定）。
+
+    同名曲目（例如「エンジェル ドリーム」同时存在デレマス版与ナムコオリジナル版）
+    必须先按难度和音符数收敛，否则会绑到音符数对不上的同名片。
+    """
+    return (
+        0 if chart.get("level") == level else 1,
+        0 if chart.get("totalNotes") == notes else 1,
+        int(chart.get("id") or 0),
+    )
+
+
 def _map_songs(courses: list[dict], charts: list[dict]) -> dict:
     index = _chart_index(charts)
     chart_keys = {(row.get("id"), row.get("level")) for row in charts}
     mapped = unavailable = unresolved = 0
+    evidence_counts: dict[str, int] = {}
     details = []
     for course in courses:
         for song in course["songs"]:
             title_key = _canonical_title(song["title"])
-            candidate_rows = index.get(title_key, [])
-            candidates = sorted({row["id"] for row in candidate_rows})
+            candidate_rows = sorted(
+                index.get(title_key, []),
+                key=lambda row: _candidate_rank(row, song["level"], song["total_notes"]),
+            )
+            candidates = []
+            for row in candidate_rows:
+                if isinstance(row.get("id"), int) and row["id"] not in candidates:
+                    candidates.append(row["id"])
             if candidates:
+                best = candidate_rows[0]
                 song["song_no"] = candidates[0]
                 song["song_no_candidates"] = candidates
                 has_rated_chart = any((song_no, song["level"]) in chart_keys for song_no in candidates)
@@ -186,22 +238,40 @@ def _map_songs(courses: list[dict], charts: list[dict]) -> dict:
                     song["mapping_status"] = "verified_aliases"
                 else:
                     song["mapping_status"] = "verified" if has_rated_chart else "song_verified_level_unrated"
+                if best.get("level") != song["level"]:
+                    evidence = "title"
+                elif best.get("totalNotes") != song["total_notes"]:
+                    evidence = "title+level"
+                elif len(candidates) > 1:
+                    evidence = "title+level+notes+ambiguous"
+                else:
+                    evidence = "title+level+notes"
+                song["mapping_evidence"] = evidence
+                evidence_counts[evidence] = evidence_counts.get(evidence, 0) + 1
                 mapped += 1
             elif title_key in KNOWN_MISSING_TITLES:
                 song["song_no"] = None
                 song["song_no_candidates"] = []
                 song["mapping_status"] = "not_in_chart_resource"
+                song["mapping_evidence"] = "known_missing"
                 unavailable += 1
             else:
                 song["song_no"] = None
                 song["song_no_candidates"] = []
                 song["mapping_status"] = "unmapped"
+                song["mapping_evidence"] = "none"
                 unresolved += 1
                 details.append({
                     "year": course["year"], "region": course["region"], "rank": course["rank"],
                     "order": song["order"], "title": song["title"], "candidates": candidates,
                 })
-    return {"mapped": mapped, "unavailable": unavailable, "unresolved": unresolved, "details": details}
+    return {
+        "mapped": mapped,
+        "unavailable": unavailable,
+        "unresolved": unresolved,
+        "evidence": evidence_counts,
+        "details": details,
+    }
 
 
 def _with_metadata(rows: list[dict], year: int, region: str, opens: str, closes: str | None, sources: list[str]) -> list[dict]:
@@ -223,7 +293,8 @@ def build(markdown_path: Path, charts_path: Path) -> tuple[dict, dict]:
         2022: _parse_table(markdown, "## 3. 段位道场 2022", "## 4. 段位道场 2023"),
         2023: _parse_table(markdown, "## 4. 段位道场 2023", "## 5. 段位道场 2024"),
         2024: _parse_table(markdown, "## 5. 段位道场 2024", "## 6. 段位道场 2025"),
-        2025: _parse_table(markdown, "## 6. 段位道场 2025", "## 7. RTLink"),
+        2025: _parse_table(markdown, "## 6. 段位道场 2025", "## 7. 段位道场 2026"),
+        2026: _parse_table(markdown, "## 7. 段位道场 2026", "## 8. RTLink"),
     }
     for year, rows in years.items():
         if len(rows) != len(RANK_ORDER):
@@ -234,11 +305,18 @@ def build(markdown_path: Path, charts_path: Path) -> tuple[dict, dict]:
     courses += _with_metadata(years[2023], 2023, "jp_worldwide", "2023-06-10", "2024-05-22", ["official_jp_2023", "official_jp_2023_high", "reference_2023"])
     courses += _with_metadata(years[2024], 2024, "jp_worldwide", "2024-06-01", "2025-05-28", ["official_jp_2024", "official_jp_2024_high", "reference_2024"])
     courses += _with_metadata(years[2025], 2025, "jp_worldwide", "2025-06-07", "2026-05-30", ["official_jp_2025", "official_jp_2025_high", "reference_2025"])
+    courses += _with_metadata(years[2026], 2026, "jp_worldwide", "2026-06-06", None, ["official_jp_2026", "reference_2026"])
+    for row in courses:
+        if row["year"] == 2026:
+            row["source_ids"] = [
+                "official_jp_2026", "reference_2026", rank_source_id(row["rank"]),
+            ]
     jp_high_opens = {
         2022: "2022-09-19",
         2023: "2023-09-23",
         2024: "2024-09-21",
         2025: "2025-09-13",
+        2026: "2026-09-12",
     }
     for row in courses:
         if row["region"] == "jp_worldwide" and row["rank"] in HIGH_RANKS:
@@ -274,7 +352,7 @@ def build(markdown_path: Path, charts_path: Path) -> tuple[dict, dict]:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--markdown", default="DAN_I_DOJO_2022_2025.md")
+    parser.add_argument("--markdown", default="DAN_I_DOJO_2022_2026.md")
     parser.add_argument("--charts", default="resource/charts.v1.json.gz")
     parser.add_argument("--output", default="resource/dan_courses.v1.json.gz")
     parser.add_argument("--manifest", default="resource/dan_courses.manifest.json")

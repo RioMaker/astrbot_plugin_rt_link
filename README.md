@@ -18,7 +18,7 @@
 - **成长记录**：每次获取 Rating 或执行 `/rtlink update` 都会追加一份轻量历史快照，完整保留七维、全部常见/冷门节奏配置，以及算法和谱面库版本
 - **完整帮助长图**：`/rtlink help` 或 `/rtlink 帮助` 返回同一张说明图片，包含菌菌 apikey 四步绑定实图、常用指令、评级与安全说明
 - LLM 工具：注册多个查询工具，模型可在自然对话中自动调用
-- **段位道场查询**：`/rtlink dan [年份] [区域] [段位] [曲名]`（或 `/rtlink 段位 …`）查 2022–2025 日版/国际版与国服课题曲、普通/金合格条件、开放时间与来源；按曲名反查时同时给出国服名、日文名与 RTLink 曲目 ID，支持「鬼 天竺2000」这样带难度前缀
+- **段位道场查询**：`/rtlink dan [年份] [区域] [段位] [曲名]`（或 `/rtlink 段位 …`）查 2022–2026 日版/国际版与国服课题曲、普通/金合格条件、开放时间与来源；按曲名反查时同时给出国服名、日文名与 RTLink 曲目 ID，支持「鬼 天竺2000」这样带难度前缀
 - **AI 段位资料查询**：LLM 工具 `query_dan_course` 与上面的命令走同一套查询（同样支持别名）
 - **AI 过段能力参考**：LLM 工具 `evaluate_player_dan` 将三首课题曲的实际良/可/不可/连打与普通、金合格条件逐项对照，并明确标注魂槽及连续演奏无法验证
 - 本地存储：SQLite 持久化全部 1–5 难度成绩；当前最佳、同步批次、去重变化历史分表保存，原始字段完整保留
@@ -252,8 +252,12 @@ python scripts/build_charts.py --src ../taiko-star-rating-system-cal-by-ai/publi
 段位资料由仓库内已审阅 Markdown 构建：
 
 ```bash
-python scripts/build_dan_courses.py
+python scripts/build_dan_courses.py                       # 默认读取 DAN_I_DOJO_2022_2026.md
 ```
+
+构建脚本会按「曲名归一化 → 难度 → 音符数」把课题曲映射到谱面库，并写出映射报告
+`resource/dan_courses.mapping.json`；尚未进入评级曲库的新曲（如 2026 届《鈍響ライクリフド》）
+会记为 `not_in_chart_resource`，等曲库更新后重跑即可自动映射。
 
 ### 重新构建评价门槛数据
 

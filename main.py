@@ -35,7 +35,7 @@ else:
 PLUGIN_NAME = "rt_link"
 PLUGIN_AUTHOR = "Rio"
 PLUGIN_DESC = "将 QQ 绑定到菌菌控制台 apikey，查询太鼓达人成绩并评估玩家实力"
-PLUGIN_VERSION = "v0.12.0"
+PLUGIN_VERSION = "v0.13.0"
 
 COMMAND_NAME = "rtlink"
 BINDINGS_KEY = "bindings"
@@ -513,7 +513,7 @@ class RTLinkPlugin(Star):
         单曲成绩只能作为段位能力参考，不能据此断言玩家已通过段位。
 
         Args:
-            year(int): 年份，可选 2022、2023、2024、2025；0 表示不限
+            year(int): 年份，可选 2022、2023、2024、2025、2026；0 表示不限
             region(string): 区域，可选 cn/国服/中国大陆 或 jp/日版/国际版；空表示不限
             rank(string): 段位，如 五级、初段、十段、玄人、达人；空表示不限
             song_name(string): 按课题曲名称反查段位，可省略。支持国服曲名、日文曲名、罗马字与常用别名
@@ -546,7 +546,7 @@ class RTLinkPlugin(Star):
         无法由单曲成绩证明的魂槽、连续演奏条件。
 
         Args:
-            year(int): 段位年份，可选 2022、2023、2024、2025
+            year(int): 段位年份，可选 2022、2023、2024、2025、2026
             rank(string): 段位，如 五级、初段、十段、玄人、达人
             region(string): 区域，可选 cn/国服/中国大陆 或 jp/日版/国际版；省略时按玩家绑定服务器选择
         """

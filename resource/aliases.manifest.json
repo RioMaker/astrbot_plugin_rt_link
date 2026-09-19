@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "dataVersion": "2026-09-19.1",
   "catalogCharts": 1393,
-  "aliasEntries": 5507,
+  "aliasEntries": 5509,
   "averageNamesPerChart": 3.95,
   "ambiguousKeys": 49,
   "ambiguousSamples": {
@@ -51,10 +51,10 @@
   "sources": {
     "charts": 1393,
     "romaji": 880,
-    "danTitles": 7,
+    "danTitles": 8,
     "curated": 371,
     "missingCurated": []
   },
-  "compressedBytes": 48601,
-  "rawBytes": 164321
+  "compressedBytes": 48618,
+  "rawBytes": 164388
 }
