@@ -33,7 +33,7 @@ def test_pure():
     print("[OK] 难度解析 + 组合名解析")
 
 
-async def test_alias_flow():
+async def _alias_flow():
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     if os.path.exists(DB_PATH):
         os.remove(DB_PATH)
@@ -92,9 +92,14 @@ async def test_alias_flow():
     print("[OK] 别名查询解析")
 
 
+def test_alias_flow():
+    """pytest 直接跑同步包装；本机没装 pytest-asyncio 也能执行。"""
+    asyncio.run(_alias_flow())
+
+
 async def main():
     test_pure()
-    await test_alias_flow()
+    await _alias_flow()
     print("ALL OK")
 
 
