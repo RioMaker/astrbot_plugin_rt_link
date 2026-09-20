@@ -35,7 +35,7 @@ else:
 PLUGIN_NAME = "rt_link"
 PLUGIN_AUTHOR = "Rio"
 PLUGIN_DESC = "将 QQ 绑定到菌菌控制台 apikey，查询太鼓达人成绩并评估玩家实力"
-PLUGIN_VERSION = "v0.13.0"
+PLUGIN_VERSION = "v0.14.0"
 
 COMMAND_NAME = "rtlink"
 BINDINGS_KEY = "bindings"
@@ -184,7 +184,7 @@ class RTLinkPlugin(Star):
             async for result in self._dispatch_command(event, rest):
                 yield result
             return
-        ok, result = await self.service.generate_report_image(event.get_sender_id())
+        ok, result = await self.service.generate_profile_image(event.get_sender_id())
         if not ok:
             yield event.plain_result(result)
             return
@@ -214,6 +214,7 @@ class RTLinkPlugin(Star):
             "rating": self.rating_cmd,
             "update": self.update_cmd,
             "profile": self.profile_cmd,
+            "progress": self.progress_cmd,
             "weakness": self.weakness_cmd,
             "improve": self.improve_cmd,
             "提升": self.improve_cmd,
@@ -293,6 +294,13 @@ class RTLinkPlugin(Star):
     async def update_cmd(self, event: AstrMessageEvent):
         _ok, result = await self.service.force_update(event.get_sender_id())
         yield event.plain_result(result)
+
+    async def progress_cmd(self, event: AstrMessageEvent):
+        ok, result = await self.service.generate_configuration_image(event.get_sender_id())
+        if not ok:
+            yield event.plain_result(result)
+            return
+        yield event.image_result(result)
 
     async def weakness_cmd(self, event: AstrMessageEvent):
         ok, result = await self.service.generate_weakness_image(event.get_sender_id())

@@ -16,6 +16,7 @@ import os
 import sqlite3
 import threading
 import time
+import zlib
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -205,6 +206,20 @@ CREATE TABLE IF NOT EXISTS rating_snapshots (
 );
 CREATE INDEX IF NOT EXISTS idx_rating_snapshots_owner_time
 ON rating_snapshots(owner_id, captured_at, id);
+
+CREATE TABLE IF NOT EXISTS configuration_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner_id TEXT NOT NULL,
+    game_player_id TEXT NOT NULL,
+    server TEXT NOT NULL,
+    source TEXT NOT NULL,
+    version_key TEXT NOT NULL,
+    captured_at TEXT NOT NULL,
+    input_hash TEXT NOT NULL,
+    payload_zlib BLOB NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_configuration_history
+ON configuration_snapshots(owner_id, game_player_id, server, source, version_key, id);
 
 CREATE TABLE IF NOT EXISTS sync_state (
     player_id TEXT PRIMARY KEY,
@@ -493,6 +508,40 @@ class ScoreDatabase:
             result.append(row)
         return result
 
+    def add_configuration_snapshot(self, owner_id, payload, captured_at=None) -> bool:
+        """Append only if scoring inputs changed since the last compatible sync."""
+        key = self._configuration_identity(owner_id, payload)
+        encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).encode('utf-8')
+        # meta may include fetch timestamps; only scoring evidence decides change.
+        evidence = json.dumps(payload['inputs'], sort_keys=True, separators=(",", ":"), allow_nan=False).encode('utf-8')
+        digest = hashlib.sha256(evidence).hexdigest()
+        with self._lock, self._conn:
+            last = self._conn.execute(
+                'SELECT input_hash FROM configuration_snapshots WHERE owner_id=? AND game_player_id=? AND server=? AND source=? AND version_key=? ORDER BY id DESC LIMIT 1', key
+            ).fetchone()
+            if last and last['input_hash'] == digest:
+                return False
+            self._conn.execute(
+                'INSERT INTO configuration_snapshots (owner_id,game_player_id,server,source,version_key,captured_at,input_hash,payload_zlib) VALUES (?,?,?,?,?,?,?,?)',
+                (*key, captured_at or now_iso(), digest, zlib.compress(encoded, 6))
+            )
+        return True
+
+    @staticmethod
+    def _configuration_identity(owner_id, payload):
+        config = payload['configurations']
+        version = '|'.join((payload['algorithmVersion'], config['version'], config['resourceHash'], config['chartsHash']))
+        return (str(owner_id), str(payload['meta']['playerId']), str(payload['meta']['server']), payload['source'], version)
+
+    def get_configuration_snapshots(self, owner_id, payload, limit=90):
+        key = self._configuration_identity(owner_id, payload)
+        with self._lock:
+            rows = self._conn.execute(
+                'SELECT captured_at,payload_zlib FROM configuration_snapshots WHERE owner_id=? AND game_player_id=? AND server=? AND source=? AND version_key=? ORDER BY id DESC LIMIT ?',
+                (*key, min(max(int(limit), 1), 365))
+            ).fetchall()
+        return [{'captured_at':row['captured_at'], 'payload':json.loads(zlib.decompress(row['payload_zlib']))} for row in reversed(rows)]
+
     # -- 同步状态 ----------------------------------------------------------
     def set_sync_state(self, player_id: str, source: str, ok: bool) -> None:
         with self._lock:
@@ -596,6 +645,9 @@ class ScoreDatabase:
             score_sync_count = self._conn.execute("SELECT COUNT(*) FROM score_syncs").fetchone()[0]
             cache_count = self._conn.execute("SELECT COUNT(*) FROM rating_cache").fetchone()[0]
             snapshot_count = self._conn.execute("SELECT COUNT(*) FROM rating_snapshots").fetchone()[0]
+            configuration_count, configuration_bytes = self._conn.execute(
+                'SELECT COUNT(*), COALESCE(SUM(LENGTH(payload_zlib)),0) FROM configuration_snapshots'
+            ).fetchone()
             kv_count = self._conn.execute("SELECT COUNT(*) FROM kv").fetchone()[0]
             current_content_bytes = self._conn.execute(
                 "SELECT COALESCE(SUM(LENGTH(raw_json)),0) FROM scores"
@@ -626,6 +678,8 @@ class ScoreDatabase:
             "score_sync_count": score_sync_count,
             "cache_count": cache_count,
             "snapshot_count": snapshot_count,
+            "configuration_snapshot_count": configuration_count,
+            "configuration_content_bytes": configuration_bytes,
             "kv_count": kv_count,
             "content_bytes": current_content_bytes + history_content_bytes,
             "current_content_bytes": current_content_bytes,

@@ -7,11 +7,12 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 import time
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 # 包加载（AstrBot）时用相对导入；本地直接运行 service.py 时回退到绝对导入。
@@ -25,7 +26,10 @@ if __package__:
     from .dan_query import evaluate_player_dan_text
     from .help_image import render_help_image
     from .improve_image import render_improve_image
-    from .profile_image import render_profile_image
+    from .profile_image import render_profile_image, render_configuration_image
+    from .profile_data import (load_configuration_catalog, configuration_scores,
+                               unique_score_rows, configuration_history_payload,
+                               archive_configuration_resources, CONFIGURATION_ALGORITHM)
     from .report_image import render_report_image
     from .weakness_image import render_weakness_image
     from .storage import ScoreDatabase, load_charts
@@ -39,7 +43,10 @@ else:
     from dan_query import evaluate_player_dan_text
     from help_image import render_help_image
     from improve_image import render_improve_image
-    from profile_image import render_profile_image
+    from profile_image import render_profile_image, render_configuration_image
+    from profile_data import (load_configuration_catalog, configuration_scores,
+                              unique_score_rows, configuration_history_payload,
+                              archive_configuration_resources, CONFIGURATION_ALGORITHM)
     from report_image import render_report_image
     from weakness_image import render_weakness_image
     from storage import ScoreDatabase, load_charts
@@ -54,7 +61,7 @@ DIFFICULTY_NAMES = {
 
 # 精简画像缓存的数据契约版本。字段新增后提升版本，避免继续读取旧缓存
 # 中缺少图片证据字段或节奏配置常见度分组。
-RATING_CACHE_SCHEMA = 5
+RATING_CACHE_SCHEMA = 6
 RATING_HISTORY_SCHEMA = 2
 RATING_ALGORITHM_VERSION = "taiko-signal-rhythm-v2-r1"
 SCORE_STORAGE_SCHEMA = 2
@@ -368,6 +375,7 @@ class ScoreService:
         self.store = store
         self._client_factory = client_factory
         self.charts = charts or {}
+        self.configuration_catalog = load_configuration_catalog(self.charts)
         self.db = score_db
         self.score_rank = score_rank or score_rank_mod.empty_score_rank()
         # 连打资料（黄色連打秒数 / 風船）：用来把「还差几打连打」换算成秒速。
@@ -482,6 +490,9 @@ class ScoreService:
             return_exceptions=True,
         )
 
+        if await self._binding(qq) != b:
+            return False, "绑定在同步期间发生变化，请重新发送 /rtlink。", None
+
         errors = {}
         if isinstance(kinoko, BaseException):
             errors["kinoko"] = str(kinoko)
@@ -520,9 +531,40 @@ class ScoreService:
             return False, "该账号暂无鬼/里（魔王/里魔王）谱面成绩，无法评级。请先在太鼓中游玩鬼级谱面。", None
 
         slim = _slim_result(result)
+        source = "kinoko" if kinoko is not None else "hiroba"
+        # Freeze identity from the binding used by this sync, not optional API metadata.
+        slim['meta'] = {**slim['meta'], 'playerId':player_id, 'server':server}
+        fields = ('id','level','highScore','bestScoreRank','clearCount','fullComboCount','dondafulComboCount')
+        normalized = rating_mod.normalize_scores(payload_for_rating, rated_only=False)
+        slim['profileScoreRows'] = unique_score_rows([{key:row.get(key) for key in fields} for row in normalized['rows']])
+        for row in slim['records']:
+            row['title'] = self.charts.get((row['id'], row['level']), {}).get('title') or row['title']
+        slim['profileConfigurations'] = await asyncio.to_thread(configuration_scores, result['records'], self.configuration_catalog)
+        target = self._default_target_rank(result['records'])
+        improvement = await asyncio.to_thread(
+            score_rank_mod.analyze_rank_improvements, result['records'], self.charts,
+            self.score_rank, target, per_genre=3, rolls_data=self.rolls
+        )
+        improvement['items'] = improvement['items'][:8]
+        for item in improvement['items']:
+            item['title'] = self.charts.get((item['id'], item['level']), {}).get('title') or item.get('title')
+        slim['profileImprovement'] = improvement
+        slim['profileSyncedAt'] = datetime.now(timezone.utc).isoformat()
+        slim['profileRating'] = result['summary']['rating']
+        slim['profileSource'] = source
+        if await self._binding(qq) != b:
+            return False, "绑定在同步期间发生变化，请重新发送 /rtlink。", None
+        slim['_historySaved'] = await self._record_rating_snapshot(qq, slim, 'sync')
         if self.db is not None:
+            if slim['profileConfigurations']['available']:
+                try:
+                    await asyncio.to_thread(archive_configuration_resources, Path(self.db.db_path).parent, slim['profileConfigurations'])
+                    await asyncio.to_thread(self.db.add_configuration_snapshot, qq, configuration_history_payload(slim), slim['profileSyncedAt'])
+                except Exception as error:
+                    self._logger.error(f"记录配置历史失败：{error}")
+                    slim['_historySaved'] = False
             await asyncio.to_thread(self.db.put_rating_cache, qq, slim)
-            await asyncio.to_thread(self.db.set_sync_state, qq, "kinoko" if kinoko is not None else "hiroba", True)
+            await asyncio.to_thread(self.db.set_sync_state, qq, source, True)
 
         # 空间告警检查（同步后触发）
         warning = await self.check_storage_warning()
@@ -612,6 +654,8 @@ class ScoreService:
             if (
                 cache
                 and cache.get("_cacheSchema") == RATING_CACHE_SCHEMA
+                and (cache.get('profileConfigurations') or {}).get('resourceHash') == self.configuration_catalog.get('hash')
+                and (not self.configuration_catalog.get('available') or (cache.get('profileConfigurations') or {}).get('algorithmVersion') == CONFIGURATION_ALGORITHM)
                 and storage_ready
                 and time.time() - float(cache.get("_ts") or 0) < self.sync_ttl
             ):
@@ -628,7 +672,14 @@ class ScoreService:
             return False
         try:
             snapshot = _history_snapshot(analysis)
+            evidence = {**snapshot, 'source':analysis.get('profileSource'),
+                        'inputs':[{k:r.get(k) for k in ('id','level','rating','goodCount','okCount','ngCount','dondafulComboCount')} for r in analysis.get('records') or []]}
+            digest = hashlib.sha256(json.dumps(evidence, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+            key = f'rating_history_last:{qq}'
+            if await asyncio.to_thread(self.db.kv_get, key) == digest:
+                return True
             await asyncio.to_thread(self.db.add_rating_snapshot, qq, trigger, snapshot)
+            await asyncio.to_thread(self.db.kv_set, key, digest)
             return True
         except Exception as error:
             self._logger.error(f"记录 Rating 历史快照失败：{error}")
@@ -641,10 +692,10 @@ class ScoreService:
             if self.db is not None and not await self._score_storage_ready(qq):
                 message = self._sync_required_message(message)
             return False, message
-        recorded = await self._record_rating_snapshot(qq, analysis, "update")
+        recorded = analysis.get('_historySaved', False)
         rating = float((analysis.get("summary") or {}).get("rating") or 0)
         chart_count = len(analysis.get("records") or [])
-        suffix = "历史快照已记录。" if recorded else "成绩已更新，但历史快照记录失败，请检查日志。"
+        suffix = "历史已保存（相同成绩不会重复记点）。" if recorded else "成绩已更新，但历史快照未保存，请检查日志。"
         return True, f"更新完成：已从菌菌拉取 {chart_count} 张有效成绩，综合 Rating {rating:.2f}；{suffix}"
 
     def _records(self, analysis: dict) -> list:
@@ -686,6 +737,7 @@ class ScoreService:
             f"成绩历史：{stats['score_history_count']} 个变化状态 ｜ 同步批次：{stats['score_sync_count']} 次",
             f"评级缓存：{stats['cache_count']} 个玩家",
             f"Rating 历史：{stats['snapshot_count']} 份快照",
+            f"配置历史：{stats['configuration_snapshot_count']} 份，压缩内容 {stats['configuration_content_bytes'] / 1024:.1f} KiB",
             f"内容字节：{stats['content_bytes']/1048576:.1f}MiB ｜ 可回收空页：{stats['reclaimable_bytes']/1024:.0f}KiB",
             f"按玩家：{by_player}",
             "清理：/rtlink cleanup 释放数据库空页（VACUUM）。",
@@ -909,7 +961,6 @@ class ScoreService:
         analysis, err = await self._get_analysis(qq)
         if err:
             return err
-        await self._record_rating_snapshot(qq, analysis, "rating_text")
         summary = analysis["summary"]
         meta = analysis.get("meta") or {}
         records = self._records(analysis)
@@ -926,7 +977,7 @@ class ScoreService:
     async def generate_report_image(self, qq) -> tuple[bool, str]:
         """生成鼓点画像图片，返回 (成功, 图片路径 或 错误信息)。"""
         return await self._generate_analysis_image(
-            qq, "report", render_report_image, "报告", snapshot_trigger="rating_image"
+            qq, "report", render_report_image, "报告"
         )
 
     async def generate_help_image(self, qq) -> tuple[bool, str]:
@@ -946,12 +997,15 @@ class ScoreService:
         return True, path
 
     async def _generate_analysis_image(
-        self, qq, prefix, renderer, label, snapshot_trigger: str | None = None
+        self, qq, prefix, renderer, label
     ) -> tuple[bool, str]:
         """使用新文件名渲染分析图片，避免 AstrBot/QQ 复用旧图缓存。"""
         analysis, err = await self._get_analysis(qq)
         if err:
             return False, err
+        if prefix == 'progress' and self.db is not None and (analysis.get('profileConfigurations') or {}).get('available'):
+            history = await asyncio.to_thread(self.db.get_configuration_snapshots, qq, configuration_history_payload(analysis))
+            analysis = {**analysis, 'configurationHistory':history}
         out_dir = self.report_dir
         if not out_dir and self.db is not None:
             out_dir = os.path.dirname(os.path.abspath(self.db.db_path))
@@ -960,8 +1014,6 @@ class ScoreService:
         path = os.path.join(out_dir, f"{prefix}_{qq}_{time.time_ns()}.png")
         try:
             await asyncio.to_thread(renderer, analysis, path)
-            if snapshot_trigger:
-                await self._record_rating_snapshot(qq, analysis, snapshot_trigger)
             await asyncio.to_thread(self._prune_analysis_images, out_dir, prefix, qq, path)
         except Exception as e:
             self._logger.error(f"生成{label}图片失败：{e}")
@@ -997,6 +1049,9 @@ class ScoreService:
     async def generate_profile_image(self, qq) -> tuple[bool, str]:
         """生成玩家 profile 图片。"""
         return await self._generate_analysis_image(qq, "profile", render_profile_image, "玩家画像")
+
+    async def generate_configuration_image(self, qq) -> tuple[bool, str]:
+        return await self._generate_analysis_image(qq, 'progress', render_configuration_image, '配置评分')
 
     async def generate_weakness_image(self, qq) -> tuple[bool, str]:
         """生成节奏弱项图片，冷门配置在图中独立展示。"""

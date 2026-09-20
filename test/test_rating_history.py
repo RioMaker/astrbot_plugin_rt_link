@@ -110,7 +110,7 @@ def test_recent_snapshot_limit_keeps_chronological_order(tmp_path):
     assert [row["payload"]["summary"]["rating"] for row in rows] == [8.3, 8.4]
 
 
-def test_force_update_and_rating_image_each_append_snapshot(tmp_path):
+def test_rating_reads_do_not_append_sync_history(tmp_path):
     async def run():
         db = ScoreDatabase(tmp_path / "rt_link.db")
         svc = ScoreService(
@@ -121,7 +121,9 @@ def test_force_update_and_rating_image_each_append_snapshot(tmp_path):
         )
 
         async def fake_sync(_qq):
-            return True, "", _analysis()
+            analysis = _analysis()
+            analysis['_historySaved'] = await svc._record_rating_snapshot(_qq, analysis, 'sync')
+            return True, "", analysis
 
         async def fake_get_analysis(_qq):
             return _analysis(), ""
@@ -134,13 +136,15 @@ def test_force_update_and_rating_image_each_append_snapshot(tmp_path):
         )
         try:
             ok, message = await svc.force_update("10001")
+            await svc.force_update("10001")
             image_ok, _path = await svc.generate_report_image("10001")
+            await svc.get_rating_text('10001')
             rows = db.get_rating_snapshots("10001")
         finally:
             service_mod.render_report_image = original_renderer
             db.close()
         assert ok and image_ok
-        assert "历史快照已记录" in message
-        assert [row["trigger"] for row in rows] == ["update", "rating_image"]
+        assert "历史已保存" in message
+        assert [row["trigger"] for row in rows] == ["sync"]
 
     asyncio.run(run())

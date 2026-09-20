@@ -427,13 +427,13 @@ def test_unknown_subcommand_still_reports_error():
     assert "未知子指令" in result[0][1]
 
 
-def test_bare_command_still_generates_report_image():
+def test_bare_command_generates_profile_image():
     plugin = _plugin()
 
     async def fake_report(qq):
         return True, "report.png"
 
-    plugin.service.generate_report_image = fake_report
+    plugin.service.generate_profile_image = fake_report
     assert _run(plugin, "/rtlink")[0] == ("image", "report.png")
 
 

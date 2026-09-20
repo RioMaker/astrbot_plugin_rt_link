@@ -105,7 +105,7 @@ def test_profile_image_renders_approved_canvas(tmp_path: Path):
     assert data["weakest"]["key"] == "hitPrecision"
     output = render_profile_image(analysis, str(tmp_path / "profile.png"), datetime(2026, 9, 3))
     with Image.open(output) as image:
-        assert image.size == (1440, 1800)
+        assert image.size == (1440, 2598)  # Sparse records use one card row, without blank BEST 20 rows.
         assert image.mode == "RGB"
 
 

@@ -33,6 +33,9 @@ class FakeService:
     async def generate_profile_image(self, qq):
         return True, f"profile-{qq}.png"
 
+    async def generate_configuration_image(self, qq):
+        return True, f"progress-{qq}.png"
+
     async def generate_weakness_image(self, qq):
         return True, f"weakness-{qq}.png"
 
@@ -148,6 +151,11 @@ async def run_dispatch_cases():
     )
     assert await invoke(plugin, profile, "profile") == ["profile-10008.png"]
 
+    progress = mock.AstrMessageEvent("10008", private=False, is_admin=False, message_str="rtlink progress")
+    assert await invoke(plugin, progress, "progress") == ["progress-10008.png"]
+    rating = mock.AstrMessageEvent("10008", private=False, is_admin=False, message_str="rtlink rating")
+    assert await invoke(plugin, rating, "rating") == ["report-10008.png"]
+
     weakness = mock.AstrMessageEvent(
         "10009", private=False, is_admin=False, message_str="rtlink weakness"
     )
@@ -161,7 +169,7 @@ async def run_dispatch_cases():
     bare = mock.AstrMessageEvent(
         "10007", private=False, is_admin=False, message_str="/rtlink"
     )
-    assert await invoke(plugin, bare) == ["report-10007.png"]
+    assert await invoke(plugin, bare) == ["profile-10007.png"]
 
     unknown = mock.AstrMessageEvent(
         "10007", private=False, is_admin=False, message_str="rtlink something"
