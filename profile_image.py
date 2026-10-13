@@ -27,6 +27,54 @@ STAGE_STARTS = (0, 1, 5, 7, 9, 10, 13)
 STAGES = [{**_stage(float(value)), 'startsAt': value} for value in STAGE_STARTS]
 PLANET_COLORS = ['#ef967e', '#e7c565', '#b69bdd', '#80cfba', '#81b8dc', '#df96b8', '#aabcc9']
 TAG_COLOR = '#416b73'
+NEXT_CARD_HEIGHT = 264
+NEXT_CARD_STEP = 282
+NEXT_NOTE_HEIGHT = 88
+DIFFICULTY_ASSETS = {4: 'oni', 5: 'ura'}
+
+
+def recommendation_routes(item):
+    """Summarize existing route results without implying an unavailable alternative."""
+    if item.get('unreachable'):
+        return '现有资料下，理论最高分不足目标', '请用 /rtlink improve 更换目标评价', False
+
+    ok_count = max(0, int(item.get('okCount') or 0))
+    ng_count = max(0, int(item.get('ngCount') or 0))
+    ok = min(ok_count, max(0, int(item.get('okToGood') or 0)))
+    ng = min(ng_count, max(0, int(item.get('ngToGood') or 0)))
+    covers = bool(item.get('judgmentCovers'))
+    if covers and (ok or ng):
+        changes = []
+        if ok:
+            changes.append(f'{ok} 个「可」')
+        if ng:
+            changes.append(f'{ng} 个「不可」')
+        judgment = ' + '.join(changes) + ' →「良」'
+        if item.get('judgmentRequiresAllGood'):
+            judgment += '（需全良）'
+    elif item.get('judgmentShortfall'):
+        judgment = f'仅靠判定不足：全良仍差 {int(item["judgmentShortfall"]):,} 分'
+    elif not (ok_count or ng_count):
+        judgment = '当前记录没有可改善的「可」「不可」'
+    else:
+        judgment = '判定单独不足，详情见 /rtlink improve'
+
+    feasible = bool(item.get('rollFeasible')) and item.get('rollsNeeded') is not None
+    if feasible:
+        roll = f'黄条额外 {int(item["rollsNeeded"])} 打'
+    elif not item.get('rollKnown'):
+        roll = '缺少连打资料，暂无估算'
+    elif not item.get('hasRolls'):
+        roll = '本曲无黄条，不能通过黄条补分'
+    else:
+        roll = '仅靠连打补足会超出该谱理论上限'
+    return judgment, roll, covers and bool(ok or ng) and feasible
+
+
+def next_plays_height(count):
+    if not count:
+        return 144
+    return math.ceil(count / 2) * NEXT_CARD_STEP - (NEXT_CARD_STEP - NEXT_CARD_HEIGHT) + NEXT_NOTE_HEIGHT
 
 def asset(im, name, x, y, w, h):
     a = Image.open(ASSETS / (name + '.png')).convert('RGBA')
@@ -298,43 +346,93 @@ class ProfileRenderer:
         items = self.improvement['items'][:count]
         if not items:
             box(ImageDraw.Draw(im), 70, y, 1300, 110, '#edf2e9', '#ccd8ca', 14)
-            txt(ImageDraw.Draw(im), '当前没有符合条件的推荐，可用 /rtlink improve 指定其他目标评价。', 98, y + 40, 23, MUTED)
-        for (i, item) in enumerate(items):
+            txt(
+                ImageDraw.Draw(im),
+                '当前没有符合条件的推荐，可用 /rtlink improve 指定其他目标评价。',
+                98,
+                y + 40,
+                23,
+                MUTED,
+            )
+            return
+        for i, item in enumerate(items):
             x = 70 + i % 2 * 665
-            yy = y + i // 2 * 144
-            box(ImageDraw.Draw(im), x, yy, 635, 130, '#edf2e9', '#ccd8ca', 14)
-            if item['level'] == 5:
-                theme.asset(im, 'ura', x + 554, yy + 6, 62, 51, 0.1)
+            yy = y + i // 2 * NEXT_CARD_STEP
+            box(ImageDraw.Draw(im), x, yy, 635, NEXT_CARD_HEIGHT, WHITE, LINE, 18)
             d = ImageDraw.Draw(im)
-            txt(d, f'{i + 1:02d}', x + 21, yy + 23, 19, TEAL)
+            txt(d, f'{i + 1:02d}', x + 24, yy + 26, 18, TEAL)
             name = title(item)
-            size = 23
+            size = 24
             while _font(size).getlength(name) > 475 and size > 16:
                 size -= 1
-            txt(d, theme.ellipsize(name, 475, size), x + 65, yy + 18, size, INK, True)
-            asset(im, f"rank-{self.improvement.get('targetRank', 8)}", x + 551, yy + 49, 40, 39)
-            txt(ImageDraw.Draw(im), f"还差 {item['gap']:,} 分", x + 329, yy + 67, 19, RED)
-            routes = [('ng', item.get('ngToGood', 0)), ('ok', item.get('okToGood', 0))]
-            routes = [(kind, int(n)) for (kind, n) in routes if n]
-            xx = x + 22
-            if item.get('judgmentCovers') and routes:
-                for (kind, n) in routes:
-                    asset(im, kind, xx, yy + 62, 31, 27)
-                    txt(ImageDraw.Draw(im), f'×{n}', xx + 34, yy + 64, 20, TEAL)
-                    xx += 85
-                txt(ImageDraw.Draw(im), '→', xx, yy + 63, 24, TEAL)
-                asset(im, 'good', xx + 35, yy + 61, 31, 28)
-            else:
-                txt(ImageDraw.Draw(im), '组合判定 / 连打路线', xx, yy + 65, 19, TEAL)
-            if item.get('rollFeasible') and item.get('rollsNeeded') is not None:
-                txt(ImageDraw.Draw(im), f"或黄条再加 {item['rollsNeeded']} 打", x + 24, yy + 102, 17, MUTED)
+            txt(d, theme.ellipsize(name, 475, size), x + 66, yy + 22, size, INK, True)
+            difficulty_asset = DIFFICULTY_ASSETS.get(item.get('level'))
+            if difficulty_asset:
+                asset(im, difficulty_asset, x + 560, yy + 12, 50, 44)
+
+            txt(d, '当前', x + 24, yy + 77, 17, MUTED)
+            txt(d, '→', x + 131, yy + 74, 24, MUTED)
+            txt(d, '目标', x + 174, yy + 77, 17, TEAL)
+            current_rank = int(item.get('currentRank') or 0)
+            target_rank = int(self.improvement.get('targetRank') or 0)
+            for rank, xx in ((current_rank, x + 66), (target_rank, x + 218)):
+                if 2 <= rank <= 8:
+                    asset(im, f'rank-{rank}', xx, yy + 65, 41, 41)
+                else:
+                    txt(
+                        ImageDraw.Draw(im),
+                        '无' if rank == 1 else '—',
+                        xx + 20,
+                        yy + 77,
+                        17,
+                        MUTED,
+                        align='center',
+                    )
+
+            d = ImageDraw.Draw(im)
+            exact = bool(item.get('exact'))
+            txt(
+                d, '距目标还差' if exact else '估算差值', x + 606, yy + 61, 16, MUTED, align='right'
+            )
+            txt(d, f'{int(item["gap"]):,} 分', x + 607, yy + 87, 30, RED, True, 'right')
+            current_score = (
+                f'{int(item["currentScore"]):,}' if item.get('currentScore') is not None else '—'
+            )
+            target_score = (
+                f'{int(item["targetScore"]):,}' if item.get('targetScore') is not None else '—'
+            )
+            target_label = '目标' if exact else '估算目标'
+            txt(
+                d,
+                f'最高分 {current_score}   →   {target_label} {target_score}',
+                x + 24,
+                yy + 126,
+                18,
+                MUTED,
+            )
+            d.line((x + 24, yy + 160, x + 611, yy + 160), fill=LINE, width=1)
+            judgment, roll, alternative = recommendation_routes(item)
+            for label, value, offset, color in (
+                ('判定参考', judgment, 177, TEAL),
+                ('或 · 连打' if alternative else '连打参考', roll, 220, '#986021'),
+            ):
+                txt(d, label, x + 24, yy + offset + 4, 17, color)
+                size = 22
+                while _font(size).getlength(value) > 467 and size > 15:
+                    size -= 1
+                txt(d, theme.ellipsize(value, 467, size), x + 140, yy + offset, size, INK)
+
+        note_y = y + next_plays_height(len(items)) - NEXT_NOTE_HEIGHT + 28
+        d = ImageDraw.Draw(im)
+        txt(d, '补分方式分别估算，每种方式均假设其余得分条件保持不变。', 70, note_y, 18, MUTED)
+        txt(d, '连打指黄条额外打数，不含风船；实际达成以游戏结算为准。', 70, note_y + 30, 18, MUTED)
 
     def profile(self, data):
         best_rows = max(1, math.ceil(min(20, len(self.analysis['records'])) / 3))
         recommendation_count = min(8, len(self.improvement['items']))
         next_heading = 2038 + best_rows * 220 + 42
         next_y = next_heading + 98
-        height = next_y + max(1, math.ceil(recommendation_count / 2)) * 144 + 56
+        height = next_y + next_plays_height(recommendation_count) + 56
         im = Image.new('RGBA', (1440, height), PAPER)
         d = ImageDraw.Draw(im)
         rating = self.analysis['summary']['rating']
@@ -358,7 +456,7 @@ class ProfileRenderer:
         self.config_frame(im, 1390, data)
         theme.section(ImageDraw.Draw(im), '03 / BEST 20', '综合评分最佳 20 谱面', 1937, '按单谱 Rating 排序')
         self.best20(im, 2038)
-        theme.section(ImageDraw.Draw(im), '04 / NEXT PLAY', '下一步可以尝试', next_heading, f'推荐 {recommendation_count} 首 · 更多路线见 /rtlink improve')
+        theme.section(ImageDraw.Draw(im), '04 / NEXT PLAY', '下一步可以尝试', next_heading, f'按分数差排序 · {recommendation_count} 首 · 更多见 /rtlink improve')
         self.next_plays(im, next_y)
         txt(ImageDraw.Draw(im), self.data['footer'], 70, height - 40, 18, MUTED)
         return im.convert('RGB')

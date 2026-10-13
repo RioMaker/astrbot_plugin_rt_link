@@ -6,7 +6,7 @@ import time
 
 from PIL import Image
 
-from profile_image import build_profile_data, render_profile_image
+from profile_image import build_profile_data, recommendation_routes, render_profile_image
 from rating import RHYTHM_RARE_CATALOG_COVERAGE, calculate_rhythm_ability
 from service import _slim_result
 from weakness_image import build_weakness_data, render_weakness_image
@@ -119,6 +119,51 @@ def test_weakness_image_renders_common_and_rare_sections(tmp_path: Path):
     with Image.open(output) as image:
         assert image.size == (1440, 2200)
         assert image.mode == "RGB"
+
+
+def test_profile_recommendations_clamp_equivalent_judgments_to_actual_counts():
+    # okToGood is an equivalent count; a combined route must use only the
+    # available OK judgments and then the necessary NG judgments.
+    item = {
+        "okCount": 2,
+        "ngCount": 1,
+        "okToGood": 3,
+        "ngToGood": 1,
+        "judgmentCovers": True,
+        "judgmentRequiresAllGood": True,
+        "rollKnown": True,
+        "hasRolls": False,
+        "rollFeasible": False,
+    }
+    judgment, roll, alternative = recommendation_routes(item)
+    assert "2 个「可」 + 1 个「不可」" in judgment
+    assert "需全良" in judgment
+    assert "无黄条" in roll
+    assert not alternative
+
+
+def test_profile_recommendations_only_offer_independently_sufficient_alternatives():
+    item = {
+        "okCount": 2,
+        "okToGood": 3,
+        "judgmentCovers": False,
+        "judgmentShortfall": 200,
+        "rollKnown": True,
+        "hasRolls": True,
+        "rollFeasible": True,
+        "rollsNeeded": 6,
+    }
+    judgment, roll, alternative = recommendation_routes(item)
+    assert "全良仍差 200 分" in judgment
+    assert "额外 6 打" in roll
+    assert not alternative
+    item.update(judgmentCovers=True, judgmentShortfall=0, okToGood=1)
+    assert recommendation_routes(item)[2]
+    item.update(rollFeasible=False, rollKnown=False)
+    assert "缺少连打资料" in recommendation_routes(item)[1]
+    assert not recommendation_routes(item)[2]
+    item["unreachable"] = True
+    assert "理论最高分不足目标" in recommendation_routes(item)[0]
 
 
 def test_generated_image_pruning_is_scoped_and_retains_latest(tmp_path: Path):
