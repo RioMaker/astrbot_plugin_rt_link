@@ -27,8 +27,8 @@ STAGE_STARTS = (0, 1, 5, 7, 9, 10, 13)
 STAGES = [{**_stage(float(value)), 'startsAt': value} for value in STAGE_STARTS]
 PLANET_COLORS = ['#ef967e', '#e7c565', '#b69bdd', '#80cfba', '#81b8dc', '#df96b8', '#aabcc9']
 TAG_COLOR = '#416b73'
-NEXT_CARD_HEIGHT = 264
-NEXT_CARD_STEP = 282
+NEXT_CARD_HEIGHT = 312
+NEXT_CARD_STEP = 330
 NEXT_NOTE_HEIGHT = 88
 DIFFICULTY_ASSETS = {4: 'oni', 5: 'ura'}
 
@@ -410,11 +410,20 @@ class ProfileRenderer:
                 18,
                 MUTED,
             )
-            d.line((x + 24, yy + 160, x + 611, yy + 160), fill=LINE, width=1)
+            txt(d, '当前判定', x + 24, yy + 172, 17, MUTED)
+            for j, (key, icon) in enumerate(
+                (('goodCount', 'good'), ('okCount', 'ok'), ('ngCount', 'ng'))
+            ):
+                xx = x + 140 + j * 155
+                icon_width, _ = judgment_icon(im, icon, xx, yy + 166, 28)
+                value = item.get(key)
+                count_text = f'{int(value):,}' if value is not None else '—'
+                txt(ImageDraw.Draw(im), count_text, xx + icon_width + 10, yy + 170, 22, INK)
+            d.line((x + 24, yy + 208, x + 611, yy + 208), fill=LINE, width=1)
             judgment, roll, alternative = recommendation_routes(item)
             for label, value, offset, color in (
-                ('判定参考', judgment, 177, TEAL),
-                ('或 · 连打' if alternative else '连打参考', roll, 220, '#986021'),
+                ('判定参考', judgment, 225, TEAL),
+                ('或 · 连打' if alternative else '连打参考', roll, 268, '#986021'),
             ):
                 txt(d, label, x + 24, yy + offset + 4, 17, color)
                 size = 22
