@@ -173,6 +173,8 @@ def _format_course(catalog: dict, course: dict, alias_data: dict | None = None) 
         )
     lines.append("合格条件（普通 / 金）：")
     lines.extend(_condition_text(condition) for condition in course["conditions"])
+    if course.get("verification_note"):
+        lines.append(f"核对说明：{course['verification_note']}")
     lines.append("来源：")
     for source_id in course.get("source_ids", []):
         lines.append(f"- {source_id}: {catalog['sources'][source_id]}")

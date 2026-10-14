@@ -174,22 +174,33 @@ def test_bundled_alias_resource_covers_every_chart():
     assert len(data["index"]) > len(charts)
 
 
-@pytest.mark.parametrize("query,song_no", [
-    ("きたさいたま2000", 338),
-    ("Tenjiku 2000", 1),
-    ("てんぢく2000", 1),
-    ("六天", 765),
-    ("第六天魔王", 765),
-    ("罗特", 402),
-    ("Rotter Tarmination", 402),
-    ("顿卡马", 120),
-    ("ドンカマ2000", 120),
-    ("幽玄", 463),
-    ("无畏", 845),
-    ("Dreadnought", 845),
-    ("わら得る2000", 890),
-    ("reendofadream", 1197),
-])
+@pytest.mark.parametrize(
+    "query,song_no",
+    [
+        ("きたさいたま2000", 338),
+        ("Tenjiku 2000", 1),
+        ("てんぢく2000", 1),
+        ("六天", 765),
+        ("第六天魔王", 765),
+        ("罗特", 402),
+        ("Rotter Tarmination", 402),
+        ("顿卡马", 120),
+        ("ドンカマ2000", 120),
+        ("幽玄", 463),
+        ("无畏", 845),
+        ("Dreadnought", 845),
+        ("わら得る2000", 890),
+        ("reendofadream", 1197),
+        ("Synchronica Airlines", 914),
+        ("Central Dogma Part 1", 954),
+        ("Central Dogma Part.2", 999),
+        ("Shouyou de Show You!", 1000),
+        ("Natsu Matsuri -JITTERIN’ JINN Version-", 1027),
+        ("GO ON ～Mirai e～", 1079),
+        ("Rokka no Mai", 1154),
+        ("Drawin’☆Dream!", 1183),
+    ],
+)
 def test_bundled_alias_resource_resolves_known_names(query, song_no):
     data = sa.load_aliases(RESOURCE)
     hits = sa.resolve(data, query, limit=5)

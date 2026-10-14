@@ -57,3 +57,7 @@ python scripts/build_profile_configurations.py --model-root <模型工程> --ese
 - Windows / Python 3.10.9 / Pillow 12.3.0 下，248 项本地测试通过。旧别名测试使用独立临时数据库，未改动原有固定测试数据库。
 - 同一份真实缓存生成 Profile（1440 × 5164）和 Rating（1440 × 2720）成功；推荐数据不变，完整 Profile 与 Pillow 11.2.1 输出逐像素一致。核对了 [Pillow 12.0 兼容性变更](https://pillow.readthedocs.io/en/stable/releasenotes/12.0.0.html)及 [12.3 发布说明](https://pillow.readthedocs.io/en/stable/releasenotes/12.3.0.html)。
 - 以上为本地依赖解析、完整测试及缓存渲染验证；未执行生产 AstrBot 更新或真实 API 同步。
+
+## 2026-10-14 数据重算
+
+配置资源更新为 `bpm7-2026-10-14-v1`，仍覆盖 1,327 张特征谱面与 116 个配置组合。ESE 更新后有 36 张配置描述、13 个理论基线变化；AI v2 定数与聚合公式保持原值。旧配置历史按资源哈希隔离。备份、映射复核、测试和本地回放见 [本次维护说明](data-refresh-2026-10-14.md)。

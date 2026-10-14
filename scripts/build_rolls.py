@@ -37,7 +37,7 @@ import urllib.parse
 from pathlib import Path
 
 SCHEMA_VERSION = 1
-DATA_VERSION = "2026-09-19.1"
+DATA_VERSION = "2026-10-14.1"
 WIKI_BASE = "https://wikiwiki.jp/taiko-fumen/"
 WIKI_PAGE = "作品/新AC/極スコア/おに"
 SOURCE = WIKI_BASE + urllib.parse.quote(WIKI_PAGE)
@@ -440,7 +440,7 @@ def main() -> int:
     raw = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     out_dir.mkdir(parents=True, exist_ok=True)
     gz_path = out_dir / "rolls.v1.json.gz"
-    gz_path.write_bytes(gzip.compress(raw, 9))
+    gz_path.write_bytes(gzip.compress(raw, 9, mtime=0))
 
     coverage = len(songs) / len(charts) if charts else 0.0
     manifest = {

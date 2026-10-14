@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
-  "dataVersion": "2026-09-19.1",
-  "courseCount": 152,
-  "songEntryCount": 456,
-  "mappedSongEntryCount": 445,
-  "unavailableSongEntryCount": 11,
+  "dataVersion": "2026-10-14.1",
+  "courseCount": 167,
+  "songEntryCount": 501,
+  "mappedSongEntryCount": 488,
+  "unavailableSongEntryCount": 13,
   "unresolvedSongEntryCount": 0,
-  "sourceMarkdownSha256": "e72d95e645799bb292549d4dde167b4a7925b8b7ab9bac7d0da0214c37d1de48",
-  "compressedBytes": 13857
+  "sourceMarkdownSha256": "b21e7b96b012e52aa203a73aabe3d0ad8ad031a3f6fcc29eee091e2c0ed5c0ec",
+  "compressedBytes": 14608
 }

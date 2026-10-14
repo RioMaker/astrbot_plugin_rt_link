@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "bpm7-2026-09-20-v1",
+  "version": "bpm7-2026-10-14-v1",
   "chartsSha256": "5c1011a3a9dc4bf3ea02b81f6806eff268c7969af852b56d0f9b86b3abf5c8d9",
   "profiles": 1327,
   "configurations": 116,
@@ -41,9 +41,9 @@
       ">330"
     ]
   ],
-  "sha256": "cb077a40e22dbd063b8f77aaf693a2c2fea2ea7ca7580cee54f971d6e890ac44",
-  "compressedBytes": 401474,
+  "sha256": "61da349461da1ee6d63c510c452c4b98e9e3ff638baba98593e6b1f1317e15f4",
+  "compressedBytes": 401385,
   "source": "ESE TJA with parser-v5 mapping; fingerprint and totalNotes verified",
   "baseline": "Full-good catalog with unchanged rating.py configuration aggregation",
-  "mappingSha256": "a89f7dcdc64ddc3252155ce0d8eb80a555bb92a24d6f2375078cf88271225a3c"
+  "mappingSha256": "bb7d8b2b780be43e1f96e01abbc62421d72b05dca089a40283360fb31e95304d"
 }

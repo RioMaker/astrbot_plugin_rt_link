@@ -15,7 +15,7 @@ from pathlib import Path
 
 
 SCHEMA_VERSION = 1
-DATA_VERSION = "2026-09-19.1"
+DATA_VERSION = "2026-10-14.1"
 RANK_ORDER = [
     "五级", "四级", "三级", "二级", "一级",
     "初段", "二段", "三段", "四段", "五段",
@@ -38,6 +38,9 @@ SOURCES = {
     "official_cn_2024": "https://www.weibo.com/ttarticle/p/show?id=2309405133996530204714",
     "official_cn_2025": "https://www.bilibili.com/opus/1119843577790201863",
     "official_cn_2025_high": "https://www.bilibili.com/opus/1158790890953637891",
+    "official_cn_2026": "https://mp.weixin.qq.com/s/ttbIlAO5G2qdrKc7f04w9w",
+    "official_cn_2025_close": "https://mp.weixin.qq.com/s/jVnLAJcGvqGOT2m9QdjltA",
+    "reference_cn_updates": "https://wikiwiki.jp/taiko-fumen/作品/新AC中国版/アップデート履歴",
     "gameplay_cn_2023": "https://www.bilibili.com/video/BV1fE4m1X7ci",
     "reference_2022": "https://wikiwiki.jp/taiko-fumen/段位道場/過去バージョン/ニジイロ2022",
     "reference_2023": "https://wikiwiki.jp/taiko-fumen/段位道場/過去バージョン/ニジイロ2023",
@@ -332,20 +335,55 @@ def build(markdown_path: Path, charts_path: Path) -> tuple[dict, dict]:
             row["source_ids"] = ["reference_2023", "gameplay_cn_2023"]
     courses += cn_2023
     courses += _with_metadata(years[2024], 2024, "cn", "2025-02-19", None, ["official_cn_2024", "reference_2024"])
-    cn_2025 = _with_metadata(years[2025], 2025, "cn", "2025-10-09", None, ["official_cn_2025", "official_cn_2025_high", "reference_2025"])
+    cn_2025 = _with_metadata(
+        years[2025],
+        2025,
+        "cn",
+        "2025-10-09",
+        "2026-10-01",
+        [
+            "official_cn_2025",
+            "official_cn_2025_high",
+            "reference_2025",
+            "reference_cn_updates",
+            "official_cn_2025_close",
+        ],
+    )
     for row in cn_2025:
         if row["rank"] in HIGH_RANKS:
             row["opens_at"] = "2026-01-21"
     courses += cn_2025
+
+    # 国服本次仅开放五级～十段；不把日版已经开放的人字段复制为国服。
+    cn_2026 = _with_metadata(
+        [row for row in years[2026] if row["rank"] not in HIGH_RANKS],
+        2026,
+        "cn",
+        "2026-10-14",
+        None,
+        ["reference_cn_updates", "official_cn_2026", "reference_2026"],
+    )
+    for row in cn_2026:
+        row["source_ids"] = [*row["source_ids"], rank_source_id(row["rank"])]
+        row["verification_status"] = "reference_cross_checked"
+        row["verification_note"] = (
+            "开放日期及范围据 Wiki 国服更新记录；曲目与条件沿用已核对的 2026 主表。"
+            "官方微信公告触发访问验证，尚未直接复核国服公告图。"
+        )
+    courses += cn_2026
 
     report = _map_songs(courses, charts)
     payload = {
         "schema_version": SCHEMA_VERSION,
         "data_version": DATA_VERSION,
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "source_markdown_sha256": hashlib.sha256(markdown_path.read_bytes()).hexdigest(),
+        "source_markdown_sha256": hashlib.sha256(
+            markdown_path.read_bytes()
+        ).hexdigest(),
         "sources": SOURCES,
-        "courses": sorted(courses, key=lambda row: (row["year"], row["region"], row["rank_order"])),
+        "courses": sorted(
+            courses, key=lambda row: (row["year"], row["region"], row["rank_order"])
+        ),
     }
     return payload, report
 

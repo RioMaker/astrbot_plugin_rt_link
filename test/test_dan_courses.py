@@ -17,19 +17,19 @@ def test_runtime_dan_resource_is_complete_and_indexed():
     catalog = load_dan_courses(ROOT / "resource" / "dan_courses.v1.json.gz", charts)
 
     assert catalog["schema_version"] == 1
-    assert catalog["data_version"] == "2026-09-19.1"
-    # 2022–2026 五届日版/国际版 + 国服 2023/2024/2025，共 8 套 19 段位
-    assert len(catalog["courses"]) == 152
-    assert sum(len(course["songs"]) for course in catalog["courses"]) == 456
-    assert len(catalog["by_key"]) == 152
+    assert catalog["data_version"] == "2026-10-14.1"
+    # 2022–2026 五届日版/国际版 + 国服 2023/2024/2025，8 套完整课程 + 国服 2026 五级至十段
+    assert len(catalog["courses"]) == 167
+    assert sum(len(course["songs"]) for course in catalog["courses"]) == 501
+    assert len(catalog["by_key"]) == 167
 
     statuses = [
         song["mapping_status"]
         for course in catalog["courses"]
         for song in course["songs"]
     ]
-    # 3 首旧曲 + 8 首 2026 新曲尚未进入评级曲库
-    assert statuses.count("not_in_chart_resource") == 11
+    # 原有 11 条缺曲记录 + 国服 2026 十段中的 2 条重复引用。
+    assert statuses.count("not_in_chart_resource") == 13
     assert "unmapped" not in statuses
 
 
@@ -72,9 +72,20 @@ def test_2026_courses_and_high_rank_openings():
     assert catalog["by_key"][(2026, "jp_worldwide", "玄人")]["opens_at"] == "2026-09-12"
     assert catalog["by_key"][(2026, "jp_worldwide", "达人")]["opens_at"] == "2026-09-12"
     assert catalog["by_key"][(2026, "jp_worldwide", "达人")]["closes_at"] is None
-    assert (2026, "cn", "十段") not in catalog["by_key"]
+    assert catalog["by_key"][(2026, "cn", "十段")]["opens_at"] == "2026-10-14"
+    assert (2026, "cn", "玄人") not in catalog["by_key"]
+    assert (2026, "cn", "达人") not in catalog["by_key"]
+    assert catalog["by_key"][(2025, "cn", "达人")]["closes_at"] == "2026-10-01"
+    assert (
+        catalog["by_key"][(2026, "cn", "十段")]["verification_status"]
+        == "reference_cross_checked"
+    )
 
-    jp_2026 = [course for course in catalog["courses"] if course["year"] == 2026]
+    jp_2026 = [
+        course
+        for course in catalog["courses"]
+        if course["year"] == 2026 and course["region"] == "jp_worldwide"
+    ]
     assert len(jp_2026) == 19
     for course in jp_2026:
         assert course["region"] == "jp_worldwide"

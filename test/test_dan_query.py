@@ -67,6 +67,18 @@ def test_song_name_and_song_id_reverse_lookup():
     assert "2025 日版/国际版 十段" in canonical_region
 
 
+def test_cn_2026_open_scope_and_source_limit_are_visible():
+    catalog = _catalog()
+    result = query_dan_courses_text(catalog, year=2026, region="国服", rank="十段")
+    assert "2026 中国大陆版 十段" in result
+    assert "2026-10-14" in result
+    assert "鈍響ライクリフド" in result
+    assert "尚未直接复核国服公告图" in result
+    for rank in ("玄人", "名人", "超人", "达人"):
+        text = query_dan_courses_text(catalog, year=2026, region="国服", rank=rank)
+        assert "没有找到" in text
+
+
 def test_llm_tool_is_registered_and_uses_public_catalog():
     plugin = object.__new__(main.RTLinkPlugin)
     plugin.dan_courses = _catalog()
