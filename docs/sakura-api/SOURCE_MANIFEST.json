@@ -1,0 +1,22 @@
+{
+  "source_url": "https://viewer.sakura-bot.cn/docs/score-token",
+  "final_url": "https://viewer.sakura-bot.cn/docs/score-token",
+  "retrieved_at": "2026-10-14T13:37:29.859647+08:00",
+  "http_status": 200,
+  "content_type": "text/html;charset=utf-8",
+  "tls_certificate_verified": true,
+  "scope": "Provided public score-token documentation page only; no player API requests.",
+  "extraction": "UTF-8 HTML article.token-docs to Markdown; navigation outside article omitted; article link made absolute; code blocks preserved.",
+  "files": [
+    {
+      "path": "score-token.source.html",
+      "bytes": 102184,
+      "sha256": "66af6ea015f62a1af8a8b85f606d0b52af5b0c2d88bb1baac49226d763ea4971"
+    },
+    {
+      "path": "score-token.md",
+      "bytes": 2982,
+      "sha256": "dbad20a470b37e081608551cd9e9d8988452b2a76907bee2c33bfd25e50d1a1a"
+    }
+  ]
+}

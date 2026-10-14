@@ -1,0 +1,3 @@
+# Preserve snapshot bytes covered by SOURCE_MANIFEST.json on Windows checkouts.
+score-token.source.html -text
+score-token.md -text
