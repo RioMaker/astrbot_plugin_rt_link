@@ -1,11 +1,11 @@
 {
-  "mapped": 488,
-  "unavailable": 13,
+  "mapped": 501,
+  "unavailable": 0,
   "unresolved": 0,
   "evidence": {
-    "title": 128,
-    "title+level+notes": 353,
-    "title+level+notes+ambiguous": 7
+    "title+level+notes": 491,
+    "title+level+notes+ambiguous": 7,
+    "title+level": 3
   },
   "details": []
 }

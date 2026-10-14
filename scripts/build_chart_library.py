@@ -121,6 +121,27 @@ def build(ese_root, index_path, mapping_path, output, quota_mib=512):
             raise ValueError(f"unverified mapping: {key}")
         links.setdefault(source_key, []).append(key)
 
+    # A game ID can exist before a rating model. Supplemental bindings use
+    # reviewed public identity + exact ESE title/course/stars/notes/fingerprint.
+    identity_path = ROOT / "scripts/data/song_names.json"
+    identities = json.loads(identity_path.read_bytes()) if identity_path.exists() else {}
+    if identities.get("sources", {}).get("ese", {}).get("revision") == revision:
+        for entry in identities.get("eseSupplementalMappings", []):
+            selected = entry["selected"]
+            key = (entry["songNo"], entry["level"])
+            source_key = (selected["relativePath"], selected["course"], selected["fingerprint"])
+            reference = by_source.get(source_key)
+            identity = identities["songs"][str(key[0])]
+            meta = identity["levels"][str(key[1])]
+            if (not reference or reference["totalNotes"] != meta["totalNotes"]
+                    or reference["level"] != meta["stars"]
+                    or normalize(reference.get("titleJa")) != normalize(identity["titleJa"])
+                    or reference["course"] != ("oni" if key[1] == 4 else "edit")
+                    or key in charts):
+                raise ValueError(f"unverified supplemental identity: {key}")
+            charts[key] = {"title": identity["title"], "titleJa": identity["titleJa"], **meta}
+            links.setdefault(source_key, []).append(key)
+
     output.mkdir(parents=True, exist_ok=True)
     existing_bytes = sum(p.stat().st_size for p in output.rglob("*") if p.is_file())
     if quota_mib <= 0 or existing_bytes + 64 * 1048576 > quota_mib * 1048576:
@@ -256,7 +277,9 @@ def build(ese_root, index_path, mapping_path, output, quota_mib=512):
                     del timelines[relative]
             db.execute("INSERT INTO charts VALUES (?,?,?)", (key, input_hash, blob))
             linked = links.get((relative, course, row["fingerprint"]), [])
-            title = charts[linked[0]]["title"] if linked else row["title"]
+            alias = aliases["songs"].get(f"{linked[0][0]}|{linked[0][1]}", {}) if linked else {}
+            title = ((alias.get("names") or [charts[linked[0]]["title"]])[0]
+                     if linked else row["title"])
             level = 4 if course == "oni" else 5
             variant = relative + (
                 f" #{course} block {row['courseOccurrence']} (stars {row['level']})"
@@ -319,6 +342,7 @@ def build(ese_root, index_path, mapping_path, output, quota_mib=512):
         "indexSha256": sha(index_bytes),
         "mappingSha256": sha(mapping_bytes),
         "chartsSha256": sha((ROOT / "resource/charts.v1.json.gz").read_bytes()),
+        "aliasesSha256": sha((ROOT / "resource/aliases.v1.json.gz").read_bytes()),
         "tjaFiles": len(files),
         "analyses": len(rows),
         "mappedCharts": sum(map(len, links.values())),

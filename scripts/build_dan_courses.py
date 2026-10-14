@@ -9,13 +9,17 @@ import gzip
 import hashlib
 import json
 import re
+import sys
 import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from scripts.build_song_names import catalog_charts  # noqa: E402
+
 
 SCHEMA_VERSION = 1
-DATA_VERSION = "2026-10-14.1"
+DATA_VERSION = "2026-10-14.2"
 RANK_ORDER = [
     "五级", "四级", "三级", "二级", "一级",
     "初段", "二段", "三段", "四段", "五段",
@@ -215,8 +219,10 @@ def _candidate_rank(chart: dict, level: int, notes: int) -> tuple:
     )
 
 
-def _map_songs(courses: list[dict], charts: list[dict]) -> dict:
-    index = _chart_index(charts)
+def _map_songs(courses: list[dict], charts: list[dict], identities: list[dict] | None = None) -> dict:
+    merged = {(row["id"], row["level"]): row for row in (identities or [])}
+    merged.update({(row["id"], row["level"]): row for row in charts})
+    index = _chart_index(list(merged.values()))
     chart_keys = {(row.get("id"), row.get("level")) for row in charts}
     mapped = unavailable = unresolved = 0
     evidence_counts: dict[str, int] = {}
@@ -228,6 +234,13 @@ def _map_songs(courses: list[dict], charts: list[dict]) -> dict:
                 index.get(title_key, []),
                 key=lambda row: _candidate_rank(row, song["level"], song["total_notes"]),
             )
+            exact = [row for row in candidate_rows if row.get("level") == song["level"]
+                     and row.get("totalNotes") == song["total_notes"]]
+            if exact:
+                candidate_rows = exact
+            elif any(row.get("level") == song["level"] and row.get("totalNotes") is not None for row in candidate_rows):
+                # A known different chart must not be accepted on title alone.
+                candidate_rows = []
             candidates = []
             for row in candidate_rows:
                 if isinstance(row.get("id"), int) and row["id"] not in candidates:
@@ -237,7 +250,11 @@ def _map_songs(courses: list[dict], charts: list[dict]) -> dict:
                 song["song_no"] = candidates[0]
                 song["song_no_candidates"] = candidates
                 has_rated_chart = any((song_no, song["level"]) in chart_keys for song_no in candidates)
-                if len(candidates) > 1:
+                if not has_rated_chart and song["level"] in (4, 5):
+                    song["mapping_status"] = "catalog_verified_unrated"
+                    song["catalog_title"] = best["title"]
+                    song["catalog_title_ja"] = best.get("titleJa")
+                elif len(candidates) > 1:
                     song["mapping_status"] = "verified_aliases"
                 else:
                     song["mapping_status"] = "verified" if has_rated_chart else "song_verified_level_unrated"
@@ -372,7 +389,9 @@ def build(markdown_path: Path, charts_path: Path) -> tuple[dict, dict]:
         )
     courses += cn_2026
 
-    report = _map_songs(courses, charts)
+    identity_path = Path(__file__).resolve().parent / "data/song_names.json"
+    identity_payload = json.loads(identity_path.read_text(encoding="utf-8"))
+    report = _map_songs(courses, charts, catalog_charts(identity_payload))
     payload = {
         "schema_version": SCHEMA_VERSION,
         "data_version": DATA_VERSION,
@@ -381,6 +400,7 @@ def build(markdown_path: Path, charts_path: Path) -> tuple[dict, dict]:
             markdown_path.read_bytes()
         ).hexdigest(),
         "sources": SOURCES,
+        "identity_sources": identity_payload["sources"],
         "courses": sorted(
             courses, key=lambda row: (row["year"], row["region"], row["rank_order"])
         ),

@@ -28,6 +28,7 @@ ALIAS_SCHEMA_VERSION = 1
 
 # 常见繁体 / 异体字折算（曲名与段位名都会出现）。
 TRADITIONAL_MAP = str.maketrans({
+    "鈍": "钝", "兩": "两", "驢": "驴", "蘿": "萝", "蔔": "卜", "闊": "阔", "塊": "块",
     "級": "级", "達": "达", "國": "国", "臺": "台", "號": "号", "龍": "龙",
     "竜": "龙", "櫻": "樱", "戰": "战", "闇": "暗", "曉": "晓", "黃": "黄",
     "黒": "黑", "樂": "乐", "學": "学", "會": "会", "來": "来", "時": "时",
@@ -98,7 +99,14 @@ def normalize(value) -> str:
     text = unicodedata.normalize("NFKC", str(value or "")).casefold()
     text = _fold_kana(text)
     text = text.translate(TRADITIONAL_MAP)
-    return _PUNCT_RE.sub("", text)
+    key = _PUNCT_RE.sub("", text)
+    if not key:
+        # Symbol-only titles such as +♂ are actual songs. Encode symbols into
+        # an alphanumeric key (also safe for the library's literal LIKE path).
+        symbols = [char for char in text if unicodedata.category(char).startswith("S")]
+        if symbols:
+            return "symbol" + "x".join(f"{ord(char):x}" for char in symbols)
+    return key
 
 
 def empty_aliases() -> dict:
@@ -147,7 +155,9 @@ def load_aliases(path, charts: dict | None = None) -> dict:
         aliases = [str(item) for item in (value.get("aliases") or []) if str(item or "").strip()]
         if not names and not aliases:
             continue
-        cleaned[key] = {"names": names, "aliases": aliases}
+        cleaned[key] = {"names": names, "aliases": aliases,
+                        "name_sources": value.get("name_sources") or {},
+                        "metadata": value.get("metadata") or {}}
 
     index: dict[str, list[str]] = {}
     song_index: dict[str, list[str]] = {}

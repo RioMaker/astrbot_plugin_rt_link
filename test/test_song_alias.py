@@ -166,7 +166,7 @@ def test_bundled_alias_resource_covers_every_chart():
         for chart in json.loads(handle.read().decode("utf-8")):
             charts[(chart["id"], chart["level"])] = chart
     data = sa.load_aliases(RESOURCE, charts)
-    assert len(data["songs"]) == len(charts)
+    assert len(data["songs"]) >= len(charts)
     # 每张谱面都要有国服曲名；日文名与国服名相同的曲目（英文曲名）除外
     assert all(item["names"] for item in data["songs"].values())
     assert all(f"{song_no}|{level}" in data["songs"] for song_no, level in charts)

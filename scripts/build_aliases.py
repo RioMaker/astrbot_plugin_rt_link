@@ -38,7 +38,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from song_alias import normalize  # noqa: E402
 
 SCHEMA_VERSION = 1
-DATA_VERSION = "2026-10-14.1"
+DATA_VERSION = "2026-10-14.2"
 
 BRACKET_RE = re.compile(r"[（(【\[［][^）)】\]］]*[）)】\]］]")
 SPLIT_RE = re.compile(r"[～〜~]| - |－")
@@ -102,6 +102,7 @@ def main() -> int:
     parser.add_argument("--ese-root", default=None, help="ESE 的 TJA 根目录（取罗马字曲名）")
     parser.add_argument("--mapping", default=None, help="rating 工程的 mapping-report.v1.json")
     parser.add_argument("--out-dir", default=None, help="输出目录（默认插件 resource/）")
+    parser.add_argument("--song-names", default=None, help="已审核的跨来源名称快照")
     args = parser.parse_args()
 
     plugin_dir = Path(__file__).resolve().parent.parent
@@ -109,6 +110,8 @@ def main() -> int:
     charts_path = Path(args.charts) if args.charts else out_dir / "charts.v1.json.gz"
     dan_path = Path(args.dan) if args.dan else out_dir / "dan_courses.v1.json.gz"
     curated_path = Path(args.curated) if args.curated else plugin_dir / "scripts" / "data" / "song_aliases.json"
+    names_path = Path(args.song_names) if args.song_names else plugin_dir / "scripts/data/song_names.json"
+    public_names = json.loads(names_path.read_text(encoding="utf-8")) if names_path.exists() else {"songs": {}}
 
     charts = load_charts(charts_path)
     catalog = {(chart["id"], chart["level"]): chart for chart in charts}
@@ -123,7 +126,24 @@ def main() -> int:
             value = chart.get(field)
             if value and value not in names:
                 names.append(value)
-        songs[key] = {"names": names, "aliases": aliases}
+        songs[key] = {"names": names, "aliases": aliases,
+                      "name_sources": {name: ["rating"] for name in names}}
+
+    # Names are game identities, not model features. Include unmodeled songs;
+    # keep Oni/Ura scope and existing lower-difficulty entries, if any.
+    for song_no, source in public_names["songs"].items():
+        for level, meta in source["levels"].items():
+            key = f"{song_no}|{level}"
+            if int(level) not in (4, 5) and key not in songs:
+                continue
+            canonical = list(dict.fromkeys(name for name in (source["title"], source["titleJa"]) if name))
+            item = songs.setdefault(key, {"names": [], "aliases": [], "name_sources": {}})
+            old = item["names"] + item["aliases"]
+            item["names"] = canonical
+            item["aliases"] = list(dict.fromkeys(name for name in [*source["names"], *old] if name not in canonical))
+            item["name_sources"] = {name: list(tags) for name, tags in source["names"].items()}
+            item["metadata"] = {**meta, "genre": source["genre"], "cnStatus": source["cnStatus"],
+                                "rated": (int(song_no), int(level)) in catalog}
 
     # 1) ESE TJA 的罗马字 / 英文曲名
     if args.ese_root and args.mapping:
@@ -140,6 +160,7 @@ def main() -> int:
             if title and title not in item["names"] and title not in item["aliases"]:
                 item["aliases"].append(title)
                 stats["romaji"] += 1
+                item["name_sources"].setdefault(title, []).append("ese:title")
     elif args.ese_root or args.mapping:
         print("提示：--ese-root 与 --mapping 需要同时提供，已跳过罗马字曲名。")
 
@@ -158,6 +179,7 @@ def main() -> int:
                     if title not in item["names"] and title not in item["aliases"]:
                         item["aliases"].append(title)
                         stats["danTitles"] += 1
+                    item["name_sources"].setdefault(title, []).append("dan")
 
     # 3) 人工整理的别名
     if curated_path.exists():
@@ -167,7 +189,7 @@ def main() -> int:
                 song_no = int(song_no_text)
             except (TypeError, ValueError):
                 continue
-            levels = [level for (sid, level) in catalog if sid == song_no]
+            levels = [int(key.partition("|")[2]) for key in songs if key.partition("|")[0] == str(song_no)]
             if not levels:
                 stats["missingCurated"].append(song_no_text)
                 continue
@@ -178,6 +200,8 @@ def main() -> int:
                     if value and value not in item["names"] and value not in item["aliases"]:
                         item["aliases"].append(value)
                         stats["curated"] += 1
+                    if value:
+                        item["name_sources"].setdefault(value, []).append("curated")
 
     # 4) 派生写法
     for item in songs.values():
@@ -185,6 +209,13 @@ def main() -> int:
             for variant in variants(value):
                 if variant not in item["names"] and variant not in item["aliases"]:
                     item["aliases"].append(variant)
+                    item["name_sources"][variant] = [f"derived:{value}"]
+
+    # Deterministic provenance, including repeated Dan references.
+    for item in songs.values():
+        item["name_sources"] = {name: sorted(set(tags)) for name, tags in item["name_sources"].items()}
+    stats["romaji"] = sum(any("ese:title" in tags for tags in item["name_sources"].values()) for item in songs.values())
+    stats["currentCnSongs"] = sum(song.get("cnStatus") == "current" for song in public_names["songs"].values())
 
     # 统计冲突：同一归一化写法指向多首歌
     index: dict[str, set] = {}
@@ -200,9 +231,11 @@ def main() -> int:
         "data_version": DATA_VERSION,
         "sources": {
             "catalog": "resource/charts.v1.json.gz（国服曲名 + 日文曲名）",
-            "ese": str(args.mapping or ""),
+            "publicNames": "scripts/data/song_names.json",
+            "publicSources": public_names.get("sources", {}),
+            "ese": "scripts/data/song_names.json / ese:title（已验证映射）",
             "dan": "resource/dan_courses.v1.json.gz（段位资料里的写法）",
-            "curated": str(curated_path),
+            "curated": "scripts/data/song_aliases.json",
         },
         "note": "names=规范曲名（国服/日文/罗马字），aliases=额外别名；匹配时统一 normalize 后比较",
         "songs": songs,
@@ -218,10 +251,13 @@ def main() -> int:
         "schemaVersion": SCHEMA_VERSION,
         "dataVersion": DATA_VERSION,
         "catalogCharts": len(catalog),
+        "identityCharts": len(songs),
+        "songCount": len({key.partition('|')[0] for key in songs}),
         "aliasEntries": total_names,
-        "averageNamesPerChart": round(total_names / len(catalog), 2) if catalog else 0,
+        "averageNamesPerChart": round(total_names / len(songs), 2) if songs else 0,
         "ambiguousKeys": len(ambiguous),
         "ambiguousSamples": dict(list(ambiguous.items())[:10]),
+        "ambiguities": ambiguous,
         "sources": stats,
         "compressedBytes": gz_path.stat().st_size,
         "rawBytes": len(raw),
@@ -235,7 +271,7 @@ def main() -> int:
         f"冲突写法 {len(ambiguous)}"
     )
     if stats["missingCurated"]:
-        print(f"人工别名表里有谱面库不存在的 ID（已忽略）：{stats['missingCurated']}")
+        raise ValueError(f"人工别名表里有不存在的 ID：{stats['missingCurated']}")
     print(f"已写出 {gz_path.name}（{manifest['compressedBytes']} bytes）与 manifest")
     return 0
 

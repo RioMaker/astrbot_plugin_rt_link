@@ -138,20 +138,31 @@ def _song_labels(song: dict, alias_data: dict | None) -> tuple[str, str, int | N
             break
     if resolved is None:
         for song_no in song.get("song_no_candidates") or []:
-            if alias_data and song_no in (alias_data.get("song_index") or {}):
+            if alias_data and str(song_no) in (alias_data.get("song_index") or {}):
                 resolved = song_no
                 break
     if resolved is None:
+        if song.get("catalog_title") and song.get("song_no"):
+            label = f"《{song['catalog_title']}》"
+            if song.get("catalog_title_ja") and song["catalog_title_ja"] != song["catalog_title"]:
+                label += f"（{song['catalog_title_ja']}）"
+            return label, "（尚无评级数据）", song["song_no"]
+        if song.get("song_no"):
+            return title, "", song["song_no"]
         return title, "（当前曲库无此曲）", None
     # 展示用「国服名（日文名）」：只看规范曲名，不拿简称/黑话当第二名字。
     item = ((alias_data or {}).get("songs") or {}).get(f"{resolved}|{level}") or {}
+    if not item:
+        item = next((value for key, value in (alias_data or {}).get("songs", {}).items()
+                     if key.partition("|")[0] == str(resolved)), {})
     canonical = [name for name in (item.get("names") or []) if name]
     display = canonical[0] if canonical else title
     other = next((name for name in canonical[1:] if name != display), "")
     label = f"《{display}》"
     if other:
         label += f"（{other}）"
-    return label, "", resolved
+    note = "（尚无评级数据）" if song.get("mapping_status") == "catalog_verified_unrated" else ""
+    return label, note, resolved
 
 
 def _format_course(catalog: dict, course: dict, alias_data: dict | None = None) -> str:

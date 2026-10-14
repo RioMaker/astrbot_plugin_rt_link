@@ -70,6 +70,7 @@ def load_dan_courses(path, charts: dict | None = None) -> dict:
     valid_statuses = {
         "verified", "song_verified_level_unrated", "verified_aliases",
         "not_in_chart_resource",
+        "catalog_verified_unrated",
     }
     for course in courses:
         if not isinstance(course, dict):
@@ -106,7 +107,12 @@ def load_dan_courses(path, charts: dict | None = None) -> dict:
                 continue
             if not candidates or song.get("song_no") not in candidates:
                 raise DanCourseDataError(f"已映射曲目缺少主 ID：{key}")
-            if charts is not None and level in (4, 5) and not any(
+            if status == "catalog_verified_unrated" and (
+                not song.get("catalog_title")
+                or not song.get("mapping_evidence", "").startswith("title+level")
+            ):
+                raise DanCourseDataError(f"未评级曲目缺少曲库核对证据：{key}")
+            if charts is not None and status != "catalog_verified_unrated" and level in (4, 5) and not any(
                 (song_no, level) in charts for song_no in candidates
             ):
                 raise DanCourseDataError(f"段位曲目未对应到评级谱面：{key} / {song.get('title')}")

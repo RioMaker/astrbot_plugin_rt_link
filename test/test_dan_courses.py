@@ -17,7 +17,7 @@ def test_runtime_dan_resource_is_complete_and_indexed():
     catalog = load_dan_courses(ROOT / "resource" / "dan_courses.v1.json.gz", charts)
 
     assert catalog["schema_version"] == 1
-    assert catalog["data_version"] == "2026-10-14.1"
+    assert catalog["data_version"] == "2026-10-14.2"
     # 2022–2026 五届日版/国际版 + 国服 2023/2024/2025，8 套完整课程 + 国服 2026 五级至十段
     assert len(catalog["courses"]) == 167
     assert sum(len(course["songs"]) for course in catalog["courses"]) == 501
@@ -28,8 +28,9 @@ def test_runtime_dan_resource_is_complete_and_indexed():
         for course in catalog["courses"]
         for song in course["songs"]
     ]
-    # 原有 11 条缺曲记录 + 国服 2026 十段中的 2 条重复引用。
-    assert statuses.count("not_in_chart_resource") == 13
+    # 曲目身份来自公开曲库，未评级谱面不再等同于“无 ID”。
+    assert statuses.count("not_in_chart_resource") == 0
+    assert statuses.count("catalog_verified_unrated") == 12
     assert "unmapped" not in statuses
 
 
@@ -46,7 +47,7 @@ def test_song_mapping_prefers_matching_level_and_note_count():
         for song in course["songs"]:
             if not song["song_no_candidates"]:
                 continue
-            best = by_id[song["song_no"]]
+            best = by_id.get(song["song_no"], {})
             if song["level"] not in best:
                 continue
             # 主 ID 必须是「难度对得上且音符数对得上」的候选
@@ -60,7 +61,7 @@ def test_song_mapping_prefers_matching_level_and_note_count():
     angel = next(song for song in course["songs"] if song["title"].startswith("エンジェル"))
     assert angel["song_no"] == 433
     assert angel["song_no_candidates"][0] == 433
-    assert 153 in angel["song_no_candidates"]
+    assert 153 not in angel["song_no_candidates"]
 
 
 def test_2026_courses_and_high_rank_openings():

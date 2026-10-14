@@ -731,7 +731,9 @@ class ScoreService:
         return True, f"更新完成：已从{self.provider_label}拉取 {chart_count} 张有效成绩，综合 Rating {rating:.2f}；{suffix}"
 
     def _records(self, analysis: dict) -> list:
-        return analysis.get("records") or []
+        return [{**row, "title": song_alias_mod.display_name(
+            self.aliases, row.get("id"), row.get("level"), row.get("title") or "")}
+            for row in analysis.get("records") or []]
 
     @staticmethod
     def _norm_level(level):
@@ -808,13 +810,13 @@ class ScoreService:
     async def _get_alias_map(self) -> dict:
         """{别名(小写): song_no}：内置别名打底，用户提交并通过审核的别名优先。"""
         if self._builtin_alias_map is None:
-            index = {}
+            candidates = defaultdict(set)
             for song_no, names in (self.aliases.get("song_index") or {}).items():
                 for name in names:
                     key = str(name).strip().lower()
                     if key:
-                        index.setdefault(key, int(song_no))
-            self._builtin_alias_map = index
+                        candidates[key].add(int(song_no))
+            self._builtin_alias_map = {key: next(iter(ids)) for key, ids in candidates.items() if len(ids) == 1}
         index = dict(self._builtin_alias_map)
         if self.db is not None:
             approved = await asyncio.to_thread(self.alias_db.get_approved_aliases)
@@ -834,6 +836,12 @@ class ScoreService:
                     "titleJa": chart.get("titleJa"),
                     "genre": chart.get("genre"),
                 }
+        for key, item in (self.aliases.get("songs") or {}).items():
+            names = item.get("names") or []
+            if names:
+                song_no = int(key.partition("|")[0])
+                idx[song_no] = {"title": names[0], "titleJa": names[1] if len(names) > 1 else names[0],
+                                "genre": item.get("metadata", {}).get("genre") or idx.get(song_no, {}).get("genre")}
         return idx
 
     def _alias_names(self, song_no) -> list:
@@ -909,9 +917,7 @@ class ScoreService:
         if song_no is not None:
             matched_ids.add(int(song_no))
         if matched_ids:
-            found = [r for r in records if r.get("id") in matched_ids]
-            if found:
-                return found
+            return [r for r in records if r.get("id") in matched_ids]
         hits = song_alias_mod.resolve(self.aliases, q, limit=12)
         if hits:
             found = [r for r in records if r.get("id") in {hit["song_no"] for hit in hits}]

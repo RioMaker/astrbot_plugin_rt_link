@@ -152,12 +152,13 @@ ESE 谱面里还带一份罗马字/英文曲名，玩家口语又常简称（北
 匹配优先级 = 完全相等 > 前缀 > 包含（同级按难度与曲目 ID 排序）
 ```
 
-- 全部写法打包在 `resource/aliases.v1.json.gz`（1393 张谱面、5500+ 条写法），
-  由 `scripts/build_aliases.py` 合并「谱面库 + ESE 谱面 + 段位资料 + 人工别名表」生成；
+- 全部写法打包在 `resource/aliases.v1.json.gz`（1524 首、1849 个鬼/里身份、6853 条写法），
+  由 `scripts/build_aliases.py` 合并「国服公开曲库 + 菌菌曲库 + ESE 谱面 + 段位资料 + 人工别名表」生成；
   人工整理部分在 [`scripts/data/song_aliases.json`](scripts/data/song_aliases.json)，可直接编辑后重跑脚本。
 - 段位查询、`/rtlink score`、成绩检索 `search_scores`、别名申请解析共用这张表；
   用户通过 `/rtlink alias` 提交且审核通过的别名优先级更高。
 - 详细规则、来源与维护方式见 [docs/song-aliases.md](docs/song-aliases.md)。
+- [完整可搜索审核表](docs/song-alias-audit-2026-10-14.html)包含逐名来源、全部冲突与段位映射；国服名优先显示，未评级新歌也可按真实 ID 查询。
 
 ## 目录结构
 
@@ -266,8 +267,8 @@ python scripts/build_dan_courses.py                       # 默认读取 DAN_I_D
 ```
 
 构建脚本会按「曲名归一化 → 难度 → 音符数」把课题曲映射到谱面库，并写出映射报告
-`resource/dan_courses.mapping.json`；尚未进入评级曲库的新曲（如 2026 届《鈍響ライクリフド》）
-会记为 `not_in_chart_resource`，等曲库更新后重跑即可自动映射。
+`resource/dan_courses.mapping.json`；曲目身份同时读取独立公开名称快照。尚无评级数据的新曲
+（如 2026 十段 ID 1502/1503）标为 `catalog_verified_unrated`，可以查名称与谱面分析，保留未评级提示。
 
 ### 重新构建评价门槛数据
 
