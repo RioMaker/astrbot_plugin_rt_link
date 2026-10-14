@@ -49,3 +49,11 @@ python scripts/build_profile_configurations.py --model-root <模型工程> --ese
 - 使用同一份 2026-08-14 真实缓存回放完整 Profile，与原始角标版逐像素比较：变化仅发生在 20 个子卡片左上角的序号区域，图片仍为 1440 × 5164。
 - 检查 `01`、`09`、`10`、`20` 的数字留白、三角斜边及与皇冠的间距；角标轮廓与卡片左侧和顶部相接。
 - `test/test_insight_images.py` 和 `test/test_profile_configurations.py` 共 12 项本地测试通过；未执行线上同步或部署。
+
+## Pillow 12 兼容验证（2026-10-14）
+
+- `requirements.txt` 移除 `Pillow<12` 上限，保留 `Pillow>=10.0`，允许使用 AstrBot Core 已约束的 `pillow==12.3.0`。同时声明 UTF-8 编码，避免旧版 Windows pip 将中文注释按 GBK 解码。
+- 在相同 `pillow==12.3.0` 约束下，pip 解析旧声明返回 `ResolutionImpossible`；修正后的实际依赖文件成功解析并安装 `12.3.0` 到独立测试目录。
+- Windows / Python 3.10.9 / Pillow 12.3.0 下，248 项本地测试通过。旧别名测试使用独立临时数据库，未改动原有固定测试数据库。
+- 同一份真实缓存生成 Profile（1440 × 5164）和 Rating（1440 × 2720）成功；推荐数据不变，完整 Profile 与 Pillow 11.2.1 输出逐像素一致。核对了 [Pillow 12.0 兼容性变更](https://pillow.readthedocs.io/en/stable/releasenotes/12.0.0.html)及 [12.3 发布说明](https://pillow.readthedocs.io/en/stable/releasenotes/12.3.0.html)。
+- 以上为本地依赖解析、完整测试及缓存渲染验证；未执行生产 AstrBot 更新或真实 API 同步。
