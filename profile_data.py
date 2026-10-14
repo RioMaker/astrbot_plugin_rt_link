@@ -146,7 +146,7 @@ def build_profile_data(analysis,generated_at=None):
     configuration=analysis.get('profileConfigurations') or {'available':False,'bands':BANDS,'cells':[]}
     improvement=analysis.get('profileImprovement') or {'items':[],'targetName':'','targetRank':8}
     return {'analysis':analysis,'playerId':str(meta['playerId']),
-            'serverLabel':{'cn':'国服','jp':'日服'}.get(meta.get('server'),str(meta.get('server') or '服务器未知')),
+            'serverLabel':{'cn':'国服','jp':'日服','unknown':'服务器未知'}.get(meta.get('server'),str(meta.get('server') or '服务器未知')) + (f" · {meta['provider']}" if meta.get('provider') else ''),
             'syncLabel':label,'footer':f'RTLink · AI v2 · {label}（北京时间）',
             'scoreRows':unique_score_rows(analysis.get('profileScoreRows',records)),
             'configurations':configuration,'improvement':improvement,

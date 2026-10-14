@@ -27,12 +27,14 @@
 
 ## 命令
 
+支持菌菌与 Sakura 分别绑定、独立保存成绩和历史。私聊发送 `/rtlink bind sakura <token>` 绑定 Sakura；`/rtlink source` 查看当前来源，`/rtlink source kinoko` 或 `/rtlink source sakura` 切换。绑定成功后自动选择该来源；`unbind` 只解绑当前来源。旧菌菌绑定与数据库原样沿用。详见 [多来源成绩与独立存储](docs/data-sources.md)。
+
 ```
 /rtlink bind <apikey> <player_id> [server]  绑定当前 QQ（server 默认 cn，仅私聊）
 /rtlink unbind                              解绑当前 QQ
 /rtlink score <曲名|别名|鬼夏祭>             查询指定曲目成绩（支持难度前缀组合名）
 /rtlink rating                              生成实力画像图片
-/rtlink update                              跳过缓存，从菌菌重新拉取并记录历史快照
+/rtlink update                              跳过缓存，从当前来源拉取并记录历史快照
 /rtlink profile                             生成个人 Profile（与裸 /rtlink 相同）
 /rtlink progress                            查看全部配置评分、理论满分、样本与历史曲线
 /rtlink weakness                            生成节奏型弱项与练习建议图片（冷门配置单列）

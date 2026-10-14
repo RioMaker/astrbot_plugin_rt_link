@@ -13,7 +13,7 @@ if __package__:
 else:
     from report_image import _box, _text, _wrapped
 
-WIDTH, HEIGHT = 1440, 8200
+WIDTH, HEIGHT = 1440, 9000
 ASSET_DIR = Path(__file__).resolve().parent / "resource" / "help"
 
 # kkz-web docs/.vitepress/theme/custom.css + VitePress light theme tokens.
@@ -141,7 +141,7 @@ def render_help_image(out_path: str) -> str:
     _text(draw, "太鼓成绩评级（rt_link）", CONTENT_X, 190, 48, TEXT, True)
     _wrapped(
         draw,
-        "绑定菌菌控制台 apikey，查询太鼓达人成绩，并用鼓迹 AI v2 评估玩家实力与节奏型弱项。",
+        "绑定菌菌或 Sakura，独立保存各来源成绩，并用鼓迹 AI v2 评估玩家实力与节奏型弱项。",
         CONTENT_X,
         270,
         CONTENT_W,
@@ -207,7 +207,12 @@ def render_help_image(out_path: str) -> str:
         112,
     )
 
-    commands_y = end + 214
+    sakura_y = end + 214
+    _heading(draw, "Sakura 绑定与数据源切换", sakura_y)
+    _wrapped(draw, "登录 viewer.sakura-bot.cn，在个人账户 > 多端同步生成 48 位 token，然后私聊发送：", CONTENT_X, sakura_y + 86, CONTENT_W, 18, 30, TEXT_2)
+    _code_block(draw, sakura_y + 140, "/rtlink bind sakura <token>")
+    _wrapped(draw, "绑定成功后切换到 Sakura。用 /rtlink source 查看当前来源，用 /rtlink source kinoko 或 /rtlink source sakura 切换。各源绑定、成绩、缓存和历史独立；解绑仅影响当前来源，历史保留。", CONTENT_X, sakura_y + 238, CONTENT_W, 18, 30, TEXT_2, False, 4)
+    commands_y = sakura_y + 385
     _heading(draw, "常用指令", commands_y)
     rows = [
         ("/rtlink", "生成个人 Profile：行星、配置评分、BEST 20"),
@@ -262,7 +267,7 @@ def render_help_image(out_path: str) -> str:
     for index, line in enumerate(notes):
         draw.ellipse((right_x + 28, card_y + 84 + index * 48, right_x + 38, card_y + 94 + index * 48), fill=BRAND)
         _text(draw, line, right_x + 54, card_y + 75 + index * 48, 15, TEXT_2)
-    _text(draw, "apikey 不会发送给 AI 或写入历史快照", right_x + 26, card_y + 330, 15, DANGER, True)
+    _text(draw, "apikey / token 不会写入评级历史快照", right_x + 26, card_y + 330, 15, DANGER, True)
 
     footer_y = card_y + 444
     draw.line((CONTENT_X, footer_y, CONTENT_X + CONTENT_W, footer_y), fill=DIVIDER, width=1)

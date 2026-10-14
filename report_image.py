@@ -219,7 +219,7 @@ def build_report_data(analysis: dict, generated_at: datetime | None = None) -> d
     counts = analysis.get("counts") or {}
     meta = analysis.get("meta") or {}
     return {
-        "playerId": str(meta.get("playerId") or "未提供编号"), "server": str(meta.get("server") or "未知服务器"),
+        "playerId": str(meta.get("playerId") or "未提供编号"), "server": str(meta.get("server") or "未知服务器") + (f" · {meta['provider']}" if meta.get("provider") else ""),
         "generatedAt": f"{generated_at.year}年{generated_at.month}月{generated_at.day}日", "model": "Taiko Signal Rhythm v2 2026-08-05",
         "rating": rating, "stage": stage, "planets": planets, "center": center,
         "spread": strongest["score"] - weakest["score"] if strongest and weakest else 0,

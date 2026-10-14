@@ -2,6 +2,8 @@
 
 抓取日期：2026-10-14（Asia/Shanghai）。[官方文档](https://viewer.sakura-bot.cn/docs/score-token)介绍通过只读成绩 token 获取当前绑定太鼓 ID 的最新完整 userdata。本目录保存该页的历史快照和接入摘要，供后续 RTLink 开发查阅。
 
+后续 v0.16.0 已实现独立来源接入，使用方式与存储位置见 [多来源成绩与独立存储](../data-sources.md)。本文下方的未实测说明保留文档首次归档时的范围。
+
 ## 文件索引
 
 | 文件 | 内容 |

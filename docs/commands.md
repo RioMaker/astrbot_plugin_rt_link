@@ -11,12 +11,14 @@
 | 指令 | 说明 | 示例 |
 | --- | --- | --- |
 | `/rtlink bind <apikey> <player_id> [server]` | 绑定当前 QQ 到菌菌账号（**仅私聊**）。`server` 默认 `cn`，可选 `cn`/`jp`/`custom` | `/rtlink bind tk_xxx 30053354 cn` |
-| `/rtlink unbind` | 解绑当前 QQ | `/rtlink unbind` |
+| `/rtlink bind sakura <token>` | 绑定 Sakura（**仅私聊**），从接口核实玩家 ID，成功后选择 Sakura；保留菌菌绑定 | `/rtlink bind sakura <48位token>` |
+| `/rtlink source [kinoko\|sakura]` | 查看或切换当前来源，成绩、缓存和历史独立保存 | `/rtlink source sakura` |
+| `/rtlink unbind` | 解绑当前来源，保留历史与其他来源绑定 | `/rtlink unbind` |
 | `/rtlink score <曲名\|别名\|鬼夏祭>` | 查询指定曲目成绩；支持难度前缀组合名（`鬼夏祭`→鬼难度+夏祭）与别名（国服名/日文名/罗马字/常用简称） | `/rtlink score 鬼夏祭`、`/rtlink score 六天` |
 | `/rtlink dan [年份] [区域] [段位] [曲名]` | 查段位道场课题曲、普通/金合格条件、开放时间与来源（覆盖 2022–2026 日版/国际版，以及国服 2023/2024/2025，以及 2026 五级～十段）。参数顺序不限，均可省略：只给曲名时反查该曲出现过的段位；只给年份+段位时列出完整三曲。曲名支持别名，也可写「鬼 天竺2000」限定难度 | `/rtlink dan 2026 十段`、`/rtlink dan 十段 国服`、`/rtlink dan 六天` |
 | `/rtlink 段位 …` | 上一条的中文写法 | `/rtlink 段位 2026 达人` |
 | `/rtlink rating` | 生成完整实力画像图片（Rating 环 + 七维能力 + 强弱项 + 表现证据 + 冷门配置观察） | `/rtlink rating` |
-| `/rtlink update` | 跳过缓存，立即从菌菌重新拉取成绩、计算 Rating 并追加历史快照 | `/rtlink update` |
+| `/rtlink update` | 跳过缓存，立即从当前来源拉取成绩、计算 Rating 并追加历史快照 | `/rtlink update` |
 | `/rtlink profile` | Rating 环、互斥评价/皇冠、能力行星、配置概览、BEST 20 与最多 8 首提升建议 | `/rtlink profile` |
 | `/rtlink progress` | 全部 18 种配置 × 7 个 BPM 档的当前评分/理论满分、样本与同版本历史 | `/rtlink progress` |
 | `/rtlink weakness` | 生成节奏型弱项图片：核心弱项排行、冷门配置观察、练习路径与参考谱面 | `/rtlink weakness` |

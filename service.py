@@ -23,6 +23,7 @@ if __package__:
     from . import score_rank as score_rank_mod
     from . import song_alias as song_alias_mod
     from .api_client import KinokoClient, KinokoAPIError
+    from .sakura_client import normalize_sakura
     from .dan_query import evaluate_player_dan_text
     from .help_image import render_help_image
     from .improve_image import render_improve_image
@@ -40,6 +41,7 @@ else:
     import score_rank as score_rank_mod
     import song_alias as song_alias_mod
     from api_client import KinokoClient, KinokoAPIError
+    from sakura_client import normalize_sakura
     from dan_query import evaluate_player_dan_text
     from help_image import render_help_image
     from improve_image import render_improve_image
@@ -373,12 +375,17 @@ class ScoreService:
         logger=None,
         chart_library=None,
         chart_installer=None,
+        provider="kinoko",
+        alias_db=None,
     ):
         self.store = store
         self._client_factory = client_factory
         self.charts = charts or {}
         self.configuration_catalog = load_configuration_catalog(self.charts)
         self.db = score_db
+        self.alias_db = alias_db if alias_db is not None else score_db
+        self.provider = provider
+        self.provider_label = "Sakura" if provider == "sakura" else "菌菌"
         self.score_rank = score_rank or score_rank_mod.empty_score_rank()
         # 连打资料（黄色連打秒数 / 風船）：用来把「还差几打连打」换算成秒速。
         self.rolls = rolls or score_rank_mod.empty_rolls()
@@ -424,6 +431,24 @@ class ScoreService:
             f"绑定成功：QQ {qq} ↔ 玩家 {player_id}（{server}）。"
             "请发送 /rtlink 自动同步，或发送 /rtlink update 手动强制同步全部成绩。"
         )
+
+    async def bind_sakura(self, qq, token) -> tuple[bool, str]:
+        if not qq:
+            return False, "无法获取你的 QQ 号。"
+        try:
+            payload = await asyncio.to_thread(self._client(token).fetch)
+            normalized = normalize_sakura(payload)
+        except KinokoAPIError as error:
+            return False, f"绑定失败：{error}"
+        played = normalized["data"]["playedRecords"]
+        binding = {"apikey": token, "player_id": played["userid"], "server": played["server"]}
+        bindings = await self.store.load()
+        previous = bindings.get(qq)
+        bindings[qq] = binding
+        await self.store.save(bindings)
+        if self.db is not None and previous != binding:
+            await asyncio.to_thread(self.db.reset_current_player, qq)
+        return True, f"Sakura 绑定成功：玩家 {played['userid']}。发送 /rtlink 同步成绩。"
 
     async def unbind(self, qq) -> tuple[bool, str]:
         bindings = await self.store.load()
@@ -482,49 +507,46 @@ class ScoreService:
     async def _sync(self, qq) -> tuple[bool, str, dict | None]:
         b = await self._binding(qq)
         if not b:
-            return False, "你还没有绑定菌菌账号。请先私聊可可子发送：/rtlink bind <apikey> <player_id> [server]", None
+            return False, "当前数据源尚未绑定。请私聊发送 /rtlink bind <apikey> <player_id> [server] 或 /rtlink bind sakura <token>", None
         apikey = b["apikey"]
         player_id = str(b.get("player_id") or "")
         server = b.get("server") or self.default_server
         client = self._client(apikey)
 
-        kinoko, hiroba = await asyncio.gather(
-            asyncio.to_thread(client.kinoko, player_id, server),
-            asyncio.to_thread(client.hiroba, player_id, server),
-            return_exceptions=True,
-        )
+        if self.provider == "sakura":
+            try:
+                raw = await asyncio.to_thread(client.fetch)
+                payload = normalize_sakura(raw, player_id)
+                actual_server = payload["data"]["playedRecords"]["server"]
+                if actual_server != server:
+                    return False, "Sakura 数据服务器发生变化，请重新绑定。", None
+                fetched = {"sakura": payload}
+            except KinokoAPIError as error:
+                return False, f"查询失败：{error}", None
+        else:
+            results = await asyncio.gather(
+                asyncio.to_thread(client.kinoko, player_id, server),
+                asyncio.to_thread(client.hiroba, player_id, server),
+                return_exceptions=True,
+            )
+            fetched = dict(zip(("kinoko", "hiroba"), results))
 
         if await self._binding(qq) != b:
             return False, "绑定在同步期间发生变化，请重新发送 /rtlink。", None
-
-        errors = {}
-        if isinstance(kinoko, BaseException):
-            errors["kinoko"] = str(kinoko)
-            kinoko = None
-        if isinstance(hiroba, BaseException):
-            errors["hiroba"] = str(hiroba)
-            hiroba = None
-
-        if kinoko is not None:
+        errors, stored = {}, {}
+        for source_name, payload in fetched.items():
+            if isinstance(payload, BaseException):
+                errors[source_name] = str(payload)
+                continue
             try:
-                await asyncio.to_thread(
-                    self._store_payload, qq, "kinoko", kinoko, player_id, server
-                )
+                await asyncio.to_thread(self._store_payload, qq, source_name, payload, player_id, server)
+                stored[source_name] = payload
             except Exception:
-                kinoko = None
-        if hiroba is not None:
-            try:
-                await asyncio.to_thread(
-                    self._store_payload, qq, "hiroba", hiroba, player_id, server
-                )
-            except Exception:
-                hiroba = None
-
-        payload_for_rating = kinoko if kinoko is not None else hiroba
-
-        if payload_for_rating is None:
+                errors[source_name] = "成绩解析或存储失败"
+        if not stored:
             detail = "；".join(f"{k}: {v}" for k, v in errors.items()) or "未知错误"
             return False, f"查询失败：{detail}", None
+        source, payload_for_rating = next(iter(stored.items()))
 
         try:
             result = await asyncio.to_thread(rating_mod.analyze, payload_for_rating, self.charts)
@@ -534,10 +556,13 @@ class ScoreService:
         if not result["records"]:
             return False, "该账号暂无鬼/里（魔王/里魔王）谱面成绩，无法评级。请先在太鼓中游玩鬼级谱面。", None
 
+        if self.provider == "sakura":
+            # Sakura 不返回曲名，先补全共享的分析记录，供能力证据与推荐一并引用。
+            for row in result["records"]:
+                row["title"] = self.charts.get((row["id"], row["level"]), {}).get("title") or row["title"]
         slim = _slim_result(result)
-        source = "kinoko" if kinoko is not None else "hiroba"
         # Freeze identity from the binding used by this sync, not optional API metadata.
-        slim['meta'] = {**slim['meta'], 'playerId':player_id, 'server':server}
+        slim['meta'] = {**slim['meta'], 'playerId':player_id, 'server':server, 'provider':self.provider_label}
         fields = ('id','level','highScore','bestScoreRank','clearCount','fullComboCount','dondafulComboCount')
         normalized = rating_mod.normalize_scores(payload_for_rating, rated_only=False)
         slim['profileScoreRows'] = unique_score_rows([{key:row.get(key) for key in fields} for row in normalized['rows']])
@@ -617,6 +642,8 @@ class ScoreService:
             "playerId": str(game_player_id or ""),
             "server": str(server or ""),
         })
+        if source == "sakura":
+            self.db.kv_set(f"source_payload:{player_id}", payload["sakura_userdata"])
         return count
 
     async def get_player_dan_capability_text(
@@ -625,7 +652,7 @@ class ScoreService:
         """同步后将玩家最佳单曲记录与指定段位的可计算条件对照。"""
         binding = await self._binding(qq)
         if not binding:
-            return "你还没有绑定菌菌账号。请先私聊可可子发送：/rtlink bind <apikey> <player_id> [server]"
+            return "当前数据源尚未绑定。请私聊发送 /rtlink bind <apikey> <player_id> [server] 或 /rtlink bind sakura <token>"
         if self.db is None:
             return "本地成绩存储未启用，无法评估段位课题曲。"
 
@@ -651,7 +678,7 @@ class ScoreService:
         if not qq:
             return None, "无法识别你的 QQ 号。"
         if not await self._binding(qq):
-            return None, "你还没有绑定菌菌账号。请先私聊可可子发送：/rtlink bind <apikey> <player_id> [server]"
+            return None, "当前数据源尚未绑定。请私聊发送 /rtlink bind <apikey> <player_id> [server] 或 /rtlink bind sakura <token>"
         if self.db is not None:
             cache = await asyncio.to_thread(self.db.get_rating_cache, qq)
             storage_ready = await self._score_storage_ready(qq)
@@ -663,6 +690,7 @@ class ScoreService:
                 and storage_ready
                 and time.time() - float(cache.get("_ts") or 0) < self.sync_ttl
             ):
+                cache["meta"] = {**cache.get("meta", {}), "provider": self.provider_label}
                 return cache, ""
         ok, msg, slim = await self._sync(qq)
         if not ok:
@@ -700,7 +728,7 @@ class ScoreService:
         rating = float((analysis.get("summary") or {}).get("rating") or 0)
         chart_count = len(analysis.get("records") or [])
         suffix = "历史已保存（相同成绩不会重复记点）。" if recorded else "成绩已更新，但历史快照未保存，请检查日志。"
-        return True, f"更新完成：已从菌菌拉取 {chart_count} 张有效成绩，综合 Rating {rating:.2f}；{suffix}"
+        return True, f"更新完成：已从{self.provider_label}拉取 {chart_count} 张有效成绩，综合 Rating {rating:.2f}；{suffix}"
 
     def _records(self, analysis: dict) -> list:
         return analysis.get("records") or []
@@ -789,7 +817,7 @@ class ScoreService:
             self._builtin_alias_map = index
         index = dict(self._builtin_alias_map)
         if self.db is not None:
-            approved = await asyncio.to_thread(self.db.get_approved_aliases)
+            approved = await asyncio.to_thread(self.alias_db.get_approved_aliases)
             for alias, song_no in (approved or {}).items():
                 key = str(alias or "").strip().lower()
                 if key:
@@ -1240,7 +1268,7 @@ class ScoreService:
         """{song_no: [别名, ...]}，供检索时按别名匹配（内置别名 + 已审核别名）。"""
         approved = {}
         if self.db is not None:
-            approved = await asyncio.to_thread(self.db.get_approved_aliases)
+            approved = await asyncio.to_thread(self.alias_db.get_approved_aliases)
         return song_alias_mod.build_alias_index(self.aliases, approved)
 
     async def query_scores(self, qq, **filters) -> tuple[dict | None, str]:
@@ -1458,7 +1486,7 @@ class ScoreService:
         target = targets[0]
         # 成长趋势优先用 kinoko 全历史；无 kinoko 时回退 hiroba 最新快照。
         history = await asyncio.to_thread(
-            self.db.get_player_history, qq, target["id"], target["level"], "kinoko"
+            self.db.get_player_history, qq, target["id"], target["level"], "sakura" if self.provider == "sakura" else "kinoko"
         )
         if not history:
             history = await asyncio.to_thread(
@@ -1656,7 +1684,7 @@ class ScoreService:
         if not qq:
             return "无法识别你的 QQ 号。"
         if not await self._binding(qq):
-            return "你还没有绑定菌菌账号。请先私聊可可子发送：/rtlink bind <apikey> <player_id> [server]"
+            return "当前数据源尚未绑定。请私聊发送 /rtlink bind <apikey> <player_id> [server] 或 /rtlink bind sakura <token>"
         if self.db is None:
             return "本地存储未启用，无法设置别名。"
         target = (target or "").strip()
@@ -1669,7 +1697,7 @@ class ScoreService:
             return hint or "未找到歌曲。"
 
         rid = await asyncio.to_thread(
-            self.db.add_alias_request,
+            self.alias_db.add_alias_request,
             song["id"], alias, song["title"], song.get("titleJa"), qq,
         )
         if rid is None:

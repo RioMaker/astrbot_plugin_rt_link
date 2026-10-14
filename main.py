@@ -20,6 +20,8 @@ from astrbot.api.star import Context, Star, StarTools, register
 # 本地直接运行/测试 main.py 时（__package__ 为空），回退到同目录绝对导入。
 if __package__:
     from .api_client import KinokoClient
+    from .sakura_client import SakuraClient
+    from .source_service import MultiSourceService
     from .chart_library import ChartLibrary
     from .chart_library_installer import ChartLibraryInstaller
     from .dan_query import match_rank, match_region, query_dan_courses_text
@@ -29,6 +31,8 @@ if __package__:
     from .storage import ScoreDatabase, load_charts, load_dan_courses
 else:
     from api_client import KinokoClient
+    from sakura_client import SakuraClient
+    from source_service import MultiSourceService
     from chart_library import ChartLibrary
     from chart_library_installer import ChartLibraryInstaller
     from dan_query import match_rank, match_region, query_dan_courses_text
@@ -39,8 +43,8 @@ else:
 
 PLUGIN_NAME = "rt_link"
 PLUGIN_AUTHOR = "Rio"
-PLUGIN_DESC = "将 QQ 绑定到菌菌控制台 apikey，查询太鼓达人成绩并评估玩家实力"
-PLUGIN_VERSION = "v0.15.1"
+PLUGIN_DESC = "支持菌菌与 Sakura 独立绑定、成绩存储与太鼓实力评估"
+PLUGIN_VERSION = "v0.16.0"
 
 COMMAND_NAME = "rtlink"
 BINDINGS_KEY = "bindings"
@@ -52,15 +56,16 @@ RATED_LEVELS = (4, 5)
 class KvBindingsStore(BindingsStore):
     """基于 AstrBot PluginKVStore 的绑定存储。"""
 
-    def __init__(self, star: "RTLinkPlugin"):
+    def __init__(self, star: "RTLinkPlugin", key=BINDINGS_KEY):
         self._star = star
+        self._key = key
 
     async def load(self) -> dict:
-        data = await self._star.get_kv_data(BINDINGS_KEY, {})
+        data = await self._star.get_kv_data(self._key, {})
         return data if isinstance(data, dict) else {}
 
     async def save(self, data: dict) -> None:
-        await self._star.put_kv_data(BINDINGS_KEY, data)
+        await self._star.put_kv_data(self._key, data)
 
 
 @register(PLUGIN_NAME, PLUGIN_AUTHOR, PLUGIN_DESC, PLUGIN_VERSION)
@@ -158,7 +163,7 @@ class RTLinkPlugin(Star):
             logger=logger,
         )
         self.chart_installer.start()
-        self.service = ScoreService(
+        kinoko_service = ScoreService(
             store=KvBindingsStore(self),
             client_factory=self._make_client,
             charts=self.charts,
@@ -176,6 +181,25 @@ class RTLinkPlugin(Star):
             chart_installer=self.chart_installer,
         )
 
+        sakura_dir = self.data_dir / "sources" / "sakura"
+        self.sakura_db = ScoreDatabase(sakura_dir / "rt_link.db")
+        sakura_service = ScoreService(
+            store=KvBindingsStore(self, "bindings_sakura"),
+            client_factory=lambda token: SakuraClient(token, timeout=int(self.cfg.get("request_timeout", 30) or 30)),
+            charts=self.charts, score_db=self.sakura_db, score_rank=self.score_rank,
+            rolls=self.rolls, aliases=self.aliases, alias_db=self.db,
+            provider="sakura", default_server="unknown",
+            sync_ttl=int(self.cfg.get("sync_ttl", 300) or 300),
+            quota_mb=int(self.cfg.get("storage_quota_mb", 256) or 256),
+            warn_ratio=float(self.cfg.get("storage_warn_ratio", 0.8) or 0.8),
+            report_dir=str(sakura_dir), logger=logger,
+            chart_library=library, chart_installer=self.chart_installer,
+        )
+        self.service = MultiSourceService(
+            {"kinoko": kinoko_service, "sakura": sakura_service},
+            KvBindingsStore(self, "active_sources"),
+        )
+
     def _make_client(self, apikey: str) -> KinokoClient:
         return KinokoClient(
             apikey,
@@ -187,6 +211,7 @@ class RTLinkPlugin(Star):
         await self.chart_installer.close()
         try:
             self.db.close()
+            self.sakura_db.close()
         except Exception:
             pass
         logger.info("rt_link 插件已卸载")
@@ -216,11 +241,28 @@ class RTLinkPlugin(Star):
         """分发 /rtlink <子指令> ...，保证未知或参数错误时也有明确回复。"""
         command = rest.split(None, 1)[0].lower()
 
+        if command == "source":
+            parts = rest.split()
+            if len(parts) > 2:
+                yield event.plain_result("用法：/rtlink source [kinoko|sakura]")
+                return
+            yield event.plain_result(await self.service.source_text(event.get_sender_id(), parts[1] if len(parts) == 2 else ""))
+            return
+
         if command == "bind":
             parts = rest.split()
+            if len(parts) >= 2 and parts[1].lower() == "sakura":
+                if not event.is_private_chat():
+                    yield event.plain_result("请在私聊中发送绑定命令，避免 token 泄露到群聊。")
+                elif len(parts) != 3:
+                    yield event.plain_result("用法：/rtlink bind sakura <token>")
+                else:
+                    _ok, message = await self.service.bind_sakura(event.get_sender_id(), parts[2])
+                    yield event.plain_result(message)
+                return
             if len(parts) not in (3, 4):
                 yield event.plain_result(
-                    "用法：/rtlink bind <apikey> <player_id> [server]"
+                    "用法：/rtlink bind <apikey> <player_id> [server] 或 /rtlink bind sakura <token>"
                 )
                 return
             async for result in self.bind(event, *parts[1:]):
