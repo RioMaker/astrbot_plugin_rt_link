@@ -3,3 +3,6 @@
 # 固定像素成绩图渲染（不依赖浏览器、Node.js 或远程后端）
 # 仅声明最低版本，兼容 AstrBot Core 的 Pillow 版本约束。
 Pillow>=10.0
+
+# 公共谱面数据包后台流式下载
+aiohttp>=3.9

@@ -8,6 +8,7 @@ rt_link 插件：将 QQ 号绑定到「菌菌控制台」apikey，查询太鼓�
 - 交互：命令（/rtlink ...）+ LLM 工具（模型可自动调用）
 """
 
+import hashlib
 import re
 from pathlib import Path
 
@@ -19,6 +20,8 @@ from astrbot.api.star import Context, Star, StarTools, register
 # 本地直接运行/测试 main.py 时（__package__ 为空），回退到同目录绝对导入。
 if __package__:
     from .api_client import KinokoClient
+    from .chart_library import ChartLibrary
+    from .chart_library_installer import ChartLibraryInstaller
     from .dan_query import match_rank, match_region, query_dan_courses_text
     from .score_rank import empty_rolls, empty_score_rank, load_rolls, load_score_rank, parse_score_rank
     from .service import BindingsStore, ScoreService, parse_difficulty
@@ -26,6 +29,8 @@ if __package__:
     from .storage import ScoreDatabase, load_charts, load_dan_courses
 else:
     from api_client import KinokoClient
+    from chart_library import ChartLibrary
+    from chart_library_installer import ChartLibraryInstaller
     from dan_query import match_rank, match_region, query_dan_courses_text
     from score_rank import empty_rolls, empty_score_rank, load_rolls, load_score_rank, parse_score_rank
     from service import BindingsStore, ScoreService, parse_difficulty
@@ -35,7 +40,7 @@ else:
 PLUGIN_NAME = "rt_link"
 PLUGIN_AUTHOR = "Rio"
 PLUGIN_DESC = "将 QQ 绑定到菌菌控制台 apikey，查询太鼓达人成绩并评估玩家实力"
-PLUGIN_VERSION = "v0.14.0"
+PLUGIN_VERSION = "v0.15.0"
 
 COMMAND_NAME = "rtlink"
 BINDINGS_KEY = "bindings"
@@ -139,6 +144,20 @@ class RTLinkPlugin(Star):
             self.aliases = empty_aliases()
             logger.warning(f"rt_link：曲名别名加载失败，只按谱面库曲名匹配：{e}")
 
+        library = ChartLibrary(
+            self.data_dir / "chart_library",
+            charts_hash=hashlib.sha256(
+                (self.plugin_dir / "resource/charts.v1.json.gz").read_bytes()
+            ).hexdigest() if self.charts else None,
+        )
+        self.chart_installer = ChartLibraryInstaller(
+            library, self.plugin_dir / "resource/chart_library.release.json",
+            enabled=bool(self.cfg.get("chart_library_auto_install", True)),
+            url=self.cfg.get("chart_library_download_url", ""),
+            quota_mb=int(self.cfg.get("chart_library_quota_mb", 512) or 512),
+            logger=logger,
+        )
+        self.chart_installer.start()
         self.service = ScoreService(
             store=KvBindingsStore(self),
             client_factory=self._make_client,
@@ -153,6 +172,8 @@ class RTLinkPlugin(Star):
             warn_ratio=float(self.cfg.get("storage_warn_ratio", 0.8) or 0.8),
             report_dir=str(self.data_dir),
             logger=logger,
+            chart_library=library,
+            chart_installer=self.chart_installer,
         )
 
     def _make_client(self, apikey: str) -> KinokoClient:
@@ -163,6 +184,7 @@ class RTLinkPlugin(Star):
         )
 
     async def terminate(self):
+        await self.chart_installer.close()
         try:
             self.db.close()
         except Exception:
@@ -221,6 +243,7 @@ class RTLinkPlugin(Star):
             "dan": self.dan_cmd,
             "段位": self.dan_cmd,
             "storage": self.storage_cmd,
+            "library": self.library_cmd,
             "cleanup": self.cleanup_cmd,
             "alias": self.alias_cmd,
             "aliaslist": self.aliaslist_cmd,
@@ -361,6 +384,18 @@ class RTLinkPlugin(Star):
             song_parts.append(token)
         args["song_name"] = " ".join(song_parts).strip()
         return args
+
+    async def library_cmd(self, event: AstrMessageEvent):
+        args = (self._bare_rest(event.get_message_str()) or "library").split()[1:]
+        if args and args != ["retry"]:
+            yield event.plain_result("用法：/rtlink library [retry]")
+            return
+        if args:
+            if not event.is_admin():
+                yield event.plain_result("仅管理员可重试安装分析库。")
+                return
+            self.chart_installer.start(force=True)
+        yield event.plain_result(await self.service.chart_library_status_text())
 
     async def storage_cmd(self, event: AstrMessageEvent):
         if not event.is_admin():
@@ -746,9 +781,41 @@ class RTLinkPlugin(Star):
             event.get_sender_id(), detail or "brief", **filters
         )
 
+    @filter.llm_tool(name="get_chart_analysis")
+    async def get_chart_analysis(
+        self, event: AstrMessageEvent, song_name: str, level: str = "",
+        route: str = "", detail: str = "summary", start_measure: int = 0,
+        end_measure: int = 0, offset: int = 0, limit: int = 8,
+    ) -> str:
+        """查询单首歌曲单个难度的 TJA 分析，包含整曲参数、分段密度、配色和变速资料。
+
+        用户问某曲难点、某小节配置、未玩歌曲要求时调用。无需绑定或游玩成绩，
+        从本地预计算库快速查询，不在调用时解析 TJA。默认只返回摘要及突出区间。
+        分析是谱面参考，不是玩家表现预测；不能据此编造精度或过关概率。
+        评估未玩歌曲适配度时，结合 get_player_profile、get_rhythm_weakness
+        和已玩相似曲成绩作定性比较；谱面原始指标不能直接当玩家能力分数。
+        遇到多个难度/同名变体须选择返回的 chartKey；解析警告与来源限制应保留。
+
+        Args:
+            song_name(string): 曲名、别名、歌曲 ID，或返回的 ese: 开头 chartKey；支持「鬼夏祭」难度前缀
+            level(string): 4/鬼/魔王 或 5/里/里魔王；省略且存在多个难度时返回候选
+            route(string): 分歧 N/普通、E/玄人、M/达人；不分歧为 single。省略用整曲特征对应路线，结果会说明
+            detail(string): summary 为整曲摘要与突出小节；segments 为分段参数；features 为分页整曲原始特征
+            start_measure(number): segments 的起始小节，1 起算，0 为不限
+            end_measure(number): segments 的结束小节，包含该小节，0 为不限
+            offset(number): segments/features 分页偏移，默认 0
+            limit(number): 每次返回条目数，1–20，默认 8；按 nextOffset 继续查询
+        """
+        return await self.service.get_chart_analysis_text(
+            song_name, level=level, route=route, detail=detail,
+            start_measure=start_measure, end_measure=end_measure, offset=offset, limit=limit,
+        )
+
     @filter.llm_tool(name="get_song_full")
     async def get_song_full(self, event: AstrMessageEvent, song_name: str) -> str:
         """查询指定歌曲的鬼/里全部难度成绩、定数、Rating 与七维能力。
+
+        本工具查询玩家已有成绩；查询未玩歌曲的谱面要求或小节难点用 get_chart_analysis。
 
         Args:
             song_name(string): 歌曲名称，支持中文/日文/英文模糊匹配

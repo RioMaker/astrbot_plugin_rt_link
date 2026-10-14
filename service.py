@@ -371,6 +371,8 @@ class ScoreService:
         warn_ratio: float = 0.8,
         report_dir: str | None = None,
         logger=None,
+        chart_library=None,
+        chart_installer=None,
     ):
         self.store = store
         self._client_factory = client_factory
@@ -389,6 +391,8 @@ class ScoreService:
         self.warn_ratio = warn_ratio
         self.report_dir = report_dir
         self._logger = logger or _NullLogger()
+        self.chart_library = chart_library
+        self.chart_installer = chart_installer
 
     def _client(self, apikey: str) -> KinokoClient:
         return self._client_factory(apikey)
@@ -742,6 +746,15 @@ class ScoreService:
             f"按玩家：{by_player}",
             "清理：/rtlink cleanup 释放数据库空页（VACUUM）。",
         ]
+        if self.chart_library:
+            library = await asyncio.to_thread(self.chart_library.status)
+            if library["available"]:
+                lines.append(
+                    f"公共 TJA 分析库：{library['tjaFiles']} 份原谱、{library['analyses']} 张分析，"
+                    f"当前版本 {library['bytes']/1048576:.1f} MiB（独立于成绩数据库配额；旧版本另计）。"
+                )
+            else:
+                lines.append("公共 TJA 分析库：尚未安装或不可用。")
         return "\n".join(lines)
 
     async def low_space_warning_text(self) -> str:
@@ -1350,6 +1363,30 @@ class ScoreService:
         if rank_min:
             filters["rank_min"] = rank_min
         return await self.query_scores_text(qq, **filters)
+
+    async def chart_library_status_text(self) -> str:
+        if self.chart_installer:
+            await self.chart_installer.ensure(wait_seconds=0.05)
+            state = self.chart_installer.status()
+        else:
+            state = {"message": "未配置自动安装。"}
+        local = await asyncio.to_thread(self.chart_library.status) if self.chart_library else {"available": False}
+        return json.dumps({"installation": state, "library": local}, ensure_ascii=False)
+
+    async def get_chart_analysis_text(self, song_name, level="", **filters) -> str:
+        """Public reference lookup: no binding, sync, API, or player DB access."""
+        if self.chart_library is None:
+            return json.dumps({"status": "unavailable", "message": "谱面分析库尚未安装。"}, ensure_ascii=False)
+        prefix_level, clean = parse_song_query(song_name)
+        selected = parse_difficulty(level) if level else prefix_level
+        if level and selected is None:
+            return json.dumps({"status": "invalid_argument", "message": "难度仅支持鬼/里（4/5）。"}, ensure_ascii=False)
+        if level and prefix_level and selected != prefix_level:
+            return json.dumps({"status": "invalid_argument", "message": "曲名前缀与 level 难度冲突。"}, ensure_ascii=False)
+        if self.chart_installer and not await self.chart_installer.ensure():
+            return json.dumps({"status": "unavailable", "installation": self.chart_installer.status()}, ensure_ascii=False)
+        result = await asyncio.to_thread(self.chart_library.query, clean, selected or 0, **filters)
+        return json.dumps(result, ensure_ascii=False, separators=(",", ":"))
 
     async def get_song_full_text(self, qq, song_name) -> str:
         analysis, err = await self._get_analysis(qq)

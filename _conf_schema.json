@@ -34,5 +34,23 @@
     "type": "float",
     "hint": "默认 0.8（80%）",
     "default": 0.8
+  },
+  "chart_library_auto_install": {
+    "description": "后台自动安装公共 TJA 分析库",
+    "type": "bool",
+    "default": true,
+    "hint": "下载约 28 MiB，校验后启用；失败不影响查分，可用 /rtlink library 查看状态。"
+  },
+  "chart_library_download_url": {
+    "description": "公共 TJA 数据包镜像地址",
+    "type": "text",
+    "default": "",
+    "hint": "留空使用插件固定的 GitHub Release 数据包；镜像须为 HTTPS 且字节内容完全一致。"
+  },
+  "chart_library_quota_mb": {
+    "description": "公共 TJA 分析库独立配额（MiB）",
+    "type": "int",
+    "default": 512,
+    "hint": "包含旧版本和安装暂存文件；旧版本不会自动删除。"
   }
 }
