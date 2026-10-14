@@ -1,0 +1,43 @@
+{
+  "retrieved_at": "2026-10-14T13:33:09.736784+08:00",
+  "requested_url": "https://kinoko.zorua.cn/docs/api-guide?return_to=%2Fsettings%3Ftab%3Dpublic",
+  "method": "HTTPS with certificate verification; Markdown string extracted from public Vite document module without executing JavaScript",
+  "documents": [
+    {
+      "page_url": "https://kinoko.zorua.cn/docs/api-guide",
+      "asset_url": "https://kinoko.zorua.cn/assets/api-guide-Cp35OZHs.js",
+      "markdown_file": "api-guide.md",
+      "source_file": "api-guide-Cp35OZHs.js",
+      "markdown_bytes": 27987,
+      "markdown_sha256": "465c9402b3dc7e0169ece253fddc84c5334aa3bcf3a9854cd1837b71f30a3e15",
+      "source_sha256": "ca454bbe7a4ead394a38a72525565b57909baae36e324198953765038f87e948"
+    },
+    {
+      "page_url": "https://kinoko.zorua.cn/docs/api-reference",
+      "asset_url": "https://kinoko.zorua.cn/assets/api-reference-jTfOC44h.js",
+      "markdown_file": "api-reference.md",
+      "source_file": "api-reference-jTfOC44h.js",
+      "markdown_bytes": 35563,
+      "markdown_sha256": "3e5e0f9c06b6e7b166d52c9b879cf1b667811e1b8d4dced0642f1938b571d94d",
+      "source_sha256": "0a554ed63bb574514115f2518ef4fc46d210ec3ff75cfaa139b4d8bc0cebd692"
+    },
+    {
+      "page_url": "https://kinoko.zorua.cn/docs/oauth-guide",
+      "asset_url": "https://kinoko.zorua.cn/assets/oauth-guide-BIjk2t_m.js",
+      "markdown_file": "oauth-guide.md",
+      "source_file": "oauth-guide-BIjk2t_m.js",
+      "markdown_bytes": 3730,
+      "markdown_sha256": "27b7e6fe83528e166de8cdbcd15d55d48752c880276f3580aa01ee61b760f030",
+      "source_sha256": "a2077ac798c66e0aecbf3431ed52194c15bd75facf7c757935d9fb34185ea6ef"
+    },
+    {
+      "page_url": "https://kinoko.zorua.cn/docs/api/oauth",
+      "asset_url": "https://kinoko.zorua.cn/assets/oauth-ChQfVQbK.js",
+      "markdown_file": "api-oauth.md",
+      "source_file": "oauth-ChQfVQbK.js",
+      "markdown_bytes": 12226,
+      "markdown_sha256": "0f7d180ea4bd747e905429a274d529fc9dafba2090cc237707a3ee4156d2f107",
+      "source_sha256": "d66496e0bd85f0fda31fd998fcd2f48520157a5f288bedf0abed65a60b1c32b4"
+    }
+  ]
+}
