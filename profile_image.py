@@ -3,7 +3,7 @@ from __future__ import annotations
 import copy, math, os
 from collections import Counter
 from datetime import datetime, timedelta, timezone
-from PIL import Image,ImageDraw,ImageFilter,ImageColor
+from PIL import Image,ImageDraw,ImageFilter,ImageColor,ImageChops
 if __package__:
     from . import profile_theme as theme
     from .profile_theme import txt,box,PAPER,WHITE,INK,MUTED,LINE,TEAL,RED
@@ -26,7 +26,7 @@ TEXT_RANK_COLORS = {**RANK_COLORS, 2: RANK_COLORS[1]}
 STAGE_STARTS = (0, 1, 5, 7, 9, 10, 13)
 STAGES = [{**_stage(float(value)), 'startsAt': value} for value in STAGE_STARTS]
 PLANET_COLORS = ['#ef967e', '#e7c565', '#b69bdd', '#80cfba', '#81b8dc', '#df96b8', '#aabcc9']
-TAG_COLOR = '#365c55'
+TAG_COLORS = ['#2d615a', '#59877b']
 NEXT_CARD_HEIGHT = 312
 NEXT_CARD_STEP = 330
 NEXT_NOTE_HEIGHT = 88
@@ -132,28 +132,29 @@ def rainbow_border(im, x, y, w, h):
 
 def corner_tag(im, index, x, y):
     scale = 4
-    width, height = 58, 26
-    tag = Image.new('RGBA', (width * scale, height * scale))
-    d = ImageDraw.Draw(tag)
-    d.rounded_rectangle(
-        (0, 0, tag.width - 1, tag.height - 1),
-        radius=8 * scale,
-        fill='#e6ede8',
-        outline='#cad9d0',
-        width=scale,
+    width, height = 66, 48
+    tag = theme.gradient((width * scale, height * scale), TAG_COLORS)
+    triangle = Image.new('L', tag.size)
+    ImageDraw.Draw(triangle).polygon(((0, 0), (tag.width - 1, 0), (0, tag.height - 1)), fill=255)
+    corner = Image.new('L', tag.size)
+    ImageDraw.Draw(corner).rounded_rectangle(
+        (0, 0, tag.width * 2, tag.height * 2), radius=16 * scale, fill=255
     )
+    d = ImageDraw.Draw(tag)
+    d.line((0, tag.height - 1, tag.width - 1, 0), fill='#88a79a', width=scale)
     number = f'{index:02d}'
-    font = _font(20 * scale)
+    font = _font(19 * scale)
     left, top, right, bottom = d.textbbox((0, 0), number, font=font)
     d.text(
-        ((tag.width - right - left) / 2, (tag.height - bottom - top) / 2),
+        (22 * scale - (left + right) / 2, 14 * scale - (top + bottom) / 2),
         number,
         font=font,
-        fill=TAG_COLOR,
+        fill='#fffdf5',
         stroke_width=2,
-        stroke_fill=TAG_COLOR,
+        stroke_fill='#fffdf5',
     )
-    im.alpha_composite(tag.resize((width, height), Image.Resampling.LANCZOS), (x + 16, y + 6))
+    tag.putalpha(ImageChops.multiply(triangle, corner))
+    im.alpha_composite(tag.resize((width, height), Image.Resampling.LANCZOS), (x, y))
 
 def judgment_icon(im, name, x, y, height=32):
     a = Image.open(ASSETS / (name + '.png')).convert('RGBA')
