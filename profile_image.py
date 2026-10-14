@@ -3,7 +3,7 @@ from __future__ import annotations
 import copy, math, os
 from collections import Counter
 from datetime import datetime, timedelta, timezone
-from PIL import Image,ImageDraw,ImageFilter,ImageColor,ImageChops
+from PIL import Image,ImageDraw,ImageFilter,ImageColor
 if __package__:
     from . import profile_theme as theme
     from .profile_theme import txt,box,PAPER,WHITE,INK,MUTED,LINE,TEAL,RED
@@ -26,7 +26,7 @@ TEXT_RANK_COLORS = {**RANK_COLORS, 2: RANK_COLORS[1]}
 STAGE_STARTS = (0, 1, 5, 7, 9, 10, 13)
 STAGES = [{**_stage(float(value)), 'startsAt': value} for value in STAGE_STARTS]
 PLANET_COLORS = ['#ef967e', '#e7c565', '#b69bdd', '#80cfba', '#81b8dc', '#df96b8', '#aabcc9']
-TAG_COLOR = '#416b73'
+TAG_COLOR = '#365c55'
 NEXT_CARD_HEIGHT = 312
 NEXT_CARD_STEP = 330
 NEXT_NOTE_HEIGHT = 88
@@ -130,16 +130,30 @@ def rainbow_border(im, x, y, w, h):
     layer.putalpha(outline.point(lambda q: round(q * 0.78)))
     im.alpha_composite(layer, (x - pad, y - pad))
 
-def corner_tag(im, index, x, y, w, h):
-    mask = Image.new('L', (w, h))
-    md = ImageDraw.Draw(mask)
-    md.rounded_rectangle((0, 0, w - 1, h - 1), radius=16, fill=255)
-    triangle = Image.new('RGBA', (w, h))
-    td = ImageDraw.Draw(triangle)
-    td.polygon(((0, 0), (54, 0), (0, 54)), fill=TAG_COLOR)
-    triangle.putalpha(ImageChops.multiply(triangle.getchannel('A'), mask))
-    im.alpha_composite(triangle, (x, y))
-    txt(ImageDraw.Draw(im), str(index), x + 8, y + 6, 18, '#fffef7')
+def corner_tag(im, index, x, y):
+    scale = 4
+    width, height = 58, 26
+    tag = Image.new('RGBA', (width * scale, height * scale))
+    d = ImageDraw.Draw(tag)
+    d.rounded_rectangle(
+        (0, 0, tag.width - 1, tag.height - 1),
+        radius=8 * scale,
+        fill='#e6ede8',
+        outline='#cad9d0',
+        width=scale,
+    )
+    number = f'{index:02d}'
+    font = _font(20 * scale)
+    left, top, right, bottom = d.textbbox((0, 0), number, font=font)
+    d.text(
+        ((tag.width - right - left) / 2, (tag.height - bottom - top) / 2),
+        number,
+        font=font,
+        fill=TAG_COLOR,
+        stroke_width=2,
+        stroke_fill=TAG_COLOR,
+    )
+    im.alpha_composite(tag.resize((width, height), Image.Resampling.LANCZOS), (x + 16, y + 6))
 
 def judgment_icon(im, name, x, y, height=32):
     a = Image.open(ASSETS / (name + '.png')).convert('RGBA')
@@ -164,7 +178,7 @@ def card(im, row, index, x, y, w=420, h=204):
     if ura:
         theme.asset(im, 'ura', x + w - 158, y + 6, 156, 119, 0.08)
     if index is not None:
-        corner_tag(im, index, x, y, w, h)
+        corner_tag(im, index, x, y)
     if state == 'ap':
         rainbow_border(im, x, y, w, h)
     if state != 'none':
