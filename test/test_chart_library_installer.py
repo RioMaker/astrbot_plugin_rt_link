@@ -80,6 +80,55 @@ def make_installer(tmp_path, release, **kwargs):
     return ChartLibraryInstaller(library, release[2], **kwargs)
 
 
+@pytest.mark.parametrize("state", ["valid", "missing", "damaged"])
+def test_bundled_install_without_network(tmp_path, release, monkeypatch, state):
+    spec = dict(release[3], archiveFile=release[1].name)
+    spec.pop("url")
+    release[2].write_text(json.dumps(spec), encoding="utf-8")
+    if state == "missing":
+        release[1].unlink()
+    elif state == "damaged":
+        release[1].write_bytes(b"broken")
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("bundled installation attempted network access")
+
+    monkeypatch.setattr("chart_library_installer.aiohttp.ClientSession", forbidden)
+
+    async def run():
+        installer = make_installer(tmp_path, release)
+        available = await installer.ensure()
+        assert available == (state == "valid")
+        if available:
+            assert installer.library.query("Sample")["status"] == "ok"
+            assert installer.status()["downloadedBytes"] == 0
+            assert installer._use_bundled()
+            assert release[1].is_file()  # Never remove the plugin's archive.
+        else:
+            assert installer.status()["status"] == "failed"
+            assert not (installer.root / "current.json").exists()
+        assert not list(installer.root.glob(".install-*"))
+        await installer.close()
+
+    asyncio.run(run())
+
+
+def test_explicit_mirror_overrides_bundled_source(tmp_path, release):
+    release[2].write_text(
+        json.dumps(dict(release[3], archiveFile=release[1].name)), encoding="utf-8"
+    )
+
+    async def run():
+        async with server(release[1]) as (url, calls):
+            installer = make_installer(tmp_path, release, url=url)
+            assert not installer._use_bundled()
+            assert await installer.ensure()
+            assert len(calls) == 1
+            await installer.close()
+
+    asyncio.run(run())
+
+
 def test_empty_install_concurrent_public_lookup_and_restart(tmp_path, release):
     async def run():
         async with server(release[1]) as (url, calls):

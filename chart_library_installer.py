@@ -46,6 +46,8 @@ class ChartLibraryInstaller:
         self._state = "idle"
         self._error = ""
         self._downloaded = 0
+        self._bundled_archive = None
+        self._prefer_download = bool(str(url or "").strip())
         self.spec = {}
         try:
             self.spec = json.loads(Path(release_path).read_bytes())
@@ -68,7 +70,16 @@ class ChartLibraryInstaller:
                     raise ValueError("release size")
             if library.charts_hash and library.charts_hash != self.spec["chartsSha256"]:
                 raise ValueError("catalog hash")
-            self.url = str(url or self.spec["url"]).strip()
+            archive_file = self.spec.get("archiveFile")
+            if archive_file:
+                if not re.fullmatch(r"[A-Za-z0-9_-]+\.zip", archive_file):
+                    raise ValueError("archive filename")
+                self._bundled_archive = (
+                    Path(release_path).resolve().parent / archive_file
+                )
+            self.url = str(url or self.spec.get("url", "")).strip()
+            if not self.url and self._bundled_archive is not None:
+                return
             parsed = urlsplit(self.url)
             # HTTP is only allowed for loopback integration testing/local mirrors.
             if (
@@ -135,6 +146,7 @@ class ChartLibraryInstaller:
             or {
                 "idle": "分析库等待初始化。",
                 "checking": "正在检查本地分析库。",
+                "installing": "正在校验并安装插件内置的分析数据包。",
                 "downloading": "正在首次安装或更新分析库，请稍后重试查询。",
                 "verifying": "下载完成，正在校验分析库。",
                 "ready": "分析库已就绪。",
@@ -168,7 +180,8 @@ class ChartLibraryInstaller:
     def _check_space(self):
         self.root.mkdir(parents=True, exist_ok=True)
         used = sum(p.stat().st_size for p in self.root.rglob("*") if p.is_file())
-        needed = self.spec["archiveBytes"] + self.spec["unpackedBytes"] + 8 * 1048576
+        download_bytes = 0 if self._use_bundled() else self.spec["archiveBytes"]
+        needed = download_bytes + self.spec["unpackedBytes"] + 8 * 1048576
         if used + needed > self.quota_bytes:
             raise InstallError(
                 "分析库配额不足；旧版本已保留，请调整 chart_library_quota_mb。"
@@ -176,6 +189,22 @@ class ChartLibraryInstaller:
         if shutil.disk_usage(self.root).free < needed + 128 * 1048576:
             raise InstallError(
                 "磁盘剩余空间不足；需为下载、解压及 128 MiB 余量留出空间。"
+            )
+
+    def _use_bundled(self):
+        return (
+            not self._prefer_download
+            and self._bundled_archive is not None
+            and self._bundled_archive.is_file()
+        )
+
+    def _verify_archive(self, package):
+        if (
+            package.stat().st_size != self.spec["archiveBytes"]
+            or _file_sha256(package) != self.spec["archiveSha256"]
+        ):
+            raise InstallError(
+                "内置分析包大小或 SHA-256 校验失败；请重新更新插件或配置镜像。"
             )
 
     async def _download(self, destination):
@@ -349,8 +378,17 @@ class ChartLibraryInstaller:
             temporary = self.root / (".install-" + uuid.uuid4().hex)
             temporary.mkdir()
             package = temporary / "download.zip"
-            self._state = "downloading"
-            await self._download(package)
+            if self._use_bundled():
+                package = self._bundled_archive
+                self._state = "installing"
+                await self._worker(self._verify_archive, package)
+            elif self.url:
+                self._state = "downloading"
+                await self._download(package)
+            else:
+                raise InstallError(
+                    "插件内置分析包缺失；请重新更新完整插件或配置镜像地址。"
+                )
             self._state = "verifying"
             directory = await self._worker(self._extract_verify, package, temporary)
             await self._worker(self._publish, directory)
