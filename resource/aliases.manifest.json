@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "dataVersion": "2026-10-14.2",
+  "dataVersion": "2026-10-15.1",
   "catalogCharts": 1393,
   "identityCharts": 1849,
   "songCount": 1524,
-  "aliasEntries": 6853,
+  "aliasEntries": 6864,
   "averageNamesPerChart": 3.71,
   "ambiguousKeys": 63,
   "ambiguousSamples": {
@@ -284,6 +284,7 @@
       "1452"
     ],
     "どらごんぼるひろず": [
+      "115",
       "116",
       "542"
     ],
@@ -310,12 +311,12 @@
   },
   "sources": {
     "charts": 1393,
-    "romaji": 1591,
+    "romaji": 1599,
     "danTitles": 3,
     "curated": 381,
     "missingCurated": [],
     "currentCnSongs": 1126
   },
-  "compressedBytes": 118054,
-  "rawBytes": 861264
+  "compressedBytes": 118201,
+  "rawBytes": 862242
 }

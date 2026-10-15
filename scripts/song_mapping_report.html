@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<title>RTLink 全量歌曲对应审核 · 2026-10-15</title>
+<style>
+:root{font:15px/1.6 system-ui,'Microsoft YaHei',sans-serif;color:#243447;background:#f1f4f7}body{max-width:1580px;margin:32px auto;padding:0 24px}h1{font-size:28px;margin-bottom:4px}p{max-width:1280px}.muted,small{color:#617285}.cards{display:flex;flex-wrap:wrap;gap:12px;margin:22px 0}.card{background:white;border-radius:9px;padding:12px 20px;min-width:120px}.card strong{display:block;font-size:26px;color:#155c71}.notice{background:#fff8df;padding:12px 18px;border-left:4px solid #bf9433}nav,.filters{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0}input,select,button{font:inherit;background:white;border:1px solid #bccbd7;border-radius:5px;padding:8px 12px}input{min-width:320px;flex:1;max-width:580px}button{cursor:pointer}button.active{background:#155c71;color:white}.scroll{overflow:auto}table{width:100%;border-collapse:collapse;background:white}th,td{text-align:left;vertical-align:top;padding:11px 13px;border-bottom:1px solid #dfe5eb;white-space:pre-line;overflow-wrap:anywhere}th{background:#e5edf2;position:sticky;top:0;white-space:nowrap}td{max-width:560px}details{margin-top:5px}summary{cursor:pointer;color:#155c71}.tag{display:inline-block;background:#edf3f7;margin:2px;padding:0 5px;border-radius:3px}.warn{color:#9e5c0b}.good{color:#18715d}footer{margin:24px 0;color:#617285}a{color:#155c71}
+</style>
+<h1>全量歌曲对应审核</h1><div class="muted">2026-10-15 · 游戏 ID → 多来源曲名 → 难度 → 评级 / ESE 谱面</div>
+<p>国服当前名称优先显示。游戏歌曲 ID 与菌菌站内 ID 分列；鬼谱和里谱各占一条对应。名称可查、存在评级、已绑定 TJA 是三个独立状态。</p>
+<div class="notice">“已绑定”表示当前本地谱面映射与来源证据相符；星级差异另行标注。待核对项保留候选及原因，不强行选择同名变体。“Sakura 当前”仅表示该公开来源的歌曲栏状态，不等同于每个难度在国服开放，也不是官方下架公告。</div>
+<div id="cards" class="cards"></div><p id="live"></p><nav id="tabs"></nav>
+<div class="filters"><input id="q" aria-label="搜索名称或ID" placeholder="搜索游戏 ID、国服名、日文、别名或源谱路径"><select id="status" aria-label="来源歌曲状态"><option value="">全部来源状态</option><option value="current">Sakura 当前</option><option value="archive">Sakura 归档</option><option value="unknown">国服状态未确认</option></select><select id="binding" aria-label="谱面绑定状态"><option value="">全部绑定状态</option><option value="bound">已绑定</option><option value="pending">待绑定</option></select><button id="clear">清空筛选</button></div>
+<p id="count"></p><div class="scroll"><table><thead id="head"></thead><tbody id="body"></tbody></table></div>
+<footer>公开曲库：<a href="https://viewer.sakura-bot.cn/api/content/songs">Sakura</a> · <a href="https://kinoko.zorua.cn/api/scores/catalog?schema_version=3">菌菌 schema v3</a> · <a href="https://ese.tjadataba.se/ESE/ESE.git">ESE</a>。完整来源指纹、全部候选和排除编号见同名 JSON。玩家成绩只用于本地验证，报告不包含 token、玩家 ID、成绩明细。</footer>
+<script id="data" type="application/json">__REPORT_DATA__</script>
+<script>
+const data=JSON.parse(document.getElementById('data').textContent),el=id=>document.getElementById(id);
+let tab='songs';
+const labels={songs:'全部歌曲',charts:'鬼 / 里逐谱对应',pending:'待绑定谱面',issues:'来源数值与收录差异',conflicts:'同名与别名歧义',dan:'段位对应',sourceDifferences:'跨来源曲名差异',excludedSourceEntries:'排除的站内编号'};
+const state={current:'Sakura 当前',archive:'Sakura 归档',unknown:'未确认',other:'其他'};
+for(const [key,label] of [['songs','歌曲'],['identityCharts','鬼 / 里身份'],['mappedCharts','已绑定 TJA'],['unmappedCharts','待绑定'],['nameEntries','名称写法'],['collisionKeys','歧义键']]){const d=document.createElement('div');d.className='card';const b=document.createElement('strong');b.textContent=data.summary[key];d.append(b,label);el('cards').append(d)}
+const lv=data.liveValidation;
+el('live').textContent=lv?`实际成绩核验：${lv.records} 条 / ${lv.uniqueSongs} 首，ID 命中 ${lv.matchedIds} 条，未匹配曲名 ${lv.unmatchedTitles||0}，物量差异 ${lv.noteDifferences||0} 条（分歧 / 双打等另核）。这只是该快照覆盖范围。`: '本次未输入成绩快照，以下为公开来源与本地资源核对。';
+for(const [key,label] of Object.entries(labels)){const b=document.createElement('button');b.textContent=label+' '+data[key].length;b.dataset.key=key;b.onclick=()=>{tab=key;draw()};el('tabs').append(b)}
+function cell(tr,text,cls){const td=document.createElement('td');td.textContent=text??'—';if(cls)td.className=cls;tr.append(td);return td}
+function detail(td,label,rows){const d=document.createElement('details'),s=document.createElement('summary');s.textContent=label;d.append(s);for(const text of rows){const p=document.createElement('div');p.textContent=text;d.append(p)}td.append(d)}
+function draw(){document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.key===tab));
+const q=el('q').value.trim().toLocaleLowerCase(),st=el('status').value,bd=el('binding').value;
+const hasState=['songs','charts','pending'].includes(tab);el('status').disabled=!hasState;el('binding').disabled=!hasState;
+const rows=data[tab].filter(r=>{if(q){const matches=/^\d+$/.test(q)?[r.id,r.songNo,r.sourceId,...(r.songIds||[]),...(r.candidates||[]).filter(v=>typeof v==='number')].includes(Number(q)):JSON.stringify(r).toLocaleLowerCase().includes(q);if(!matches)return false}if(hasState&&st&&r.cnStatus!==st)return false;if(hasState&&bd){const bound=tab==='songs'?r.boundCharts:r.bound;if(bd==='bound'&&!bound)return false;if(bd==='pending'&&(tab==='songs'?r.boundCharts===r.identityCharts:bound))return false}return true});
+el('head').replaceChildren();el('body').replaceChildren();el('count').textContent=`${rows.length} / ${data[tab].length} 条 · 游戏 ID 保留独立身份，歧义不自动合并`;
+const headers={songs:['游戏 ID / 来源 ID','优先名 / 日文','名称及来源','鬼 / 里绑定','来源状态 / 差异'],charts:['游戏 ID / 难度','优先名 / 日文','星级 / 物量','评级 / 国服难度','TJA 对应与候选'],pending:['游戏 ID / 难度','优先名 / 日文','星级 / 物量','评级 / 国服难度','TJA 对应与候选'],issues:['游戏 ID / 难度','曲名','差异类别','各来源值','处理'],conflicts:['归一化名称','游戏 ID / 曲名','类别','处理'],dan:['届别 / 地区 / 段位','曲序 / 曲名','游戏 ID / 候选','难度 / 物量','证据'],sourceDifferences:['游戏 ID','Sakura','菌菌','处理'],excludedSourceEntries:['站内编号','来源名称','处理']}[tab];
+const hr=document.createElement('tr');for(const h of headers){const th=document.createElement('th');th.textContent=h;hr.append(th)}el('head').append(hr);
+for(const r of rows){const tr=document.createElement('tr');if(tab==='songs'){
+cell(tr,`游戏 ${r.id}\n菌菌站内 ${r.kinokoId??'—'}\nSakura ${r.sakuraId??'—'}`);cell(tr,r.title+'\n'+r.titleJa);const td=cell(tr,'');for(const n of Object.keys(r.names)){const s=document.createElement('span');s.className='tag';s.textContent=n;s.title=r.names[n].join(' / ');td.append(s)}detail(td,'逐名来源',Object.entries(r.names).map(([n,s])=>n+' ← '+s.join(' / ')));const coverage=cell(tr,`${r.boundCharts} / ${r.identityCharts} 已绑定\n${r.rated?'含评级谱面':'尚无评级'}`);detail(coverage,'全部难度身份',Object.entries(r.levels).map(([lv,m])=>`${['','简单','普通','困难','鬼','里'][lv]} · ${m.stars??'—'}★ / ${m.totalNotes??'未知'} 音符`));cell(tr,state[r.cnStatus]+(r.issues.length?'\n'+[...new Set(r.issues)].join('、'):'')+(r.conflicts.length?`\n${r.conflicts.length} 个歧义键`:''));
+}else if(tab==='charts'||tab==='pending'){
+cell(tr,`${r.id} / ${r.level===4?'鬼':'里'}`);cell(tr,r.title+'\n'+r.titleJa);cell(tr,`${r.stars??'—'}★\n本地身份 ${r.identityNotes??'—'}\nSakura ${r.sakuraNotes??'—'}\n评级 ${r.ratingNotes??'—'}${r.eseStars!==null?'\nESE '+r.eseStars+'★':''}`);cell(tr,(r.rated?'已有评级':'尚无评级')+'\n'+(r.cnDifficultyListed?'Sakura 列出此难度':'Sakura 未列出此难度')+'\n'+state[r.cnStatus]);const td=cell(tr,r.status+(r.esePath?'\n'+r.esePath:''),r.bound?'good':'warn');if(r.fingerprint)detail(td,'源谱指纹',[r.fingerprint]);if(r.candidates.length)detail(td,`${r.candidates.length} 个完整曲名候选`,r.candidates.map(c=>`${c.stars}★ / ${c.notes} 音符 · ${c.path}${c.warnings.length?' · '+c.warnings.join(', '):''}`));
+}else if(tab==='issues'){cell(tr,r.id+' / '+r.level);cell(tr,r.title);cell(tr,r.category);cell(tr,r.values);cell(tr,r.decision);
+}else if(tab==='conflicts'){cell(tr,r.key);cell(tr,r.songIds.map((v,i)=>v+': '+r.titles[i]).join('\n'));cell(tr,r.category);cell(tr,r.decision);
+}else if(tab==='dan'){cell(tr,[r.year,r.region,r.rank].join(' / '));cell(tr,r.order+'. '+r.displayTitle+'\n'+r.sourceTitle);cell(tr,r.songNo+' / '+r.candidates.join(', '));cell(tr,r.level+' / '+r.notes+'（身份 '+(r.catalogNotes??'未知')+'）');cell(tr,r.evidence+'\n'+r.status);
+}else if(tab==='sourceDifferences'){cell(tr,r.songNo);cell(tr,r.sakura);cell(tr,r.kinoko);cell(tr,'按同一游戏 ID 保留来源写法和版本标识');
+}else{cell(tr,r.sourceId);cell(tr,r.title);cell(tr,'仅见于其他歌曲栏；未经游戏 ID 确认，不进入运行映射')}
+el('body').append(tr)}}
+el('q').oninput=draw;el('status').onchange=draw;el('binding').onchange=draw;el('clear').onclick=()=>{el('q').value='';el('status').value='';el('binding').value='';draw()};draw();
+</script></html>

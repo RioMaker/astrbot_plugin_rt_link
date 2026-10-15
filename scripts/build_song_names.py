@@ -16,9 +16,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from scripts.build_aliases import read_tja_title
+from scripts.song_identity import exact_candidates
 from song_alias import normalize
 
-DATA_VERSION = "2026-10-14.2"
+DATA_VERSION = "2026-10-15.1"
 SOURCE_URLS = {
     "sakura": "https://viewer.sakura-bot.cn/api/content/songs",
     "kinoko": "https://kinoko.zorua.cn/api/scores/catalog?schema_version=3",
@@ -140,7 +141,7 @@ def build(sakura_path, kinoko_path, ese_root, mapping_path, index_path):
             "levels": {str(level): data for level, data in sorted(levels.items())},
         }
 
-    # Keep proven mappings; extend only with exact Japanese title, course,
+    # Keep proven mappings; extend only with an exact independent source title, course,
     # note count AND stars, and one source chart. Ambiguous variants stay out.
     linked = {}
     for row in mapping["mappings"]:
@@ -153,15 +154,8 @@ def build(sakura_path, kinoko_path, ese_root, mapping_path, index_path):
             data = song["levels"].get(str(level))
             if not data:
                 continue
-            if key not in linked and int(sid) not in rated:
-                matches = [
-                    row
-                    for row in index["charts"]
-                    if normalize(row.get("titleJa")) == normalize(song["titleJa"])
-                    and row["course"] == ("oni" if level == 4 else "edit")
-                    and row["totalNotes"] == data["totalNotes"]
-                    and row["level"] == data["stars"]
-                ]
+            if key not in linked:
+                matches = exact_candidates(index["charts"], song, level)
                 if len(matches) == 1:
                     selected = {
                         key: matches[0][key]
@@ -178,7 +172,7 @@ def build(sakura_path, kinoko_path, ese_root, mapping_path, index_path):
                             "songNo": int(sid),
                             "level": level,
                             "selected": selected,
-                            "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart",
+                            "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart",
                         }
                     )
             selected = linked.get(key)
@@ -208,7 +202,7 @@ def build(sakura_path, kinoko_path, ese_root, mapping_path, index_path):
     return {
         "schemaVersion": 1,
         "dataVersion": DATA_VERSION,
-        "retrievedDate": "2026-10-14",
+        "retrievedDate": "2026-10-15",
         "sources": sources,
         "sourceDifferences": differences,
         "excludedSourceEntries": excluded,

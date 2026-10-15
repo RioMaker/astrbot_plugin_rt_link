@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
-  "dataVersion": "2026-10-14.2",
-  "retrievedDate": "2026-10-14",
+  "dataVersion": "2026-10-15.1",
+  "retrievedDate": "2026-10-15",
   "sources": {
     "sakura": {
       "url": "https://viewer.sakura-bot.cn/api/content/songs",
-      "sha256": "dbd5dfb96521d2ffcb7205e3c3a739b3a02d2934c64f8b62afe453cf6d3f6ade"
+      "sha256": "e5ad55b09fdea63dce96bc83b8d109da2edeb87f303fefee8cdec98ec0eeff90"
     },
     "kinoko": {
       "url": "https://kinoko.zorua.cn/api/scores/catalog?schema_version=3",
@@ -889,7 +889,7 @@
         "fingerprint": "17371960ad44217d1a34cc4760df499382bb12dcd28d2c819ae52f36684aff6d",
         "totalNotes": 338
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 25,
@@ -900,7 +900,7 @@
         "fingerprint": "f6098a03575ebb9afcc99036c4a0dd55ab752101a8430e9dee5f3434d2e4bd42",
         "totalNotes": 306
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 26,
@@ -911,7 +911,7 @@
         "fingerprint": "958bec90958526c1d4b014fd5713dc5f00f60fdf2aa07a821f2524bb474a8e64",
         "totalNotes": 529
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 37,
@@ -922,7 +922,18 @@
         "fingerprint": "861826be1cd19d38e3ab1e589883e6cf674099d79f3ced60c5a4c50f3dce387b",
         "totalNotes": 701
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
+    },
+    {
+      "songNo": 69,
+      "level": 4,
+      "selected": {
+        "relativePath": "07 Game Music/Brave Sword Braver Soul/Brave Sword Braver Soul.tja",
+        "course": "oni",
+        "fingerprint": "9f97619dfd8ddef36961debf262d24cca7c1d41fd53bc5862e92aaf41e41b263",
+        "totalNotes": 471
+      },
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 76,
@@ -933,7 +944,7 @@
         "fingerprint": "8c920247d13fc873bdba7bbc66508d5469d474a49f9365a499a3030bf7f2e370",
         "totalNotes": 414
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 76,
@@ -944,7 +955,7 @@
         "fingerprint": "ab52e3e2c7ce9f05ac2545b4641ffc94100c5186a1c9934fa095ca270e365c0a",
         "totalNotes": 604
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 101,
@@ -955,7 +966,29 @@
         "fingerprint": "84b0c9e0997d8c533c0405620f73f9d5aa6735f8ed4ed205e3c3b0884a62b7e0",
         "totalNotes": 285
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
+    },
+    {
+      "songNo": 106,
+      "level": 5,
+      "selected": {
+        "relativePath": "09 Namco Original/Day by Day/Day by Day.tja",
+        "course": "edit",
+        "fingerprint": "b5fc9e1a1b3964ca95ac121947aae1c3b04f22d479cb752c60e155608084b490",
+        "totalNotes": 833
+      },
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
+    },
+    {
+      "songNo": 115,
+      "level": 4,
+      "selected": {
+        "relativePath": "07 Game Music/Dragon Ball Heroes Galaxy Mission Series Theme Song/Dragon Ball Heroes Galaxy Mission Series Theme Song.tja",
+        "course": "oni",
+        "fingerprint": "d5b42c8fb56755ebc6433628f61cb09c29dc2535f30eae4c2ba506be7aee4085",
+        "totalNotes": 341
+      },
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 116,
@@ -966,7 +999,7 @@
         "fingerprint": "ca680c00ac02df95b050b703144cb3939b4610c6aebc94e18632a6b2c8f279d5",
         "totalNotes": 365
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 129,
@@ -977,7 +1010,7 @@
         "fingerprint": "8401a51dc8b5066924826cf49976b0c97df868e575609af3870587a0b32bfd12",
         "totalNotes": 358
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 142,
@@ -988,7 +1021,7 @@
         "fingerprint": "702186b99dbd0bfeeb6ef58603848e565ca7248ac0ea71a72a1d6b85e0c38ec3",
         "totalNotes": 374
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 146,
@@ -999,7 +1032,7 @@
         "fingerprint": "abcbd3f3dd8536f9e51de77dd88d02e75d5b2077251dac84c8886627d1c40d49",
         "totalNotes": 432
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 157,
@@ -1010,7 +1043,7 @@
         "fingerprint": "d2fe1c8b98a2ddebb6038573c70974d75e269d974c07a2acb32823fc692c235d",
         "totalNotes": 329
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 161,
@@ -1021,7 +1054,7 @@
         "fingerprint": "bb80739c18fef5793b3b9705d1d021d34322825bd028ad24ba2f4a2763fc9640",
         "totalNotes": 336
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 165,
@@ -1032,7 +1065,7 @@
         "fingerprint": "929e2f2d5c526e4ec954942422fa9cc60a7e366d7751d9a52931c28c6b6ca40f",
         "totalNotes": 752
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 165,
@@ -1043,7 +1076,7 @@
         "fingerprint": "6032c8110193296d6145591a2d830ce65e942d2edd09a7a9eca3d661f8017197",
         "totalNotes": 999
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 190,
@@ -1054,7 +1087,18 @@
         "fingerprint": "4a247909bedc17986ae2d1c0e31abbe247987e914b6a9c223d8e7a69c7d9c007",
         "totalNotes": 929
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
+    },
+    {
+      "songNo": 197,
+      "level": 5,
+      "selected": {
+        "relativePath": "07 Game Music/The world is all one/The world is all one.tja",
+        "course": "edit",
+        "fingerprint": "3d964853234039c1e1476519580090cce1d5dcce2ded3d7666a35242db2da10a",
+        "totalNotes": 765
+      },
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 208,
@@ -1065,7 +1109,7 @@
         "fingerprint": "6411b70d03d5f44ed9c4eb61dd6ffefa37d6040af8bc477c1489d9c7c5d24f34",
         "totalNotes": 328
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 224,
@@ -1076,7 +1120,7 @@
         "fingerprint": "f82e6e688faa91b136414456a2a3ca43bf5ea6fd8693f6beef404b4b0cb120d3",
         "totalNotes": 469
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 235,
@@ -1087,7 +1131,7 @@
         "fingerprint": "f96bcd745dad33c416d6f572e651bedaaa42851fb386d6c53c9f7c5306b7a745",
         "totalNotes": 563
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 236,
@@ -1098,7 +1142,7 @@
         "fingerprint": "55fcafc812fb378ff8dd1db461f3f9055940def6887f79bdb36944c1d5bbba8c",
         "totalNotes": 371
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 251,
@@ -1109,7 +1153,7 @@
         "fingerprint": "0b9e39557db03998621be5dde075cd3faf5c15432afce569a8cba4ee760aa703",
         "totalNotes": 949
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 253,
@@ -1120,7 +1164,7 @@
         "fingerprint": "4ee74a859cb54c01be71dbdc83fab546da180296310dc6c26211badb61379b45",
         "totalNotes": 485
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 253,
@@ -1131,7 +1175,7 @@
         "fingerprint": "d31b78e1329e2b0283fa76387af1c581c1fc35b769a6d565b148de571939c530",
         "totalNotes": 636
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 267,
@@ -1142,7 +1186,7 @@
         "fingerprint": "00f46203fee7d580eee679fdad95c6d3fab1e5129950502b36daf9c4cf0a038f",
         "totalNotes": 417
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 271,
@@ -1153,7 +1197,7 @@
         "fingerprint": "3443c0ae435e2f6803f31cbcc11f3dbc17bd0c865b0814a4691715ae1d9a47b4",
         "totalNotes": 345
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 271,
@@ -1164,7 +1208,7 @@
         "fingerprint": "b73fe82ab1f407d0c551792bd4675991601bc987655093f30a6a5fc9a354e76c",
         "totalNotes": 757
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 272,
@@ -1175,7 +1219,7 @@
         "fingerprint": "33918744e745a8d5a2562d73eead3193118a83bcccbbeec75882eb8e02aa7463",
         "totalNotes": 443
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 272,
@@ -1186,7 +1230,7 @@
         "fingerprint": "0c5366a17d10e06446b7ca13b9301b726cff37a9a37e30693009dc3e9c7eee59",
         "totalNotes": 777
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 291,
@@ -1197,7 +1241,18 @@
         "fingerprint": "da7eaea0a40c08e69f08e0a7ea2b2b704ca8219e1627514fa160027ee15c8b24",
         "totalNotes": 722
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
+    },
+    {
+      "songNo": 301,
+      "level": 5,
+      "selected": {
+        "relativePath": "09 Namco Original/My Mine/My Mine.tja",
+        "course": "edit",
+        "fingerprint": "c62ea10b538b9d0416683cfd9376d0f694b33dc987b3f47aa6635fc36e49aa8c",
+        "totalNotes": 914
+      },
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 312,
@@ -1208,7 +1263,7 @@
         "fingerprint": "0c429533d48d4057bdae8efae1991e466530e117658a1b9067adc73bf94aece1",
         "totalNotes": 291
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 319,
@@ -1219,7 +1274,7 @@
         "fingerprint": "7bae475c882c0087a90d7608befd87b201dfadd94da79f26b372fd4df1363b4b",
         "totalNotes": 466
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 331,
@@ -1230,7 +1285,7 @@
         "fingerprint": "59e9d037b2d632f25c6cebda6df41755b07565b15051bcfc785efeb6f542576c",
         "totalNotes": 794
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 339,
@@ -1241,7 +1296,7 @@
         "fingerprint": "00518288805313c5281593c89c76af900c4d49fa4d3d7ace7a0ffb73ca03bdef",
         "totalNotes": 410
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 340,
@@ -1252,7 +1307,7 @@
         "fingerprint": "8b34ed7ad92ec6708c3fe045cc958a9076379060f086348d0c9043b853d8bcc2",
         "totalNotes": 538
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 353,
@@ -1263,7 +1318,7 @@
         "fingerprint": "3d83815e49630fd1961000613c9fb3b2c25ae5081250fd367c03d9bf62c2196e",
         "totalNotes": 384
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 381,
@@ -1274,7 +1329,7 @@
         "fingerprint": "28aa081ac8a1ca1c34b0a8562c1184961b008f7d90105726198522cc951ceb4b",
         "totalNotes": 419
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 415,
@@ -1285,7 +1340,7 @@
         "fingerprint": "73fba993f13b7f265b7e45321ddd0de1d59f248109ccb00da2a7db19350d2cdd",
         "totalNotes": 521
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 424,
@@ -1296,7 +1351,7 @@
         "fingerprint": "d44b41da376bc12b217d838235a6f8768b3205cc118ae29dd9399c62cbfab907",
         "totalNotes": 745
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 449,
@@ -1307,7 +1362,7 @@
         "fingerprint": "38fed32e372df408689b584fa1173f351315d37644c887149b2557dada5486f3",
         "totalNotes": 784
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 457,
@@ -1318,7 +1373,7 @@
         "fingerprint": "2f15e7c4d534490a4f2c8b9fec2832eba0341ab3292559c207f4f22498e4a9a9",
         "totalNotes": 683
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 457,
@@ -1329,7 +1384,7 @@
         "fingerprint": "98a141e2278f67b5fc5d8f2a7cdf26d8d08f8d4e9753ad6fb5ae56157c49b73b",
         "totalNotes": 1142
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 460,
@@ -1340,7 +1395,7 @@
         "fingerprint": "7c7954ebbedb5707010903a6c152f74ce874a2532173a8fabc43dad59de3ba2b",
         "totalNotes": 272
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 465,
@@ -1351,7 +1406,7 @@
         "fingerprint": "54c9502c82d376de1bdb78949de468bdad52ac07c86f0ce389fafa0e055ba9c6",
         "totalNotes": 666
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 466,
@@ -1362,7 +1417,7 @@
         "fingerprint": "41f042a920a19a6d806afc56902bfcb51e9769113e719b17060c9aa94fee6a69",
         "totalNotes": 384
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 467,
@@ -1373,7 +1428,7 @@
         "fingerprint": "14bccce3668d965e3941b4e7d08d600f50c0db6035b8a33d326dd7fee2bf3bf7",
         "totalNotes": 282
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 468,
@@ -1384,7 +1439,7 @@
         "fingerprint": "6c8e4880bcb6a3bf61f0167cae160f94db9fe8928f488dc167109c35f54b342c",
         "totalNotes": 292
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 487,
@@ -1395,7 +1450,7 @@
         "fingerprint": "9a4b666e598a35afff2a8c202d8e664be200b6eb90132e28db1e46471ad6e392",
         "totalNotes": 556
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 487,
@@ -1406,7 +1461,7 @@
         "fingerprint": "198c13a5b63ff5569291a31564150a5b9bf8b3ac87a36b81bdf97de42025a5ac",
         "totalNotes": 806
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 489,
@@ -1417,7 +1472,7 @@
         "fingerprint": "621480b45432c6250cf3551ceb344b4fb1c9960d0a0141d1c0f251e86ce9f179",
         "totalNotes": 371
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 491,
@@ -1428,7 +1483,7 @@
         "fingerprint": "d1e8151afd13dcb0350c119be4de8b7d7662fe4fafcea236e8e083cafe67ca7e",
         "totalNotes": 932
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 492,
@@ -1439,7 +1494,7 @@
         "fingerprint": "3e8347f07065d8707aa459686c24108fc7c39193734e7a4b128edb47d2c32ac2",
         "totalNotes": 145
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 515,
@@ -1450,7 +1505,7 @@
         "fingerprint": "3b79d004e24d2a84fe38dc31844e6a9c20b5561cd1426d5fc84ed05dc8b0a597",
         "totalNotes": 488
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 541,
@@ -1461,7 +1516,7 @@
         "fingerprint": "5489eb4c81577720b5175750c6fa890b3178c2625a8e9db3c764882c22758454",
         "totalNotes": 473
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 542,
@@ -1472,7 +1527,7 @@
         "fingerprint": "f46b60f29fd4650992c562753ad2d41a7d3d11a3b93368a0c787702881274d3c",
         "totalNotes": 389
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 544,
@@ -1483,7 +1538,7 @@
         "fingerprint": "8bf0bc70c491836433ff7b9647e7cd6fe13dd5ee519919cd37ff6c598e7cae50",
         "totalNotes": 609
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 545,
@@ -1494,7 +1549,7 @@
         "fingerprint": "fc0ada4dfda35f7cf2da0e32d0b5459918cb80346ded84b6eca880394812ce10",
         "totalNotes": 602
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 582,
@@ -1505,7 +1560,7 @@
         "fingerprint": "aa11edc06334f877dd88bb599f6fc7abfb63395183373778c5572c4535027b27",
         "totalNotes": 292
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 583,
@@ -1516,7 +1571,7 @@
         "fingerprint": "658fd2cc6cd74636efebcc801f3773ab655a0042aa59828c4504227de61dabd4",
         "totalNotes": 339
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 601,
@@ -1527,7 +1582,7 @@
         "fingerprint": "9b93ad7530e7f05b031b6903886da5bf309366c0136f59c2a88cb28c528d19a2",
         "totalNotes": 441
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 601,
@@ -1538,7 +1593,7 @@
         "fingerprint": "2f4c1894bfbf0e4dc68854ecf9433430d68e3bd61e60997a9d082a919129f433",
         "totalNotes": 757
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 606,
@@ -1549,7 +1604,7 @@
         "fingerprint": "882524806604dd18b6519a162bf36e861d74afe92a69238261d8572f161d8299",
         "totalNotes": 505
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 606,
@@ -1560,7 +1615,7 @@
         "fingerprint": "9b6f4065b91d6c02cea411749e113bd530481c4f5ebacda9b968cb9fd1027e19",
         "totalNotes": 798
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 607,
@@ -1571,7 +1626,7 @@
         "fingerprint": "1010488c05991dbf6e208db3727e6a9806a0897191500149620102f96bb36785",
         "totalNotes": 365
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 637,
@@ -1582,7 +1637,7 @@
         "fingerprint": "6f459a0e131f7a5904500678d011715683b2c12425e0dde46ad276e61b6c6eb5",
         "totalNotes": 736
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 640,
@@ -1593,7 +1648,7 @@
         "fingerprint": "ee2e4ebaf7db609c9a62888adc53e136271524e21824d116be1cb7ad9578c136",
         "totalNotes": 614
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 647,
@@ -1604,7 +1659,7 @@
         "fingerprint": "277c4e05ffc426414991313d3a013dedd32eadffb3740c8a7a8ec7760725cc22",
         "totalNotes": 687
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 661,
@@ -1615,7 +1670,29 @@
         "fingerprint": "49e95885abd710f32ec45fe097a9a5732c0ebc4f3457914d3cee632023441140",
         "totalNotes": 343
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
+    },
+    {
+      "songNo": 663,
+      "level": 4,
+      "selected": {
+        "relativePath": "09 Namco Original/Fuun Bachio Sensei/Fuun Bachio Sensei.tja",
+        "course": "oni",
+        "fingerprint": "d65feabd645c81f1295a76d6ed6df81fd2acf8b541fd641dd81a4f3511244e55",
+        "totalNotes": 476
+      },
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
+    },
+    {
+      "songNo": 663,
+      "level": 5,
+      "selected": {
+        "relativePath": "09 Namco Original/Fuun Bachio Sensei/Fuun Bachio Sensei.tja",
+        "course": "edit",
+        "fingerprint": "fb84f6439a7876d671bdcfd413f9b25f3b79cd1575353e43e79bab7098bfa98e",
+        "totalNotes": 694
+      },
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 668,
@@ -1626,7 +1703,7 @@
         "fingerprint": "9f2a7f710abc8ee150240a126cb81ee11106cb55984181b2fa75d92bb71dc364",
         "totalNotes": 156
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 670,
@@ -1637,7 +1714,7 @@
         "fingerprint": "5d59eecc3fff75e69453afe457c3ce96a5474177d051845997e2393b29cb6d62",
         "totalNotes": 690
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 693,
@@ -1648,7 +1725,7 @@
         "fingerprint": "090898dd96bb7f76307e12039eb44d382338bb228fba5a04d5a889bc32e6ae69",
         "totalNotes": 569
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 694,
@@ -1659,7 +1736,7 @@
         "fingerprint": "81711ce70967710219e774042cb694174dfc4d9c93c2d820b3a50495e8a7affb",
         "totalNotes": 304
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 697,
@@ -1670,7 +1747,7 @@
         "fingerprint": "225d37907b9093e53111fe16c927886fbe898c497dd9058ea82be51e3994ba26",
         "totalNotes": 944
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 698,
@@ -1681,7 +1758,7 @@
         "fingerprint": "4f23d44a5011ed55a05791cb0d42895b96eb45ad22991afc4c5ae6b78c01e657",
         "totalNotes": 1194
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 699,
@@ -1692,7 +1769,7 @@
         "fingerprint": "f746f995ddb2bcd46f50062337e9f71e8226055064c6cac18311e9ddc851356f",
         "totalNotes": 1000
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 704,
@@ -1703,7 +1780,7 @@
         "fingerprint": "c5b33d1cadaefdefc05e385650fedb5dea7a1cd3db00d498b64f20cc91b61928",
         "totalNotes": 620
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 706,
@@ -1714,7 +1791,7 @@
         "fingerprint": "03b9421a84eb0bebfd1c99819e16c43f79a0c59fc8d067e30ca0782e763f17f7",
         "totalNotes": 350
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 707,
@@ -1725,7 +1802,7 @@
         "fingerprint": "571ca27cdb44ac2587daa25ec5feb49f67e33fc067c598a236bf5770f7f0a956",
         "totalNotes": 734
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 710,
@@ -1736,7 +1813,7 @@
         "fingerprint": "989bdca0727b308c68a473eed36f6e894a192b96fcc8645acd64598483e8c50e",
         "totalNotes": 275
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 711,
@@ -1747,7 +1824,7 @@
         "fingerprint": "5d01ad58059da488c4ffa9ae139b993f4a9f72a2b0221289b803d38062120ff4",
         "totalNotes": 329
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 711,
@@ -1758,7 +1835,7 @@
         "fingerprint": "35078a9814b0887cc94be43ff3b1255cc0078d56dc63ee65579830dc199b8fd2",
         "totalNotes": 579
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 713,
@@ -1769,7 +1846,7 @@
         "fingerprint": "54cab85e70bbdbf4be8a6c0eea60dc09328167338acca7e0c02eece1f45ecba7",
         "totalNotes": 765
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 717,
@@ -1780,7 +1857,7 @@
         "fingerprint": "64b51cfa413a75fed8f36501a96e0bbd5df7af9f724bdf0b2c4e13d4dfd03e71",
         "totalNotes": 765
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 717,
@@ -1791,7 +1868,7 @@
         "fingerprint": "c66ff35ada9f8c8f7fc115584b48121d4a45866b8ab7c173e4f163709cb291be",
         "totalNotes": 888
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 729,
@@ -1802,7 +1879,7 @@
         "fingerprint": "1faa743c25f6a2484d902c30729fa5c09c8be35ac21b493bff8c15d607d34bfb",
         "totalNotes": 223
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 739,
@@ -1813,7 +1890,7 @@
         "fingerprint": "bb1656e43bbcde8046d07f38190f0e37329dc0555da33f116ccf0bffc71e3e15",
         "totalNotes": 876
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 740,
@@ -1824,7 +1901,18 @@
         "fingerprint": "ad8242d329bdffa8694ebe412d4661c92ba25bc8cb57ab65ee03f832b2ed0c6b",
         "totalNotes": 546
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
+    },
+    {
+      "songNo": 743,
+      "level": 4,
+      "selected": {
+        "relativePath": "01 Pop/USA/USA.tja",
+        "course": "oni",
+        "fingerprint": "d684352e1c67efb8182d875aaa5195e2e9c6dda740514ea421a99fb7ff694390",
+        "totalNotes": 428
+      },
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 754,
@@ -1835,7 +1923,7 @@
         "fingerprint": "731ffa6558e529f565b5a666e88713d8115526f23a78caae01c6a0e29507cea6",
         "totalNotes": 634
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 756,
@@ -1846,7 +1934,7 @@
         "fingerprint": "adb1c6faa59828a5a9080f0a008e517b53e3f5d9c15a9cb2aef0756adffdf747",
         "totalNotes": 973
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 757,
@@ -1857,7 +1945,7 @@
         "fingerprint": "97eccbf425aabd0afc2fc2843970fb3656d0c304699efb31aca5b1bcb6e1ade2",
         "totalNotes": 1129
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 758,
@@ -1868,7 +1956,7 @@
         "fingerprint": "f177f7029e8edb6547dcdfdafdca3ee5b693138dd0c5df98ac0a9bc766736c29",
         "totalNotes": 1134
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 766,
@@ -1879,7 +1967,7 @@
         "fingerprint": "7ad0b437b51536f76a985c708198cbf5721f7f2bee37bcd9190b9a8598c949f2",
         "totalNotes": 407
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 780,
@@ -1890,7 +1978,7 @@
         "fingerprint": "b17f182f93d11a224d704e4a21e0fc73abe9f66dd2bd302c61e88897e39e2d74",
         "totalNotes": 726
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 782,
@@ -1901,7 +1989,7 @@
         "fingerprint": "6fac381b345b9730a4eb6008cfd7c766ec2fd5516be883ceb0e465cc8a56e525",
         "totalNotes": 522
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 783,
@@ -1912,7 +2000,7 @@
         "fingerprint": "5883953ab4eb39794459712303811c78d2bdfad6b6ad5e880f719f02548086c6",
         "totalNotes": 641
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 797,
@@ -1923,7 +2011,7 @@
         "fingerprint": "804f7ec347a21b3ceaca7ef5abe63c24fd10366ae985b52f1b820bed74c8b73b",
         "totalNotes": 657
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 804,
@@ -1934,7 +2022,7 @@
         "fingerprint": "d37df21eee291b50ff6521266d5657ddd7697f0a95a09ed0f5846486687fdd24",
         "totalNotes": 540
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 804,
@@ -1945,7 +2033,7 @@
         "fingerprint": "bd7d589537918be3e6ac4ffafce8604eb7c4841cb948e482b1d35583e4f87f74",
         "totalNotes": 820
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 805,
@@ -1956,7 +2044,7 @@
         "fingerprint": "674d9c68b48b1364ee791d23b54e901e6e0ab12b2c3216e57f4b4ca3c6cd5afd",
         "totalNotes": 740
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 822,
@@ -1967,7 +2055,7 @@
         "fingerprint": "3f5c4a1660630ab7ef72f4e459189ca6433e73ac68a89cd8f45846cd4a81aeb0",
         "totalNotes": 765
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 847,
@@ -1978,7 +2066,7 @@
         "fingerprint": "95fce921c34dc553cc27d2586f1e003df29469613a96428e68ca45f82a6993e0",
         "totalNotes": 217
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 848,
@@ -1989,7 +2077,7 @@
         "fingerprint": "97cbd24d39059aca8938adce3102f224d23322da037e9e9095b5bb8735ca7a24",
         "totalNotes": 348
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 853,
@@ -2000,7 +2088,7 @@
         "fingerprint": "f2c3d4b016ffc1c8f200ae2e95eb63f927bfb437f90853cbef61ba7f81fea734",
         "totalNotes": 382
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 864,
@@ -2011,7 +2099,7 @@
         "fingerprint": "a8747e2d0ec9aeb1181ca1bdb6607f582c81eb0caf827f828f8db8c7aef17509",
         "totalNotes": 882
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 889,
@@ -2022,7 +2110,7 @@
         "fingerprint": "aef2c4b0ef400becbbccb4c30dbcab123c9a2873c45c4bc55aee8b005496a997",
         "totalNotes": 593
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 897,
@@ -2033,7 +2121,7 @@
         "fingerprint": "583620dce8a1b60f6f6b357706c33f73d80757bf8dc4a9c8ab69e1018e259846",
         "totalNotes": 393
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 902,
@@ -2044,7 +2132,7 @@
         "fingerprint": "f6c5627f55a530beddd1d9bb5599e828f360fbaea2afe01430e884a6aa9db727",
         "totalNotes": 288
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1007,
@@ -2055,7 +2143,7 @@
         "fingerprint": "d15960f573143233e89df5ff84ebc720eb1b7b4537bf35b50f46474e878184b5",
         "totalNotes": 187
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1008,
@@ -2066,7 +2154,7 @@
         "fingerprint": "0642d0e83eddc9fc72d32a1e4ffec5dde5d27b5d54eaafa2e7a282c6d63d8ec5",
         "totalNotes": 249
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1016,
@@ -2077,7 +2165,7 @@
         "fingerprint": "d42bab11be39c90c94073a50797e9c69b5f03ad7391e4ed7e4c6d608892a8da7",
         "totalNotes": 426
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1038,
@@ -2088,7 +2176,7 @@
         "fingerprint": "ad184566f53256bc6323306fc82827e90d563a66265d7b705252c9d036a89db2",
         "totalNotes": 480
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1046,
@@ -2099,7 +2187,7 @@
         "fingerprint": "85aff991cdd8a368f83760c3985d08b7734f78c26dcfd6337a5cf8720102dd5c",
         "totalNotes": 541
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1046,
@@ -2110,7 +2198,7 @@
         "fingerprint": "312c07f4315a8513d94399cdbfe0cf73d9b7c4eaa653562debd4d06d8a97e480",
         "totalNotes": 621
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1060,
@@ -2121,7 +2209,7 @@
         "fingerprint": "339a5a7cab67335f551a18a802331c5f2967c6bf4dd1a8ff7a6e593422132b5c",
         "totalNotes": 500
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1064,
@@ -2132,7 +2220,7 @@
         "fingerprint": "08f8de44ac3a49af5d012597a088aa8e7a9ee92ba011e1a588460eae2906eb54",
         "totalNotes": 296
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1087,
@@ -2143,7 +2231,7 @@
         "fingerprint": "be644768395db2649dda472db10167deb91e88c75cb15e8496c34efc374644a5",
         "totalNotes": 432
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1091,
@@ -2154,7 +2242,18 @@
         "fingerprint": "ab35c71730e499cbc411cafd91b2e20e4e5b542efadf2b6ca271e423eef106da",
         "totalNotes": 274
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
+    },
+    {
+      "songNo": 1103,
+      "level": 5,
+      "selected": {
+        "relativePath": "03 Vocaloid/Godish/Godish.tja",
+        "course": "edit",
+        "fingerprint": "28457b75c0e853120f3d2f21353f1cc00119f6773a809357fb131e625c8f6af6",
+        "totalNotes": 699
+      },
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1168,
@@ -2165,7 +2264,7 @@
         "fingerprint": "75d8af6bb7a2787d35b15fbc44081ebd3b98598f125ea14ea96c49e2981c1cc3",
         "totalNotes": 441
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1168,
@@ -2176,7 +2275,7 @@
         "fingerprint": "fbb3c3c3e97cb8a7f9db10ee76877748d839d8213075d87988fef325aefdd70f",
         "totalNotes": 733
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1175,
@@ -2187,7 +2286,7 @@
         "fingerprint": "55bac0e901319f0f5a21a2975aa2b40a1a02eaa1c0cd10c5d6c5d912cf207da7",
         "totalNotes": 591
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1181,
@@ -2198,7 +2297,7 @@
         "fingerprint": "58ca92c5b384fb7bf6f23551444c394074203b28296bec6a3610b04542b71b97",
         "totalNotes": 231
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1195,
@@ -2209,7 +2308,7 @@
         "fingerprint": "ad647295794fb95da2b1a7e514e4ccbaed45a99a56ce4f07fe70b1de85027f71",
         "totalNotes": 319
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1198,
@@ -2220,7 +2319,18 @@
         "fingerprint": "7a218d1e25be4167d2e76dc2beb1df6d5160de93d1147f1f4635f82f2c41adc2",
         "totalNotes": 708
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
+    },
+    {
+      "songNo": 1210,
+      "level": 5,
+      "selected": {
+        "relativePath": "02 Anime/Dokimeki Diary/Dokimeki Diary.tja",
+        "course": "edit",
+        "fingerprint": "3d05039915aba10867c220c1432b0153614293e82a1e3eb89a335a94e5014854",
+        "totalNotes": 636
+      },
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1219,
@@ -2231,7 +2341,7 @@
         "fingerprint": "b3335e2a150275ec0320d52a73a90a73262de9bcff3e57d5b8a6e8250e479292",
         "totalNotes": 557
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1219,
@@ -2242,7 +2352,7 @@
         "fingerprint": "ed069d50a378c2798d397bcbb5315b4e51b7ca87f67cbe55c978737c31536437",
         "totalNotes": 825
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1221,
@@ -2253,7 +2363,7 @@
         "fingerprint": "5e4420eff94b09eca9e8e48ec8f69b283b8827e78b2e492188730becd40a7a1a",
         "totalNotes": 465
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1221,
@@ -2264,7 +2374,40 @@
         "fingerprint": "7118ad854e8145e94245cb0f1956a7133805c0d8df35029ee75f9d5ac2f2c088",
         "totalNotes": 526
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
+    },
+    {
+      "songNo": 1222,
+      "level": 4,
+      "selected": {
+        "relativePath": "07 Game Music/Brave Sword Braver Soul/Brave Sword Braver Soul Souuchi.tja",
+        "course": "oni",
+        "fingerprint": "b9d58367c3a828f0f2c7157c64049774dd644a4799b0fadc3c2b89dada03b481",
+        "totalNotes": 288
+      },
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
+    },
+    {
+      "songNo": 1223,
+      "level": 4,
+      "selected": {
+        "relativePath": "07 Game Music/KAGEKIYO Genpei Touma Den Medley/KAGEKIYO Genpei Touma Den Medley Souuchi.tja",
+        "course": "oni",
+        "fingerprint": "0dababa766112381d7754b3cc75cc18a54eddcfc0cf8294cae8baf5f203bf9f9",
+        "totalNotes": 466
+      },
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
+    },
+    {
+      "songNo": 1239,
+      "level": 4,
+      "selected": {
+        "relativePath": "09 Namco Original/Many wow bang/Many wow bang Souuchi.tja",
+        "course": "oni",
+        "fingerprint": "b6255cbc43219f8f1ea68e74b7722ad4edafd0e862544147c16538068fc7503a",
+        "totalNotes": 329
+      },
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1294,
@@ -2275,7 +2418,7 @@
         "fingerprint": "49bfa019f4a05931d34c042d972aff6ece762fc771198230486ac16fb661eaf9",
         "totalNotes": 307
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1389,
@@ -2286,7 +2429,7 @@
         "fingerprint": "8ae9684c610b8b1a9b1902e5031f5c49328a2697594eedd836dfbdd16f122f0c",
         "totalNotes": 344
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1396,
@@ -2297,7 +2440,7 @@
         "fingerprint": "fc640c92383608babfb5599eff4fae9348b4c93914cdb45f2af689c5805ba633",
         "totalNotes": 617
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1399,
@@ -2308,7 +2451,7 @@
         "fingerprint": "bd7e9136cc2d4a1a0c2da2a3c9aeef9ab0eba07a7d22e9f3e922507a439912b0",
         "totalNotes": 311
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1424,
@@ -2319,7 +2462,7 @@
         "fingerprint": "dfcea759803f9e12698f2395afd6f69444f15be9ec7d5bb7a26af9bfc80582c4",
         "totalNotes": 745
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1425,
@@ -2330,7 +2473,7 @@
         "fingerprint": "0ace4b10ad9af19f22729302e35a84ceb49e3128215b259195bc12537fb16a4b",
         "totalNotes": 821
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1426,
@@ -2341,7 +2484,7 @@
         "fingerprint": "0b96588fa0155d0c80fbb344bcc9523729885e506f4f6edb97dd2f43e2310606",
         "totalNotes": 479
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1427,
@@ -2352,7 +2495,7 @@
         "fingerprint": "66ebe2c7cfdfc3c81a4a69b15c98fc71d171362fa50f7057b0d9c59a6ca858da",
         "totalNotes": 802
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1428,
@@ -2363,7 +2506,7 @@
         "fingerprint": "e52a9fef6f100741430fbc3fbd1f8c1218d8241bc368fd7e6662bf06f00a9085",
         "totalNotes": 642
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1435,
@@ -2374,7 +2517,7 @@
         "fingerprint": "fb9d40353529c5c436fec187de9dd783c0d555004b1b189ac315faaf5b8fc6b2",
         "totalNotes": 422
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1436,
@@ -2385,7 +2528,7 @@
         "fingerprint": "e3024a2c9bdb12e3facbb745ad12b73aa8d7065901034ff689012bc7ced5b910",
         "totalNotes": 885
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1437,
@@ -2396,7 +2539,7 @@
         "fingerprint": "318fdd036520a7ac37698791e98bc5ff759af21b39dcf651b137083a71c57367",
         "totalNotes": 806
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1447,
@@ -2407,7 +2550,7 @@
         "fingerprint": "46edbf7ceea479d680465a76a0c11fdb06d32e1bb94b9cd613acb9695820bce8",
         "totalNotes": 687
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1448,
@@ -2418,7 +2561,7 @@
         "fingerprint": "4089ddfa8d10cf8e226de8f8f7ba77d1b2326dd2ec4c5ee549a76b847677805f",
         "totalNotes": 715
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1449,
@@ -2429,7 +2572,7 @@
         "fingerprint": "97ab38f63ba1b1cbcac1cba3701e038df7947f7670d628e1ac2dbbb435b5acef",
         "totalNotes": 648
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1453,
@@ -2440,7 +2583,7 @@
         "fingerprint": "161c80cb7a86e3a6b7853d2df50405d5113078387a1ac456e68bb47ccaecd8a0",
         "totalNotes": 350
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1454,
@@ -2451,7 +2594,7 @@
         "fingerprint": "4b9f0a004f1dacf2b1b3f1640b5b50f9eae76dfcf991823fae8e764cdd4f913d",
         "totalNotes": 478
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1455,
@@ -2462,7 +2605,7 @@
         "fingerprint": "91dae62c77163808cbd31453dedf35b34a1ebb33684122c50a41200d21ac367c",
         "totalNotes": 503
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1455,
@@ -2473,7 +2616,7 @@
         "fingerprint": "e73b5bde721c8d420843d6466581e48c95b6c6f75a7a5fd477bf833351008ac1",
         "totalNotes": 766
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1456,
@@ -2484,7 +2627,7 @@
         "fingerprint": "90a529732f6a5a6d51070386f298b6c774ce3c2e236f52920e7fc6db717f4ba5",
         "totalNotes": 701
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1457,
@@ -2495,7 +2638,7 @@
         "fingerprint": "0d07ee14f3f32f5b74e5274595eaba9710838461ea23744869075d70d080ecf4",
         "totalNotes": 622
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1458,
@@ -2506,7 +2649,7 @@
         "fingerprint": "ff58492cbaae5a037082a93bb86403cdf0ca696f2ab9b3362b0a700319d2c57b",
         "totalNotes": 592
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1459,
@@ -2517,7 +2660,7 @@
         "fingerprint": "68fef72d06d568aaaa982bbecf66d4503dd97a15c01f9606fa58cd45b5c55517",
         "totalNotes": 516
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1460,
@@ -2528,7 +2671,7 @@
         "fingerprint": "d517729d2aca0c8930ec23532f680ab3572063a36dde0f249332f014c8b5c562",
         "totalNotes": 412
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1461,
@@ -2539,7 +2682,7 @@
         "fingerprint": "41ec6c938a1f6b4b1cdb6b93a322a3bd4ed85e5e5decb034e5a6307b4c84523b",
         "totalNotes": 438
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1462,
@@ -2550,7 +2693,7 @@
         "fingerprint": "cd59bf34e243e5fd31bf93b031a315a7788d133756f20c283f120120679a03ed",
         "totalNotes": 354
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1463,
@@ -2561,7 +2704,7 @@
         "fingerprint": "699c875c778a48384552882560add8b3adceabc63107fe536a813a2c6979f062",
         "totalNotes": 432
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1464,
@@ -2572,7 +2715,7 @@
         "fingerprint": "45bcb57a55ba38ddf0ad84342fc2b662e1a20d091347e1c00830a7dae699f9c2",
         "totalNotes": 765
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1465,
@@ -2583,7 +2726,7 @@
         "fingerprint": "e25e5e23093464e98f1131d01db13c3519365dc5023b1ec74851c2ea596aa608",
         "totalNotes": 779
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1465,
@@ -2594,7 +2737,7 @@
         "fingerprint": "b37ccd1a41bc8c83b2dc6dfdbdfb9ee5f4e72eb00159880d76382384f89ffc18",
         "totalNotes": 1226
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1466,
@@ -2605,7 +2748,7 @@
         "fingerprint": "cea9d617dc55d814ee96ae3b5f451464ff89eaa387837bfe1a3ac8b108805b47",
         "totalNotes": 368
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1466,
@@ -2616,7 +2759,7 @@
         "fingerprint": "4564136215f5dc8c974761cd31bc8dec996da2ffbf63dc42007b190d1347dbe2",
         "totalNotes": 199
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1467,
@@ -2627,7 +2770,7 @@
         "fingerprint": "01147f05eb69ea485d469443b111bc6375289283908a099cb24ea14255c7f486",
         "totalNotes": 570
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1468,
@@ -2638,7 +2781,7 @@
         "fingerprint": "01b3ba2b825a7ae587c53a72642aabb5c93d00a5cd4a75887d4dbfa0488715c5",
         "totalNotes": 765
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1470,
@@ -2649,7 +2792,7 @@
         "fingerprint": "4eeacf194758076e8e5ea34f848131880a67a014b1fbd94da155cf043e142ebe",
         "totalNotes": 987
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1471,
@@ -2660,7 +2803,7 @@
         "fingerprint": "a37cc89d2a0a8f7927833725034df63ed592a139951e78689e47719a37c4c203",
         "totalNotes": 11
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1472,
@@ -2671,7 +2814,7 @@
         "fingerprint": "76d1be8a397b109d3b71052209a16783a25f3f1aa1d708ad8f7a4d5f7cfa3401",
         "totalNotes": 9
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1474,
@@ -2682,7 +2825,7 @@
         "fingerprint": "9b1be1ef2d9ddfa61c1f61896e035ad0ee54f93ed2924e722f15e02d017cca8a",
         "totalNotes": 1
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1475,
@@ -2693,7 +2836,7 @@
         "fingerprint": "273c83f02bae43b4a8db663b273d796ab0b9a270a5c0059e29f71b14e6607f36",
         "totalNotes": 282
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1476,
@@ -2704,7 +2847,7 @@
         "fingerprint": "18b5375d3b4aa12d79103d8ac0af3c3039fea43fea6c35bb61797e29d763db42",
         "totalNotes": 408
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1476,
@@ -2715,7 +2858,7 @@
         "fingerprint": "df9e29047f4e96e7749a4946d9a6f08dd297a680b6b526ffda3a414b9626146d",
         "totalNotes": 34
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1477,
@@ -2726,7 +2869,7 @@
         "fingerprint": "e4e6e9e409790b6d19d2e3f4dd92badb5c36770203ba245aef14d70c31a9ad31",
         "totalNotes": 684
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1477,
@@ -2737,7 +2880,7 @@
         "fingerprint": "273ea30afb8ae8ef7305e30a0457da4de7ea00083c2126d2ca791e9a73fd5246",
         "totalNotes": 57
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1482,
@@ -2748,7 +2891,7 @@
         "fingerprint": "037011ac71d71ef83998045afcfd1ee1de9f2131b490e61f739ffb6588853320",
         "totalNotes": 1
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1484,
@@ -2759,7 +2902,7 @@
         "fingerprint": "744fa39ab13f4953a54187a86f78232fde7635352c13bff1e5aa2f71ff68438e",
         "totalNotes": 765
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1485,
@@ -2770,7 +2913,7 @@
         "fingerprint": "3106ed9d1f0ffda9295d6f18c3a241cf359f3d5f1f28bddc89bc338cc021688e",
         "totalNotes": 1333
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1486,
@@ -2781,7 +2924,7 @@
         "fingerprint": "6ca8bd29731f809f1c45b3bf0a1165152bf3896034e6105d3e80dcba9b321690",
         "totalNotes": 44
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1487,
@@ -2792,7 +2935,7 @@
         "fingerprint": "b242d045c4a5b5aee0b9e69db896215d367199d208e46ebcdbe18c0bc1e4cea4",
         "totalNotes": 43
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1488,
@@ -2803,7 +2946,7 @@
         "fingerprint": "8f48b4a956a65cbede5869da48bf653a90b75921eff50e8fdd8fdca30fb51f81",
         "totalNotes": 46
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1489,
@@ -2814,7 +2957,7 @@
         "fingerprint": "bd445253b343397472b5c0ad9a6dffe8a6213b887af42aa0c62017a51ebf0680",
         "totalNotes": 42
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1490,
@@ -2825,7 +2968,7 @@
         "fingerprint": "9be4f06a24da55f56d9c83213a614d50475a23ecc9186e6e94ecf9ef18eed18d",
         "totalNotes": 358
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1491,
@@ -2836,7 +2979,7 @@
         "fingerprint": "aa37a5fd1dd5bc096c9c4e51dd570c29159fb666764fc14041e73379c2e4dc0c",
         "totalNotes": 994
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1492,
@@ -2847,7 +2990,7 @@
         "fingerprint": "e1cdbd3c03351f0fac3bdda25f7b95b11232849d106c053a602c30171a2000a0",
         "totalNotes": 376
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1492,
@@ -2858,7 +3001,7 @@
         "fingerprint": "b9cfd1498ceb608b22f2e64490db81d5cdeee7123dea39a6bfcd1ade0b98f7e6",
         "totalNotes": 539
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1493,
@@ -2869,7 +3012,29 @@
         "fingerprint": "df8f280d04c7ae28b932dd5138777dc2e468c7b6f1fc86f7140da9d62cb66abf",
         "totalNotes": 301
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
+    },
+    {
+      "songNo": 1494,
+      "level": 4,
+      "selected": {
+        "relativePath": "01 Pop/Sukisugite Metsu/Sukisugite Metsu.tja",
+        "course": "oni",
+        "fingerprint": "e11321c044982a5713576ea6dab087f45c67b3e9c2829603acd98f131be18629",
+        "totalNotes": 329
+      },
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
+    },
+    {
+      "songNo": 1494,
+      "level": 5,
+      "selected": {
+        "relativePath": "01 Pop/Sukisugite Metsu/Sukisugite Metsu.tja",
+        "course": "edit",
+        "fingerprint": "54a8d0649794d9adced0d36f68cd63848a08fa31e4c536fe2729d719409694e1",
+        "totalNotes": 658
+      },
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1495,
@@ -2880,7 +3045,7 @@
         "fingerprint": "9a4135deeaaf7a77f5e2d2316875362a5fed3ff39ed8589732769c86bb1a21ee",
         "totalNotes": 266
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1502,
@@ -2891,7 +3056,7 @@
         "fingerprint": "deae143a9ca0a2f68709aa2d0a638d2f801297c0f4d312e0abbb5d61cecc54cb",
         "totalNotes": 1059
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1503,
@@ -2902,7 +3067,7 @@
         "fingerprint": "456dff6a9f8b2b1a57da0c5aa50448a1d84f19baaa06fc149d1aee5a2f1477f1",
         "totalNotes": 938
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1504,
@@ -2913,7 +3078,7 @@
         "fingerprint": "6adc55c696a4cca9cfcd3a5be2805b71112b8ddfb0d67723cca2be2beed4aa60",
         "totalNotes": 408
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1505,
@@ -2924,7 +3089,7 @@
         "fingerprint": "02d4be98fc9550220b0edbeaa8933582e3a9ab56afc788c3e249fe53e0bee634",
         "totalNotes": 525
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1506,
@@ -2935,7 +3100,7 @@
         "fingerprint": "6abd480ed1184021c4b7f922e87dfef29818bc1bf82d93dfec246be0daff6ad4",
         "totalNotes": 564
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1507,
@@ -2946,7 +3111,7 @@
         "fingerprint": "bf08d9763b744ccf61fd8789e556992a5efb39e401880098beca1268d9bb7ab3",
         "totalNotes": 872
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1508,
@@ -2957,7 +3122,7 @@
         "fingerprint": "ac9fbf3e7bafa03684697502e887b9fc45cdeed1b0bef812b66c762ac137ac9f",
         "totalNotes": 422
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1509,
@@ -2968,7 +3133,7 @@
         "fingerprint": "cb422dd0393017a85471ad9623d21b237763bc25a5816e648a65923bc3f6af5b",
         "totalNotes": 765
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1510,
@@ -2979,7 +3144,7 @@
         "fingerprint": "869ddce2a187f04bff1590c07cd3dd971aaf6523b39ad916940e0557d8ed2b50",
         "totalNotes": 670
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1511,
@@ -2990,7 +3155,7 @@
         "fingerprint": "57f0ba755fd319b5b1f4d0ca89ca7fcf3f1833b607d8b105535be38c27752470",
         "totalNotes": 461
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1512,
@@ -3001,7 +3166,7 @@
         "fingerprint": "85be48c811e421252dcccab02f6d4fd14dd375d86725a65df105a9438fdc4471",
         "totalNotes": 639
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1513,
@@ -3012,7 +3177,7 @@
         "fingerprint": "83586ac2ad4c86d3b1ee6adad07dd579dcfc392e711436bd6c821346ba068d87",
         "totalNotes": 504
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1514,
@@ -3023,7 +3188,7 @@
         "fingerprint": "24828d5a62a02b0ff98eae557b5d05aae6e7ac5218216b7982b37fd40908d541",
         "totalNotes": 876
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1515,
@@ -3034,7 +3199,7 @@
         "fingerprint": "0b202335ec7f73b569e029214c348287d9ee685060ccfaf557e1c153565a7cb2",
         "totalNotes": 361
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1516,
@@ -3045,7 +3210,7 @@
         "fingerprint": "826e8555a7e7bb06a7b0fef17896b3534354bf9a44c912939d525ac4f572cc53",
         "totalNotes": 594
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1517,
@@ -3056,7 +3221,7 @@
         "fingerprint": "1f297f6c891f38116513747f2ceefa4d96582fda1d8a56506625dea0c2a5be92",
         "totalNotes": 334
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1518,
@@ -3067,7 +3232,7 @@
         "fingerprint": "223fa64800756cd135da08a18f3b142651277bfae97ff59be1405968e175bcca",
         "totalNotes": 348
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1518,
@@ -3078,7 +3243,7 @@
         "fingerprint": "31058dd77e05246d938aebd3c3a582af6ef8d9c3e69ae8734d02141d3aa5b0fe",
         "totalNotes": 480
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1519,
@@ -3089,7 +3254,7 @@
         "fingerprint": "3fed4470251627b3e6b3b70b7ad44d83ea5bbd39ce89a0b11b409bca82827036",
         "totalNotes": 468
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1520,
@@ -3100,7 +3265,7 @@
         "fingerprint": "5a848ab5b3eec26c90a23a783fec7615119eaebb2269170099475f9aec6b00ad",
         "totalNotes": 434
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1521,
@@ -3111,7 +3276,7 @@
         "fingerprint": "c1f9d04a906f5059f6919c646140dd16587925b9e140f578616d5cd3f8f15665",
         "totalNotes": 594
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1522,
@@ -3122,7 +3287,7 @@
         "fingerprint": "b79a860d5f4c961f7a6a5f4e57040c940d67d4ac1345c27d271de983e237f10f",
         "totalNotes": 1096
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1523,
@@ -3133,7 +3298,7 @@
         "fingerprint": "59def2602722c82e1a91c2f0d4c6440febfd24ba86b38c17ca040c1fc18b43e5",
         "totalNotes": 998
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1524,
@@ -3144,7 +3309,7 @@
         "fingerprint": "cadc4e49f9cae467827b3cc63f59d3898456ac9bb64ade484d14b43ec8d4e047",
         "totalNotes": 531
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1525,
@@ -3155,7 +3320,7 @@
         "fingerprint": "d4c11ada6fd8221bc98f34ef6523c0cea358ef3b2d28f9308ff1e5060bdd899a",
         "totalNotes": 431
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1526,
@@ -3166,7 +3331,7 @@
         "fingerprint": "9a1d7ce11b54865b235d3ab911b11ced740348937af1863a3659080c7d8a8c6d",
         "totalNotes": 529
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1527,
@@ -3177,7 +3342,7 @@
         "fingerprint": "c2f0dad564b14d2b3a834d35caffbe8384b04c112244f292daf6ed6c29242127",
         "totalNotes": 283
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1528,
@@ -3188,7 +3353,7 @@
         "fingerprint": "06bb150a970930fed78cf17d81f4f71be69c7ca86b75c5114b3d3c9ba4eff8d8",
         "totalNotes": 641
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1530,
@@ -3199,7 +3364,7 @@
         "fingerprint": "5059cd299e8a4f416068bd5658cb3138d0c2cdea05d3398fc405fe25577b5b4a",
         "totalNotes": 1079
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1530,
@@ -3210,7 +3375,7 @@
         "fingerprint": "19d86c5a90c6449d919b5c10b016ba64eae7b20c12fdab05e13133cbf91f74cf",
         "totalNotes": 1326
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1531,
@@ -3221,7 +3386,7 @@
         "fingerprint": "aa603121b8594febfc0b11624c72e8a0b4ccee51be136b673819585db263861e",
         "totalNotes": 639
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1531,
@@ -3232,7 +3397,7 @@
         "fingerprint": "ae4e8c64e659243b82f080f9741c336d73d27d74030b2acb65d46622f671d88b",
         "totalNotes": 1013
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1532,
@@ -3243,7 +3408,7 @@
         "fingerprint": "b918b1d1f017b25501d85be9c85016a07bfffb669e354692f6fa3df3c5e0d2a7",
         "totalNotes": 1053
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1532,
@@ -3254,7 +3419,7 @@
         "fingerprint": "ac66f12b56ba7a30ce2a8ee2e6376ab1802a88685fc3719d2e3a4b9f22712ff2",
         "totalNotes": 1501
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1533,
@@ -3265,7 +3430,7 @@
         "fingerprint": "4fb2a35a20d222b8cfce41b0bf17e34ddc732945352038ea9a595e3082e8c0dc",
         "totalNotes": 652
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     },
     {
       "songNo": 1534,
@@ -3276,7 +3441,7 @@
         "fingerprint": "0a7e30e7eaa315e34b070cff051e55d486d3b24b2b81b4646bcc04aabb3ad623",
         "totalNotes": 743
       },
-      "evidence": "game_id+japanese_title+level+stars+notes+unique_ese_chart"
+      "evidence": "game_id+catalog_title+level+stars+notes+unique_ese_chart"
     }
   ],
   "songs": {
@@ -5898,7 +6063,9 @@
           "rating:titleJa",
           "sakura:cn",
           "kinoko:zh",
-          "kinoko:jp"
+          "kinoko:jp",
+          "ese:title",
+          "ese:titleJa"
         ],
         "ソウルキャリバーII": [
           "sakura:jp"
@@ -7733,11 +7900,15 @@
       "kinokoId": 1812,
       "names": {
         "Dragon Ball Heroes Galaxy Mission Series Theme Song": [
-          "sakura:cn"
+          "sakura:cn",
+          "ese:title"
         ],
         "ドラゴンボールヒーローズ ギャラクシーミッションシリーズ テーマソング": [
           "sakura:jp",
           "kinoko:jp"
+        ],
+        "ドラゴンボールヒーローズ": [
+          "ese:titleJa"
         ]
       },
       "levels": {
@@ -28787,7 +28958,11 @@
         "風雲！バチお先生": [
           "rating:titleJa",
           "sakura:jp",
-          "kinoko:jp"
+          "kinoko:jp",
+          "ese:titleJa"
+        ],
+        "Fuun! Bachio Sensei -New Audio/Chart-": [
+          "ese:title"
         ]
       },
       "levels": {
@@ -31769,7 +31944,8 @@
         "U.S.A.": [
           "sakura:cn",
           "sakura:jp",
-          "kinoko:jp"
+          "kinoko:jp",
+          "ese:title"
         ]
       },
       "levels": {
@@ -61004,6 +61180,12 @@
         ],
         "好きすぎて滅！": [
           "kinoko:jp"
+        ],
+        "Sukisugite Metsu!": [
+          "ese:title"
+        ],
+        "好きすぎて滅!": [
+          "ese:titleJa"
         ]
       },
       "levels": {

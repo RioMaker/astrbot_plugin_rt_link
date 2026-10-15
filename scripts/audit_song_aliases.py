@@ -42,7 +42,7 @@ def audit():
         {930, 1143},
         {50, 964},
         {329, 330},
-        {116, 542},
+        {115, 116, 542},
     ]
     short_groups = [
         {252, 338},
@@ -170,9 +170,9 @@ def render(report):
     payload = json.dumps(report, ensure_ascii=False).replace("<", "\\u003c")
     return (
         """<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width">
-<title>RTLink 曲名映射审核 · 2026-10-14</title><style>
+<title>RTLink 曲名映射审核 · __AUDIT_DATE__</title><style>
 :root{font:15px/1.6 system-ui,'Microsoft YaHei',sans-serif;color:#263444;background:#f3f5f8}body{max-width:1560px;margin:35px auto;padding:0 24px}h1{font-size:28px;margin-bottom:6px}p{max-width:1100px}.cards{display:flex;flex-wrap:wrap;gap:12px;margin:24px 0}.card{background:white;padding:14px 22px;border-radius:10px;min-width:125px}.card strong{font-size:25px;display:block;color:#175879}nav{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0}button,input,select{font:inherit;padding:9px 14px;border:1px solid #c9d4df;border-radius:6px;background:white}button{cursor:pointer}button.active{background:#175879;color:white}input{min-width:330px}table{width:100%;border-collapse:collapse;background:white;font-size:14px}th,td{padding:12px;text-align:left;border-bottom:1px solid #dde3ea;vertical-align:top}th{position:sticky;top:0;background:#e7eef4;white-space:nowrap}small{color:#677887}.names{max-width:640px;overflow-wrap:anywhere}.tag{display:inline-block;border-radius:4px;padding:0 5px;margin:2px;background:#edf3f8}details{margin-top:5px}summary{cursor:pointer;color:#175879}.scroll{overflow:auto}a{color:#175879}footer{margin:25px 0;color:#677887}.notice{background:#fff7de;border-left:4px solid #c59b34;padding:12px 18px}
-</style><h1>RTLink 曲名与谱面映射审核</h1><small>2026-10-14 · 本地公开资料快照 · 每个名称均保留来源</small>
+</style><h1>RTLink 曲名与谱面映射审核</h1><small>__AUDIT_DATE__ · 本地公开资料快照 · 每个名称均保留来源</small>
 <p>国服当前曲名优先；下架曲保留已有国服译名。日文、ESE 罗马字、菌菌写法、段位写法及经整理的短名共同用于搜索。<b>名称/ID 可查询不代表已有 AI 评级数据。</b></p>
 <div class="notice">审核范围：全量 ID、名称可达性、显示优先级、全部冲突键与段位物量核对；口语别名仅做语义和冲突复核，未宣称全部具有外部权威出处。国服公告图尚未直接复核。Sakura 下架状态可能滞后于当日开放，不据此修改课程。</div>
 <div class="cards" id="cards"></div><nav id="tabs"></nav><input id="q" aria-label="搜索名称或ID" placeholder="搜索 ID、国服名、日文、罗马字或简称"><select id="status" aria-label="国服状态"><option value="">全部状态</option><option value="current">当前国服</option><option value="archive">归档/下架</option><option value="unknown">未确认国服状态</option></select><p id="count"></p><div class="scroll"><table><thead id="head"></thead><tbody id="body"></tbody></table></div><footer>数据来源：<a href="https://viewer.sakura-bot.cn/api/content/songs">Sakura 公共曲库</a> · <a href="https://kinoko.zorua.cn/api/scores/catalog?schema_version=3">菌菌公共曲库</a> · <a href="https://ese.tjadataba.se/ESE/ESE.git">ESE TJA</a> · 仓库评级与段位快照。完整指纹和审核记录见同目录 JSON。</footer>
@@ -187,12 +187,12 @@ function cell(tr,text){const td=document.createElement('td');td.textContent=text
 function draw(){document.querySelectorAll('button').forEach(b=>b.classList.toggle('active',b.dataset.key===tab));const q=el('q').value.toLocaleLowerCase().trim();const rows=data[tab].filter(r=>(!q||JSON.stringify(r).toLocaleLowerCase().includes(q))&&(tab!=='songs'||!el('status').value||r.cnStatus===el('status').value));el('head').replaceChildren();el('body').replaceChildren();el('count').textContent=`${rows.length} / ${data[tab].length} 条 · 按 ID 保留身份，歧义不自动合并`;const headers={songs:['ID / 状态','优先显示 / 日文','名称与来源','评级 / 冲突'],dan:['届别 / 地区 / 段位','曲序 / 曲名','ID / 候选','难度 / 物量','映射证据'],conflicts:['归一化名称','ID / 曲名','分类','处理'],sourceDifferences:['ID','Sakura','菌菌','处理'],removedAliases:['原 ID','名称','移除原因'],excludedSourceEntries:['来源编号','名称','原因']}[tab];const hr=document.createElement('tr');for(const h of headers){const th=document.createElement('th');th.textContent=h;hr.append(th)}el('head').append(hr);
 for(const r of rows){const tr=document.createElement('tr');if(tab==='songs'){cell(tr,r.id+' · '+statusLabel[r.cnStatus]);cell(tr,r.title+'\n'+(r.titleJa===r.title?'':r.titleJa));const td=cell(tr,'');td.className='names';for(const name of Object.keys(r.names)){const sp=document.createElement('span');sp.className='tag';sp.textContent=name;sp.title=r.names[name].join(' / ');td.append(sp)}const details=document.createElement('details'),summary=document.createElement('summary');summary.textContent='查看逐名来源';details.append(summary);for(const [n,src] of Object.entries(r.names)){const d=document.createElement('div');d.textContent=n+' ← '+src.join(' / ');details.append(d)}td.append(details);cell(tr,(r.rated?'含评级谱面':'仅曲目身份')+(r.conflicts.length?' · '+r.conflicts.length+' 个歧义名称':''))}else if(tab==='dan'){cell(tr,[r.year,r.region,r.rank].join(' / '));cell(tr,r.order+'. '+r.displayTitle+' ('+r.sourceTitle+')');cell(tr,r.songNo+' / '+r.candidates.join(', '));cell(tr,r.level+' / '+r.notes+'，曲库核对 '+(r.catalogNotes??'未提供'));cell(tr,r.evidence+' · '+r.status)}else if(tab==='conflicts'){cell(tr,r.key);cell(tr,r.songIds.map((v,i)=>v+': '+r.titles[i]).join(' / '));cell(tr,r.category);cell(tr,r.decision)}else if(tab==='sourceDifferences'){cell(tr,r.songNo);cell(tr,r.sakura);cell(tr,r.kinoko);cell(tr,'同一 game_id，保留来源写法和版本标识')}else if(tab==='removedAliases'){cell(tr,r.songNo);cell(tr,r.name);cell(tr,r.reason)}else{cell(tr,r.sourceId);cell(tr,r.title);cell(tr,'其他歌曲栏站内编号，未获游戏 ID 确认')}el('body').append(tr)}}
 el('q').oninput=draw;el('status').onchange=draw;draw();</script></html>"""
-    )
+    ).replace("__AUDIT_DATE__", str(report["version"])[:10])
 
 
 if __name__ == "__main__":
     report = audit()
-    out = ROOT / "docs/song-alias-audit-2026-10-14"
+    out = ROOT / ("docs/song-alias-audit-" + str(report["version"])[:10])
     out.with_suffix(".json").write_text(
         json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )

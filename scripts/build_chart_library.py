@@ -24,6 +24,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from song_alias import load_aliases, normalize
+from scripts.song_identity import exact_candidates
 from storage import load_charts
 
 if __package__:
@@ -123,6 +124,7 @@ def build(ese_root, index_path, mapping_path, output, quota_mib=512):
 
     # A game ID can exist before a rating model. Supplemental bindings use
     # reviewed public identity + exact ESE title/course/stars/notes/fingerprint.
+    # A rated song may still have an unbound chart or a newly added Ura chart.
     identity_path = ROOT / "scripts/data/song_names.json"
     identities = json.loads(identity_path.read_bytes()) if identity_path.exists() else {}
     if identities.get("sources", {}).get("ese", {}).get("revision") == revision:
@@ -133,11 +135,14 @@ def build(ese_root, index_path, mapping_path, output, quota_mib=512):
             reference = by_source.get(source_key)
             identity = identities["songs"][str(key[0])]
             meta = identity["levels"][str(key[1])]
-            if (not reference or reference["totalNotes"] != meta["totalNotes"]
-                    or reference["level"] != meta["stars"]
-                    or normalize(reference.get("titleJa")) != normalize(identity["titleJa"])
-                    or reference["course"] != ("oni" if key[1] == 4 else "edit")
-                    or key in charts):
+            candidates = exact_candidates(rows, identity, key[1])
+            already_bound = any(key in values for values in links.values())
+            if (not reference or len(candidates) != 1
+                    or candidates[0]["fingerprint"] != selected["fingerprint"]
+                    or candidates[0]["relativePath"] != selected["relativePath"]
+                    or candidates[0]["course"] != selected["course"]
+                    or already_bound
+                    or (key in charts and charts[key]["totalNotes"] != meta["totalNotes"])):
                 raise ValueError(f"unverified supplemental identity: {key}")
             charts[key] = {"title": identity["title"], "titleJa": identity["titleJa"], **meta}
             links.setdefault(source_key, []).append(key)
