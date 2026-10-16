@@ -63,9 +63,9 @@ DIFFICULTY_NAMES = {
 
 # 精简画像缓存的数据契约版本。字段新增后提升版本，避免继续读取旧缓存
 # 中缺少图片证据字段或节奏配置常见度分组。
-RATING_CACHE_SCHEMA = 6
+RATING_CACHE_SCHEMA = 7
 RATING_HISTORY_SCHEMA = 2
-RATING_ALGORITHM_VERSION = "taiko-signal-rhythm-v2-r1"
+RATING_ALGORITHM_VERSION = "taiko-signal-rhythm-v2-r1-branches-v1"
 SCORE_STORAGE_SCHEMA = 2
 
 
@@ -242,6 +242,9 @@ def _slim_result(result: dict) -> dict:
             "clearCount": r.get("clearCount"),
             "updatedAt": r.get("updatedAt"),
             "aiV2": r.get("aiV2"),
+            "branchProfile": r.get("branchProfile"),
+            "branchPaths": r.get("branchPaths"),
+            "totalNotes": r.get("totalNotes"),
         })
 
     def slim_family(f):

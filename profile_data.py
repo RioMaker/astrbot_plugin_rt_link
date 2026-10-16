@@ -10,15 +10,15 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 if __package__:
-    from .rating import calculate_rhythm_ability
+    from .rating import calculate_rhythm_ability, chart_for_record
 else:
-    from rating import calculate_rhythm_ability
+    from rating import calculate_rhythm_ability, chart_for_record
 
 BANDS=[('ultraslow','超慢速','0–<110'),('slow','慢速','110–<140'),
        ('normal','常规','140–<180'),('fast','高速','180–<220'),
        ('ultrafast','超高速','220–<280'),('rapid','急速','280–330'),('laser','激光级','>330')]
 RESOURCE=Path(__file__).resolve().parent/'resource'/'profile_configurations.v1.json.gz'
-CONFIGURATION_ALGORITHM = 'rhythm-v2-r1-bpm7-v1'
+CONFIGURATION_ALGORITHM = 'rhythm-v2-r1-bpm7-branches-v1'
 
 def bpm_band(value):
     value=abs(float(value))
@@ -52,7 +52,11 @@ def configuration_scores(records,catalog):
     selected=[]
     for row in records:
         chart=catalog['catalog'].get((row['id'],row['level']))
-        if chart:selected.append({**row,'chart':chart,'feature':chart['feature']})
+        if chart:
+            chart=chart_for_record(chart,row)
+            if chart.get('branchProfile'):
+                chart={**chart,'feature':{**chart['feature'],'rhythmProfile':chart['configurationRhythmProfile']}}
+            selected.append({**row,'chart':chart,'feature':chart['feature']})
     current={c['key']:c for c in calculate_rhythm_ability(selected,catalog['catalog'])['cells']}
     cells=[]
     for item in catalog['cells']:
@@ -67,7 +71,7 @@ def configuration_scores(records,catalog):
 def configuration_history_payload(analysis):
     """Keep scoring inputs, not credentials, API envelopes or mutable sync timestamps."""
     fields = ('id','level','goodCount','okCount','ngCount','dondafulComboCount',
-              'aiConstantRaw','aiConstant','rating','accuracy')
+              'aiConstantRaw','aiConstant','rating','accuracy','branchProfile','branchPaths','totalNotes')
     inputs = [{k:r.get(k) for k in fields} for r in analysis['records']]
     inputs.sort(key=lambda r:(r['id'],r['level']))
     config = analysis['profileConfigurations']

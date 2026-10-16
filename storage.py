@@ -36,6 +36,23 @@ def load_charts(path) -> dict:
         if not isinstance(chart, dict):
             continue
         charts[(chart.get("id"), chart.get("level"))] = chart
+    # Branch supplements are bound to the exact master catalog; never load a
+    # stale supplement against a different TJA/model generation.
+    branch_path = Path(path).with_name("branch_profiles.v1.json.gz")
+    if branch_path.is_file():
+        branch_raw = branch_path.read_bytes()
+        manifest = json.loads(branch_path.with_name("branch_profiles.manifest.json").read_bytes())
+        branches = json.loads(gzip.decompress(branch_raw))
+        catalog_hash = hashlib.sha256(Path(path).read_bytes()).hexdigest()
+        if (branches.get("schemaVersion") != 1
+                or manifest.get("sha256") != hashlib.sha256(branch_raw).hexdigest()
+                or manifest.get("chartsSha256") != catalog_hash
+                or branches.get("chartsSha256") != catalog_hash):
+            raise ValueError("分支画像与谱面库版本不匹配")
+        for item in branches["charts"]:
+            chart = charts[item["id"], item["level"]]
+            chart["branchProfiles"] = item["profiles"]
+            chart["branchAmbiguities"] = item["ambiguous"]
     return charts
 
 

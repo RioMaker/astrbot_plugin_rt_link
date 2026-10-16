@@ -657,6 +657,10 @@ def analyze_rank_improvements(
     no_roll_count = roll_unknown = 0
 
     for record in records:
+        # Master-route roll lengths and per-note units are not a verified
+        # improvement plan for a newly identified non-master route.
+        if record.get("branchProfile"):
+            continue
         level = record.get("level")
         if level not in levels:
             continue

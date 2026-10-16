@@ -450,6 +450,18 @@ def aggregate(rows: list, dimensions=REFERENCE_DIMENSIONS) -> dict:
 # 主分析入口
 # ---------------------------------------------------------------------------
 
+def chart_for_record(chart: dict, record: dict) -> dict:
+    """Restore the exact audited branch chosen during analysis, including caches."""
+    key = record.get("branchProfile")
+    for branch in chart.get("branchProfiles", []) if key else []:
+        if branch["key"] == key:
+            return {**chart, "totalNotes": branch["totalNotes"],
+                    "feature": branch["feature"], "public": None,
+                    "branchProfile": branch["key"], "branchPaths": branch["paths"],
+                    "configurationRhythmProfile": branch["configurationRhythmProfile"]}
+    return chart
+
+
 def analyze(payload: dict, charts: dict) -> dict:
     """charts: {(song_no, level) -> chart} 的内存字典。"""
     normalized = normalize_scores(payload)
@@ -479,6 +491,18 @@ def analyze(payload: dict, charts: dict) -> dict:
             if not dondaful and good + ok + bad > total_notes:
                 raise RatingError("良、可、不可合计超过总音符数")
             accuracy = calc_accuracy(good, ok, bad, total_notes, dondaful)
+            if observed and stored != observed:
+                matches = [b for b in chart.get("branchProfiles", [])
+                           if b["totalNotes"] == observed]
+                if len(matches) == 1:
+                    chart = chart_for_record(chart, {"branchProfile": matches[0]["key"]})
+                    stored = chart["totalNotes"]
+                elif any(b["totalNotes"] == observed for b in chart.get("branchAmbiguities", [])):
+                    counts["invalid"] += 1
+                    diagnostics.append({"code": "branch-route-ambiguous", "id": score["id"],
+                                        "level": score["level"],
+                                        "message": "多条不同分支路径具有相同音符数，成绩未提供路径，暂不评级"})
+                    continue
             has_public = bool(chart.get("public")) and stored == total_notes
             has_feature = bool(chart.get("feature")) and stored == total_notes
             if has_public:
@@ -500,6 +524,10 @@ def analyze(payload: dict, charts: dict) -> dict:
             ai = calculate_ai_values({**chart, "totalNotes": total_notes}, score) if has_feature else None
             row = {**score, **(ai or {}), "chart": chart, "feature": chart.get("feature"),
                    "hasPublicProfile": has_public, "aiV2": ai, "ourTaikoV1": reference}
+            row["totalNotes"] = total_notes
+            if chart.get("branchProfile"):
+                row["branchProfile"] = chart["branchProfile"]
+                row["branchPaths"] = chart["branchPaths"]
             if has_feature:
                 counts["featureMatched"] += 1
                 row["aiConstantRaw"] = ai["constantRaw"]

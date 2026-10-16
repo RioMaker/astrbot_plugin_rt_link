@@ -20,5 +20,7 @@
   "rawBytes": 5368244,
   "sha256": "4da033a2115c64295272fb10ddb9b772cc23d7eb31f9917d796e055745e9d99d",
   "backfillVersion": "2026-10-16.1",
-  "catalogVersion": "taiko-signal-rhythm-v2-2026-08-05+cn-2026-10-16.1"
+  "catalogVersion": "taiko-signal-rhythm-v2-2026-08-05+cn-2026-10-16.1+2026-10-16-branches-v1",
+  "branchProfilesVersion": "2026-10-16-branches-v1",
+  "branchProfilesSha256": "3693a24067bb41f577e409c53e87b3057f024027842884825855cf3f89b70266"
 }

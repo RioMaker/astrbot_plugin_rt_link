@@ -71,7 +71,8 @@ def test_pending_charts_are_never_filled_and_reference_versions_stay_separate():
     assert hashlib.sha256(encoded).hexdigest() == REVIEW["baselineFeaturesSha256"]
     from service import CATALOG_VERSION
 
-    assert CATALOG_VERSION.endswith("+cn-2026-10-16.1")
+    assert "+cn-2026-10-16.1" in CATALOG_VERSION
+    assert CATALOG_VERSION.endswith("+2026-10-16-branches-v1")
     assert Counter(r["status"] for r in REVIEW["charts"]) == {
         "verified": 86,
         "deferred-double": 6,

@@ -27,8 +27,10 @@ import unicodedata
 
 if __package__:
     from . import score_rank as score_rank_mod
+    from .rating import chart_for_record
 else:
     import score_rank as score_rank_mod
+    from rating import chart_for_record
 
 MATCH_MODES = ("contains", "exact", "regex", "all", "any")
 MATCH_FIELDS = ("any", "title", "titleJa", "genre", "alias")
@@ -204,6 +206,7 @@ def _chart_constant(chart: dict) -> float | None:
 
 def played_row(record: dict, chart: dict) -> dict:
     """把 analyze 的 record（或缓存里的精简记录）转成统一的行结构。"""
+    chart = chart_for_record(chart, record)
     level = record.get("level")
     return {
         "id": record.get("id"),
@@ -212,6 +215,7 @@ def played_row(record: dict, chart: dict) -> dict:
         "titleJa": record.get("titleJa"),
         "genre": chart.get("genre") or "未知",
         "totalNotes": int(chart.get("totalNotes") or 0),
+        "branchProfile": record.get("branchProfile"),
         "constant": _num(record.get("constant")) if record.get("constant") is not None else _chart_constant(chart),
         "aiConstant": _num(record.get("aiConstant")),
         "aiConstantRaw": _num(record.get("aiConstantRaw")),
@@ -372,6 +376,9 @@ def _passes_song_no(row: dict, song_no) -> bool:
 def annotate_target(row: dict, charts: dict, rank_data: dict, target_rank, rolls_data: dict | None = None) -> None:
     """就地补上目标评价、门槛分数、缺口、所需良数与所需连打数（含秒速与可行性）。"""
     if not target_rank:
+        return
+    if row.get("branchProfile"):
+        # Per-route score units and roll budgets have not been reviewed yet.
         return
     song_no = row.get("id")
     level = row.get("level")

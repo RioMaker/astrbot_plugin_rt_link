@@ -1,0 +1,261 @@
+{
+  "version": "2026-10-16-branches-v1",
+  "retrained": false,
+  "masterProfilesUnchanged": true,
+  "charts": [
+    {
+      "id": 156,
+      "level": 5,
+      "title": "KAGEKIYO",
+      "totalNotes": 998,
+      "sourcePath": "cn-20261016/156-5.tja",
+      "sourceSha256": "879f87d6971f4e8acc1e343dff25da0c9e00f88750d4c054fc10aee32da0dd49",
+      "sourceUrl": "https://viewer.sakura-bot.cn/api/content/songs/156/tja-package",
+      "conditions": [
+        "p,75,90"
+      ],
+      "candidateCount": 1,
+      "paths": [
+        "E"
+      ],
+      "status": "verified",
+      "aiConstant": 10.3646,
+      "fingerprintV4": "2d0e5f1b6b835f3c2d9d7b9816031e9fc36bd707847755f2879872257fd214db",
+      "fingerprintV5": "1ec61cf02472e56833f1936f071510c6a48c362764f146be311bcaaff509600d",
+      "warnings": []
+    },
+    {
+      "id": 182,
+      "level": 4,
+      "title": "Hello! Halloween",
+      "totalNotes": 569,
+      "sourcePath": "cn-20261016/182-4.tja",
+      "sourceSha256": "0c4e278a3a4c0b4cb9877cc2c91757bebced59946d672940b76a9cb27347d768",
+      "sourceUrl": "https://viewer.sakura-bot.cn/api/content/songs/182/tja-package",
+      "conditions": [
+        "p,50,90"
+      ],
+      "candidateCount": 1,
+      "paths": [
+        "E"
+      ],
+      "status": "verified",
+      "aiConstant": 8.4325,
+      "fingerprintV4": "dbeb72dcdb1c9231b24f8a50d56426e0098aee91d4ecd00ad9522a7f15361aec",
+      "fingerprintV5": "1aac37fc9783311f9a1001851e3fc964a0d256c5dba2e041ba4f550f1aaf027a",
+      "warnings": [
+        "unused-balloon-values"
+      ]
+    },
+    {
+      "id": 269,
+      "level": 4,
+      "title": "METAL HAWK BGM1",
+      "totalNotes": 744,
+      "sourcePath": "cn-20261016/269-4.tja",
+      "sourceSha256": "749d098f7ca5cd3dc4d33226c78049deb34f51c668fa4193ba22a535c0766289",
+      "sourceUrl": "https://viewer.sakura-bot.cn/api/content/songs/269/tja-package",
+      "conditions": [
+        "p,75,99",
+        "p,75,85",
+        "p,75,85",
+        "p,75,85",
+        "p,75,85",
+        "p,75,85"
+      ],
+      "candidateCount": 3,
+      "paths": [
+        "EMMEMM",
+        "MEMMMN",
+        "MMMNEM"
+      ],
+      "status": "ambiguous"
+    },
+    {
+      "id": 269,
+      "level": 4,
+      "title": "METAL HAWK BGM1",
+      "totalNotes": 753,
+      "sourcePath": "cn-20261016/269-4.tja",
+      "sourceSha256": "749d098f7ca5cd3dc4d33226c78049deb34f51c668fa4193ba22a535c0766289",
+      "sourceUrl": "https://viewer.sakura-bot.cn/api/content/songs/269/tja-package",
+      "conditions": [
+        "p,75,99",
+        "p,75,85",
+        "p,75,85",
+        "p,75,85",
+        "p,75,85",
+        "p,75,85"
+      ],
+      "candidateCount": 2,
+      "paths": [
+        "EMMMMM",
+        "MMMNME"
+      ],
+      "status": "ambiguous"
+    },
+    {
+      "id": 617,
+      "level": 4,
+      "title": "风云志士",
+      "totalNotes": 636,
+      "sourcePath": "cn-20261016/617-4.tja",
+      "sourceSha256": "a82eb7f40ff2ba0d627ab2999c1a26a9d9cb5d193a1a43082153943d0fdd4e11",
+      "sourceUrl": "https://viewer.sakura-bot.cn/api/content/songs/617/tja-package",
+      "conditions": [
+        "r,1,2"
+      ],
+      "candidateCount": 1,
+      "paths": [
+        "E"
+      ],
+      "status": "verified",
+      "aiConstant": 8.4159,
+      "fingerprintV4": "74e1fdb8480cf3cd35aa8e89fd6b2fedf93c66c42d27d5c061e1e7d7ba7a9710",
+      "fingerprintV5": "0ca472130a580a92675d07f91399414cabc3178c9df78cf9edf656d3f7b703e5",
+      "warnings": []
+    },
+    {
+      "id": 627,
+      "level": 4,
+      "title": "還是埼玉2000",
+      "totalNotes": 981,
+      "sourcePath": "cn-20261016/627-4.tja",
+      "sourceSha256": "6966062c30f7b4984d8a1499b719d4080c04fac8317a6f03c1faaa948e0ce30b",
+      "sourceUrl": "https://viewer.sakura-bot.cn/api/content/songs/627/tja-package",
+      "conditions": [
+        "p,80,80",
+        "p,-1,-1"
+      ],
+      "candidateCount": 1,
+      "paths": [
+        "NM"
+      ],
+      "status": "verified",
+      "aiConstant": 10.8949,
+      "fingerprintV4": "52d4acd9ae198832e64baec3ee1a9e48aeec61e57635d3bfbbdb1954f799e64a",
+      "fingerprintV5": "91d66a31586c5a322834d37dd4600a354d9814275ecafac6e6fa202bf2134337",
+      "warnings": []
+    },
+    {
+      "id": 869,
+      "level": 4,
+      "title": "森罗万象",
+      "totalNotes": 925,
+      "sourcePath": "cn-20261016/869-4.tja",
+      "sourceSha256": "4e6549d1613699656ed4ded7ecad6fdba2e0778b8a3b14ccebf058536baa0889",
+      "sourceUrl": "https://viewer.sakura-bot.cn/api/content/songs/869/tja-package",
+      "conditions": [
+        "r,40,60",
+        "p,75,95",
+        "p,75,95",
+        "p,75,95"
+      ],
+      "candidateCount": 1,
+      "paths": [
+        "MEEM"
+      ],
+      "status": "verified",
+      "aiConstant": 10.4897,
+      "fingerprintV4": "eadeaa2431cfb381bf1f862daf2fb528b3a7ebaa94df507f489fbc1ae3943417",
+      "fingerprintV5": "e4041831a520a55576c2dc83e6387166810426ecd1fdc9c8c7566e6bdb01880e",
+      "warnings": [
+        "unused-balloon-values"
+      ]
+    },
+    {
+      "id": 1140,
+      "level": 5,
+      "title": "Scarlet Police on Ghetto Patrol 24PM",
+      "totalNotes": 859,
+      "sourcePath": "cn-20261016/1140-5.tja",
+      "sourceSha256": "79bdedb84c43e750ef285c3abc257c629c128750d324de9e6c570af7a1d65374",
+      "sourceUrl": "https://viewer.sakura-bot.cn/api/content/songs/1140/tja-package",
+      "conditions": [
+        "p,95,95"
+      ],
+      "candidateCount": 1,
+      "paths": [
+        "N"
+      ],
+      "status": "verified",
+      "aiConstant": 9.6228,
+      "fingerprintV4": "698d0636fd37dc54ad48bcff3289f4bef9297cd4588286e1302577a612a6c760",
+      "fingerprintV5": "c4f9d52cd19fc689e00153949eb23083aca28d7449ec61ace301d8761f4ab153",
+      "warnings": []
+    },
+    {
+      "id": 1352,
+      "level": 4,
+      "title": "INTERNET YAMERO",
+      "totalNotes": 928,
+      "sourcePath": "cn-20261016/1352-4.tja",
+      "sourceSha256": "3327b4e35966ce80d0f35ec30764d7999cfcaa861e21fdd510134e86e0c5c43a",
+      "sourceUrl": "https://viewer.sakura-bot.cn/api/content/songs/1352/tja-package",
+      "conditions": [
+        "p,95,95"
+      ],
+      "candidateCount": 1,
+      "paths": [
+        "N"
+      ],
+      "status": "verified",
+      "aiConstant": 9.4934,
+      "fingerprintV4": "8ae393d4d21f9f9d996b0e823a8c659f57a1a2f6e448f180d91b8fec10c05e36",
+      "fingerprintV5": "a214b62f3460ef7e915c6b1183b53c88b95e3b5e378e19819611cbe2aa2b39a1",
+      "warnings": [
+        "unused-balloon-values"
+      ]
+    },
+    {
+      "id": 1369,
+      "level": 4,
+      "title": "DARK EX MACHINA♡",
+      "totalNotes": 1270,
+      "sourcePath": "cn-20261016/1369-4.tja",
+      "sourceSha256": "271a758aa883743d0628d0cf7ced1a4afe6f6b4de54d55d1a0b0052671779652",
+      "sourceUrl": "https://viewer.sakura-bot.cn/api/content/songs/1369/tja-package",
+      "conditions": [
+        "p,85,85",
+        "p,101,102"
+      ],
+      "candidateCount": 1,
+      "paths": [
+        "NN"
+      ],
+      "status": "verified",
+      "aiConstant": 11.1404,
+      "fingerprintV4": "47d91943e85c0cc3c1a12d5e970ef000b2db7a0f3070e9f775936d959a3cac94",
+      "fingerprintV5": "b21c4f2a03ce9e222ba429ff844f7493102bbd0a7c90cc32eb2721d5b6ba04b0",
+      "warnings": [
+        "unused-balloon-values"
+      ]
+    },
+    {
+      "id": 1404,
+      "level": 4,
+      "title": "大家的歌",
+      "totalNotes": 764,
+      "sourcePath": "cn-20261016/1404-4.tja",
+      "sourceSha256": "38b0b2f87cabf3f5fd494c812a6f58ce42a832247a505baa811f67c052b99c00",
+      "sourceUrl": "https://viewer.sakura-bot.cn/api/content/songs/1404/tja-package",
+      "conditions": [
+        "p,90,90",
+        "p,101,102",
+        "p,75,90",
+        "p,75,90"
+      ],
+      "candidateCount": 1,
+      "paths": [
+        "MNMN"
+      ],
+      "status": "verified",
+      "aiConstant": 10.4205,
+      "fingerprintV4": "aea1f3af293e5760fa0de0305447581426dbc1dea1b33923e7af1922fadb1a1c",
+      "fingerprintV5": "4a9478de1e80911552cbe4776ed469bfe9aadb7a7b9f4c738c379ad64651ebca",
+      "warnings": [
+        "unused-balloon-values"
+      ]
+    }
+  ]
+}
