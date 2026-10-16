@@ -430,7 +430,8 @@ def test_unknown_subcommand_still_reports_error():
 def test_bare_command_generates_profile_image():
     plugin = _plugin()
 
-    async def fake_report(qq):
+    async def fake_report(qq, *, refresh=False):
+        assert refresh is True
         return True, "report.png"
 
     plugin.service.generate_profile_image = fake_report

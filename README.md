@@ -35,7 +35,7 @@
 /rtlink score <曲名|别名|鬼夏祭>             查询指定曲目成绩（支持难度前缀组合名）
 /rtlink rating                              生成实力画像图片
 /rtlink update                              跳过缓存，从当前来源拉取并记录历史快照
-/rtlink profile                             生成个人 Profile（与裸 /rtlink 相同）
+/rtlink profile                             生成个人 Profile（使用有效缓存）
 /rtlink progress                            查看全部配置评分、理论满分、样本与历史曲线
 /rtlink weakness                            生成节奏型弱项与练习建议图片（冷门配置单列）
 /rtlink improve [评价] [难度]                生成「提升评价」图片（分区列出最接近目标的谱面）
@@ -46,7 +46,7 @@
 /rtlink 帮助                                查看同一张完整帮助长图
 /rtlink about                               查看插件信息
 
-裸 `/rtlink`（不带子命令）默认返回新版个人画像，等价于 `/rtlink profile`。原详细实力报告保留在 `/rtlink rating`。
+裸 `/rtlink`（不带子命令）先执行与 `/rtlink update` 相同的强制同步，成功后返回个人画像；同步失败时返回错误提示。`/rtlink profile` 保留有效缓存读取行为。原详细实力报告保留在 `/rtlink rating`。
 评价简写示例：`/rtlink 金雅`、`/rtlink 紫雅 鬼`、`/rtlink 极`。
 国服段位资料已更新至 2026-10-14 开放的五级～十段；人字段尚未确认。资料来源与重算记录见 [本次维护说明](docs/data-refresh-2026-10-14.md)。
 

@@ -155,7 +155,7 @@ def render_help_image(out_path: str) -> str:
         draw,
         360,
         "两种帮助入口",
-        "发送 /rtlink help 或 /rtlink 帮助，都会返回这一张完整说明长图。裸 /rtlink 默认生成个人 Profile。",
+        "发送 /rtlink help 或 /rtlink 帮助，都会返回这一张完整说明长图。裸 /rtlink 先同步，再生成个人 Profile。",
         "tip",
         132,
     )
@@ -215,10 +215,10 @@ def render_help_image(out_path: str) -> str:
     commands_y = sakura_y + 385
     _heading(draw, "常用指令", commands_y)
     rows = [
-        ("/rtlink", "生成个人 Profile：行星、配置评分、BEST 20"),
+        ("/rtlink", "先同步，再生成个人 Profile 与 BEST 20"),
         ("/rtlink score <曲名>", "查询指定曲目成绩"),
         ("/rtlink rating", "Rating、七维、强弱项与冷门配置"),
-        ("/rtlink profile", "与 /rtlink 相同，含成绩概况和 8 首提升建议"),
+        ("/rtlink profile", "使用有效缓存生成 Profile，含成绩概况与提升建议"),
         ("/rtlink progress", "全部配置评分、理论满分、样本与同步历史"),
         ("/rtlink weakness", "生成节奏型弱项与练习建议"),
         ("/rtlink improve [评价]", "找最接近目标评价的谱面：判定 / 连打两条路线"),

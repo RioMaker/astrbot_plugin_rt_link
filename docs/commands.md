@@ -2,7 +2,7 @@
 
 > `/rtlink help` 只显示普通用户指令，**不显示管理员指令**。管理员指令全部列在本文档。
 
-**裸 `/rtlink`（不带子命令）默认返回个人 Profile**，等价于 `/rtlink profile`。原详细实力报告保留在 `/rtlink rating`。
+**裸 `/rtlink`（不带子命令）先强制同步，再返回个人 Profile**。同步逻辑与 `/rtlink update` 相同，失败时返回错误提示；`/rtlink profile` 保留有效缓存读取行为。原详细实力报告保留在 `/rtlink rating`。
 
 ---
 

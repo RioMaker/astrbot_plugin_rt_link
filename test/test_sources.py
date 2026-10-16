@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+import service as service_mod
 from sakura_client import SakuraAPIError, SakuraClient, _NoRedirect, normalize_sakura
 from service import MemoryBindingsStore, ScoreService
 from source_service import MultiSourceService
@@ -45,6 +46,9 @@ class Client:
         return copy.deepcopy(self.data)
 
     def hiroba(self, *args, **kwargs):
+        self.calls += 1
+        if self.fail:
+            raise SakuraAPIError("HTTP 503：服务暂时不可用")
         return normalize_sakura(copy.deepcopy(self.data))
 
     kinoko = hiroba
@@ -125,6 +129,58 @@ def test_independent_databases_binding_cache_history_and_restart(tmp_path, chart
             assert reopened.get_scores("qq")[0]["source"] == "sakura"
         finally:
             reopened.close()
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("source", ["kinoko", "sakura"])
+def test_profile_refresh_bypasses_cache_and_stops_on_sync_failure(tmp_path, charts, monkeypatch, source):
+    rendered = []
+
+    def render(analysis, path):
+        rendered.append(copy.deepcopy(analysis))
+        Path(path).write_bytes(b"test image")
+
+    monkeypatch.setattr(service_mod, "render_profile_image", render)
+
+    async def run():
+        router, old_client, new_client = setup_services(tmp_path, charts)
+        client = old_client if source == "kinoko" else new_client
+        try:
+            if source == "sakura":
+                assert (await router.bind_sakura("qq", "x" * 48))[0]
+            assert (await router.force_update("qq"))[0]
+            calls = client.calls
+            assert (await router.generate_profile_image("qq"))[0]
+            assert client.calls == calls
+            previous = rendered[-1]["records"][0]["goodCount"]
+            client.data["data"]["songs"][0]["good_cnt"] += 1
+            client.data["data"]["songs"][0]["ok_cnt"] -= 1
+
+            assert (await router.generate_profile_image("qq", refresh=True))[0]
+            assert client.calls - calls == (2 if source == "kinoko" else 1)
+            assert rendered[-1]["records"][0]["goodCount"] == previous + 1
+            db = router.services[source].db
+            snapshots = db.get_rating_snapshots("qq")
+            assert len(snapshots) == 2
+            assert (await router.generate_profile_image("qq", refresh=True))[0]
+            assert db.get_rating_snapshots("qq") == snapshots
+
+            client.fail = True
+            count = len(rendered)
+            ok, message = await router.generate_profile_image("qq", refresh=True)
+            assert not ok and "查询失败" in message
+            assert len(rendered) == count
+            assert db.get_rating_snapshots("qq") == snapshots
+
+            await router.unbind("qq")
+            count = len(rendered)
+            ok, message = await router.generate_profile_image("qq", refresh=True)
+            assert not ok and "尚未绑定" in message
+            assert len(rendered) == count
+        finally:
+            for service in router.services.values():
+                service.db.close()
+
     asyncio.run(run())
 
 

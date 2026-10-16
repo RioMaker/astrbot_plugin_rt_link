@@ -19,6 +19,7 @@ import main  # noqa: E402
 class FakeService:
     def __init__(self):
         self.bind_calls = []
+        self.profile_calls = []
         self.sync_reminder = ""
 
     async def generate_report_image(self, qq):
@@ -30,7 +31,8 @@ class FakeService:
     async def score_sync_reminder_text(self, qq):
         return self.sync_reminder
 
-    async def generate_profile_image(self, qq):
+    async def generate_profile_image(self, qq, *, refresh=False):
+        self.profile_calls.append((qq, refresh))
         return True, f"profile-{qq}.png"
 
     async def generate_configuration_image(self, qq):
@@ -170,6 +172,7 @@ async def run_dispatch_cases():
         "10007", private=False, is_admin=False, message_str="/rtlink"
     )
     assert await invoke(plugin, bare) == ["profile-10007.png"]
+    assert plugin.service.profile_calls == [("10008", False), ("10007", True)]
 
     unknown = mock.AstrMessageEvent(
         "10007", private=False, is_admin=False, message_str="rtlink something"

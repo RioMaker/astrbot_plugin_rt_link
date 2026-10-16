@@ -1093,8 +1093,12 @@ class ScoreService:
             except OSError as error:
                 self._logger.warning(f"回收旧{prefix}图片失败：{error}")
 
-    async def generate_profile_image(self, qq) -> tuple[bool, str]:
-        """生成玩家 profile 图片。"""
+    async def generate_profile_image(self, qq, *, refresh=False) -> tuple[bool, str]:
+        """生成玩家 profile 图片；可先强制同步，失败时不输出旧画像。"""
+        if refresh:
+            ok, message = await self.force_update(qq)
+            if not ok:
+                return False, message
         return await self._generate_analysis_image(qq, "profile", render_profile_image, "玩家画像")
 
     async def generate_configuration_image(self, qq) -> tuple[bool, str]:
