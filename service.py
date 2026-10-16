@@ -74,7 +74,7 @@ def _catalog_identity() -> tuple[str, int | None]:
     manifest_path = Path(__file__).resolve().parent / "resource" / "charts.manifest.json"
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        return str(manifest.get("modelId") or "unknown"), manifest.get("schemaVersion")
+        return str(manifest.get("catalogVersion") or manifest.get("modelId") or "unknown"), manifest.get("schemaVersion")
     except (OSError, ValueError, TypeError):
         return "unknown", None
 

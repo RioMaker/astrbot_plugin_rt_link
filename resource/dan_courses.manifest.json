@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
-  "dataVersion": "2026-10-14.2",
+  "dataVersion": "2026-10-16.1",
   "courseCount": 167,
   "songEntryCount": 501,
   "mappedSongEntryCount": 501,
   "unavailableSongEntryCount": 0,
   "unresolvedSongEntryCount": 0,
   "sourceMarkdownSha256": "b21e7b96b012e52aa203a73aabe3d0ad8ad031a3f6fcc29eee091e2c0ed5c0ec",
-  "compressedBytes": 15258
+  "compressedBytes": 15384
 }

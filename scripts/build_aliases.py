@@ -38,7 +38,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from song_alias import normalize  # noqa: E402
 
 SCHEMA_VERSION = 1
-DATA_VERSION = "2026-10-15.1"
+DATA_VERSION = "2026-10-16.1"
 
 BRACKET_RE = re.compile(r"[（(【\[［][^）)】\]］]*[）)】\]］]")
 SPLIT_RE = re.compile(r"[～〜~]| - |－")

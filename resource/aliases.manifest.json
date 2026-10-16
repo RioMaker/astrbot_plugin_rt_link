@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "dataVersion": "2026-10-15.1",
-  "catalogCharts": 1393,
+  "dataVersion": "2026-10-16.1",
+  "catalogCharts": 1421,
   "identityCharts": 1849,
   "songCount": 1524,
-  "aliasEntries": 6864,
-  "averageNamesPerChart": 3.71,
-  "ambiguousKeys": 63,
+  "aliasEntries": 6978,
+  "averageNamesPerChart": 3.77,
+  "ambiguousKeys": 64,
   "ambiguousSamples": {
     "braveswordbraversoul": [
       "1222",
@@ -204,6 +204,10 @@
       "1260",
       "750"
     ],
+    "古典乐组曲": [
+      "1449",
+      "888"
+    ],
     "くらしっくめどれ": [
       "1449",
       "888"
@@ -310,13 +314,13 @@
     ]
   },
   "sources": {
-    "charts": 1393,
+    "charts": 1421,
     "romaji": 1599,
     "danTitles": 3,
-    "curated": 381,
+    "curated": 380,
     "missingCurated": [],
-    "currentCnSongs": 1126
+    "currentCnSongs": 1131
   },
-  "compressedBytes": 118201,
-  "rawBytes": 862242
+  "compressedBytes": 120916,
+  "rawBytes": 960728
 }

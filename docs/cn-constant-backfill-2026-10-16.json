@@ -1,0 +1,692 @@
+{
+  "version": "2026-10-16.1",
+  "retrained": false,
+  "model": {
+    "modelSha256": "14aa800b2131398af90f80cef227567ebc6dc256f3fc050e22ebef3813e71f79",
+    "datasetSha256": "6795ef6ae5f5833b0b4fa70e9fed45a387e6540c541a54c67d62b32f2c9595f2",
+    "parserVersion": 4,
+    "featureCount": 446,
+    "checked": 1327,
+    "differences": [],
+    "inputPreparation": "parser-v4 raw features + star_level from reviewed current CN stars + course_is_edit, in frozen featureNames order"
+  },
+  "baselineReplay": 1327,
+  "oldFeaturesPreserved": true,
+  "added": [
+    {
+      "id": 2,
+      "level": 4,
+      "aiConstant": 6.8918,
+      "totalNotes": 406
+    },
+    {
+      "id": 14,
+      "level": 4,
+      "aiConstant": 7.2098,
+      "totalNotes": 455
+    },
+    {
+      "id": 42,
+      "level": 4,
+      "aiConstant": 5.6071,
+      "totalNotes": 400
+    },
+    {
+      "id": 63,
+      "level": 4,
+      "aiConstant": 8.3086,
+      "totalNotes": 575
+    },
+    {
+      "id": 69,
+      "level": 4,
+      "aiConstant": 7.3602,
+      "totalNotes": 471
+    },
+    {
+      "id": 91,
+      "level": 4,
+      "aiConstant": 7.5684,
+      "totalNotes": 376
+    },
+    {
+      "id": 92,
+      "level": 4,
+      "aiConstant": 6.114,
+      "totalNotes": 383
+    },
+    {
+      "id": 92,
+      "level": 5,
+      "aiConstant": 8.5281,
+      "totalNotes": 612
+    },
+    {
+      "id": 106,
+      "level": 5,
+      "aiConstant": 9.2651,
+      "totalNotes": 833
+    },
+    {
+      "id": 124,
+      "level": 4,
+      "aiConstant": 8.3149,
+      "totalNotes": 563
+    },
+    {
+      "id": 135,
+      "level": 4,
+      "aiConstant": 7.3922,
+      "totalNotes": 345
+    },
+    {
+      "id": 135,
+      "level": 5,
+      "aiConstant": 8.4134,
+      "totalNotes": 423
+    },
+    {
+      "id": 156,
+      "level": 5,
+      "aiConstant": 10.3691,
+      "totalNotes": 999
+    },
+    {
+      "id": 173,
+      "level": 4,
+      "aiConstant": 8.2705,
+      "totalNotes": 777
+    },
+    {
+      "id": 182,
+      "level": 4,
+      "aiConstant": 8.5306,
+      "totalNotes": 576
+    },
+    {
+      "id": 197,
+      "level": 5,
+      "aiConstant": 8.6999,
+      "totalNotes": 765
+    },
+    {
+      "id": 202,
+      "level": 4,
+      "aiConstant": 9.6049,
+      "totalNotes": 765
+    },
+    {
+      "id": 203,
+      "level": 4,
+      "aiConstant": 7.4217,
+      "totalNotes": 567
+    },
+    {
+      "id": 203,
+      "level": 5,
+      "aiConstant": 9.3514,
+      "totalNotes": 765
+    },
+    {
+      "id": 226,
+      "level": 4,
+      "aiConstant": 9.181,
+      "totalNotes": 691
+    },
+    {
+      "id": 226,
+      "level": 5,
+      "aiConstant": 9.2,
+      "totalNotes": 691
+    },
+    {
+      "id": 241,
+      "level": 4,
+      "aiConstant": 6.2795,
+      "totalNotes": 433
+    },
+    {
+      "id": 265,
+      "level": 4,
+      "aiConstant": 10.5261,
+      "totalNotes": 1414
+    },
+    {
+      "id": 269,
+      "level": 4,
+      "aiConstant": 10.4791,
+      "totalNotes": 765
+    },
+    {
+      "id": 301,
+      "level": 5,
+      "aiConstant": 9.4303,
+      "totalNotes": 914
+    },
+    {
+      "id": 303,
+      "level": 4,
+      "aiConstant": 6.5612,
+      "totalNotes": 488
+    },
+    {
+      "id": 321,
+      "level": 4,
+      "aiConstant": 8.6039,
+      "totalNotes": 639
+    },
+    {
+      "id": 385,
+      "level": 4,
+      "aiConstant": 8.2964,
+      "totalNotes": 303
+    },
+    {
+      "id": 387,
+      "level": 4,
+      "aiConstant": 8.1307,
+      "totalNotes": 492
+    },
+    {
+      "id": 425,
+      "level": 4,
+      "aiConstant": 9.2466,
+      "totalNotes": 765
+    },
+    {
+      "id": 547,
+      "level": 4,
+      "aiConstant": 7.3818,
+      "totalNotes": 550
+    },
+    {
+      "id": 580,
+      "level": 4,
+      "aiConstant": 7.1004,
+      "totalNotes": 436
+    },
+    {
+      "id": 580,
+      "level": 5,
+      "aiConstant": 9.2774,
+      "totalNotes": 733
+    },
+    {
+      "id": 617,
+      "level": 4,
+      "aiConstant": 8.4059,
+      "totalNotes": 651
+    },
+    {
+      "id": 627,
+      "level": 4,
+      "aiConstant": 10.9698,
+      "totalNotes": 999
+    },
+    {
+      "id": 663,
+      "level": 4,
+      "aiConstant": 7.8601,
+      "totalNotes": 476
+    },
+    {
+      "id": 663,
+      "level": 5,
+      "aiConstant": 9.8003,
+      "totalNotes": 694
+    },
+    {
+      "id": 811,
+      "level": 4,
+      "aiConstant": 3.5691,
+      "totalNotes": 145
+    },
+    {
+      "id": 811,
+      "level": 5,
+      "aiConstant": 10.6092,
+      "totalNotes": 468
+    },
+    {
+      "id": 831,
+      "level": 4,
+      "aiConstant": 3.7987,
+      "totalNotes": 155
+    },
+    {
+      "id": 831,
+      "level": 5,
+      "aiConstant": 10.3393,
+      "totalNotes": 390
+    },
+    {
+      "id": 869,
+      "level": 4,
+      "aiConstant": 10.6477,
+      "totalNotes": 984
+    },
+    {
+      "id": 956,
+      "level": 4,
+      "aiConstant": 6.3448,
+      "totalNotes": 275
+    },
+    {
+      "id": 956,
+      "level": 5,
+      "aiConstant": 8.3891,
+      "totalNotes": 444
+    },
+    {
+      "id": 979,
+      "level": 4,
+      "aiConstant": 8.6515,
+      "totalNotes": 765
+    },
+    {
+      "id": 1081,
+      "level": 4,
+      "aiConstant": 8.59,
+      "totalNotes": 564
+    },
+    {
+      "id": 1081,
+      "level": 5,
+      "aiConstant": 10.5639,
+      "totalNotes": 876
+    },
+    {
+      "id": 1103,
+      "level": 5,
+      "aiConstant": 9.765,
+      "totalNotes": 699
+    },
+    {
+      "id": 1116,
+      "level": 4,
+      "aiConstant": 7.389,
+      "totalNotes": 412
+    },
+    {
+      "id": 1116,
+      "level": 5,
+      "aiConstant": 9.4442,
+      "totalNotes": 600
+    },
+    {
+      "id": 1140,
+      "level": 5,
+      "aiConstant": 10.0567,
+      "totalNotes": 879
+    },
+    {
+      "id": 1194,
+      "level": 4,
+      "aiConstant": 7.679,
+      "totalNotes": 435
+    },
+    {
+      "id": 1210,
+      "level": 5,
+      "aiConstant": 8.7986,
+      "totalNotes": 636
+    },
+    {
+      "id": 1290,
+      "level": 4,
+      "aiConstant": 5.566,
+      "totalNotes": 223
+    },
+    {
+      "id": 1352,
+      "level": 4,
+      "aiConstant": 9.8591,
+      "totalNotes": 976
+    },
+    {
+      "id": 1369,
+      "level": 4,
+      "aiConstant": 11.2162,
+      "totalNotes": 1333
+    },
+    {
+      "id": 1404,
+      "level": 4,
+      "aiConstant": 10.4321,
+      "totalNotes": 829
+    },
+    {
+      "id": 1416,
+      "level": 4,
+      "aiConstant": 7.7939,
+      "totalNotes": 555
+    },
+    {
+      "id": 1429,
+      "level": 4,
+      "aiConstant": 7.5397,
+      "totalNotes": 571
+    },
+    {
+      "id": 1429,
+      "level": 5,
+      "aiConstant": 11.0905,
+      "totalNotes": 1074
+    },
+    {
+      "id": 1443,
+      "level": 4,
+      "aiConstant": 7.4833,
+      "totalNotes": 418
+    },
+    {
+      "id": 1444,
+      "level": 4,
+      "aiConstant": 5.6926,
+      "totalNotes": 293
+    },
+    {
+      "id": 1447,
+      "level": 4,
+      "aiConstant": 10.5365,
+      "totalNotes": 687
+    },
+    {
+      "id": 1448,
+      "level": 5,
+      "aiConstant": 8.12,
+      "totalNotes": 715
+    },
+    {
+      "id": 1449,
+      "level": 4,
+      "aiConstant": 10.5756,
+      "totalNotes": 648
+    },
+    {
+      "id": 1453,
+      "level": 4,
+      "aiConstant": 7.1789,
+      "totalNotes": 350
+    },
+    {
+      "id": 1454,
+      "level": 4,
+      "aiConstant": 8.4274,
+      "totalNotes": 478
+    },
+    {
+      "id": 1455,
+      "level": 4,
+      "aiConstant": 7.6451,
+      "totalNotes": 503
+    },
+    {
+      "id": 1455,
+      "level": 5,
+      "aiConstant": 9.7902,
+      "totalNotes": 766
+    },
+    {
+      "id": 1456,
+      "level": 4,
+      "aiConstant": 8.5065,
+      "totalNotes": 701
+    },
+    {
+      "id": 1457,
+      "level": 4,
+      "aiConstant": 8.6842,
+      "totalNotes": 622
+    },
+    {
+      "id": 1458,
+      "level": 4,
+      "aiConstant": 9.3642,
+      "totalNotes": 592
+    },
+    {
+      "id": 1459,
+      "level": 4,
+      "aiConstant": 8.6104,
+      "totalNotes": 516
+    },
+    {
+      "id": 1464,
+      "level": 4,
+      "aiConstant": 10.4338,
+      "totalNotes": 765
+    },
+    {
+      "id": 1465,
+      "level": 4,
+      "aiConstant": 9.6166,
+      "totalNotes": 779
+    },
+    {
+      "id": 1465,
+      "level": 5,
+      "aiConstant": 10.5932,
+      "totalNotes": 1226
+    },
+    {
+      "id": 1466,
+      "level": 4,
+      "aiConstant": 7.7239,
+      "totalNotes": 368
+    },
+    {
+      "id": 1466,
+      "level": 5,
+      "aiConstant": 4.9891,
+      "totalNotes": 199
+    },
+    {
+      "id": 1496,
+      "level": 4,
+      "aiConstant": 9.7607,
+      "totalNotes": 910
+    },
+    {
+      "id": 1497,
+      "level": 4,
+      "aiConstant": 10.9521,
+      "totalNotes": 1076
+    },
+    {
+      "id": 1498,
+      "level": 4,
+      "aiConstant": 10.6086,
+      "totalNotes": 1103
+    },
+    {
+      "id": 1499,
+      "level": 4,
+      "aiConstant": 8.4796,
+      "totalNotes": 701
+    },
+    {
+      "id": 1499,
+      "level": 5,
+      "aiConstant": 10.2371,
+      "totalNotes": 982
+    },
+    {
+      "id": 1501,
+      "level": 5,
+      "aiConstant": 10.8896,
+      "totalNotes": 999
+    },
+    {
+      "id": 1502,
+      "level": 4,
+      "aiConstant": 10.4814,
+      "totalNotes": 1059
+    },
+    {
+      "id": 1503,
+      "level": 4,
+      "aiConstant": 10.6192,
+      "totalNotes": 938
+    }
+  ],
+  "pending": [
+    {
+      "id": 210,
+      "level": 4,
+      "title": "インベーダーインベーダー",
+      "stars": 6,
+      "catalogNotes": 482,
+      "sakuraNotes": 482,
+      "ratingNotes": 482,
+      "bound": false,
+      "status": "deferred-p1-mapping",
+      "reason": "Matching note count requires a P1 block; double/P1 extraction paused by user instruction."
+    },
+    {
+      "id": 245,
+      "level": 4,
+      "title": "LINDA LINDA",
+      "stars": 5,
+      "catalogNotes": 384,
+      "sakuraNotes": 384,
+      "ratingNotes": 384,
+      "bound": false,
+      "status": "deferred-p1-mapping",
+      "reason": "Matching note count requires a P1 block; double/P1 extraction paused by user instruction."
+    },
+    {
+      "id": 371,
+      "level": 5,
+      "title": "旋风ノ舞【天】",
+      "stars": 10,
+      "catalogNotes": 599,
+      "sakuraNotes": 599,
+      "ratingNotes": 599,
+      "bound": false,
+      "status": "deferred-p1-mapping",
+      "reason": "Matching note count requires a P1 block; double/P1 extraction paused by user instruction."
+    },
+    {
+      "id": 900,
+      "level": 4,
+      "title": "【双打】 双龙之乱",
+      "stars": 10,
+      "catalogNotes": 603,
+      "sakuraNotes": 448,
+      "ratingNotes": 603,
+      "bound": false,
+      "status": "deferred-double",
+      "reason": "User excluded double-play charts from this backfill."
+    },
+    {
+      "id": 1221,
+      "level": 4,
+      "title": "【双打】 Garakuta Doll Play",
+      "stars": 9,
+      "catalogNotes": 465,
+      "sakuraNotes": 465,
+      "ratingNotes": null,
+      "bound": true,
+      "status": "deferred-double",
+      "reason": "User excluded double-play charts from this backfill."
+    },
+    {
+      "id": 1221,
+      "level": 5,
+      "title": "【双打】 Garakuta Doll Play",
+      "stars": 10,
+      "catalogNotes": 526,
+      "sakuraNotes": 526,
+      "ratingNotes": null,
+      "bound": true,
+      "status": "deferred-double",
+      "reason": "User excluded double-play charts from this backfill."
+    },
+    {
+      "id": 1222,
+      "level": 4,
+      "title": "【双打】 Brave Sword, Braver Soul",
+      "stars": 7,
+      "catalogNotes": 288,
+      "sakuraNotes": 288,
+      "ratingNotes": null,
+      "bound": true,
+      "status": "deferred-double",
+      "reason": "User excluded double-play charts from this backfill."
+    },
+    {
+      "id": 1223,
+      "level": 4,
+      "title": "【双打】 KAGEKIYO",
+      "stars": 9,
+      "catalogNotes": 466,
+      "sakuraNotes": 466,
+      "ratingNotes": null,
+      "bound": true,
+      "status": "deferred-double",
+      "reason": "User excluded double-play charts from this backfill."
+    },
+    {
+      "id": 1239,
+      "level": 4,
+      "title": "【双打】 Many wow bang!",
+      "stars": 9,
+      "catalogNotes": 329,
+      "sakuraNotes": 329,
+      "ratingNotes": null,
+      "bound": true,
+      "status": "deferred-double",
+      "reason": "User excluded double-play charts from this backfill."
+    },
+    {
+      "id": 1448,
+      "level": 4,
+      "title": "DAJARE de OSHARE",
+      "stars": 2,
+      "catalogNotes": 326,
+      "sakuraNotes": 326,
+      "ratingNotes": null,
+      "bound": false,
+      "status": "deferred-p1-mapping",
+      "reason": "Matching note count requires a P1 block; double/P1 extraction paused by user instruction."
+    },
+    {
+      "id": 1500,
+      "level": 4,
+      "title": "LUMINΔ",
+      "stars": 9,
+      "catalogNotes": null,
+      "sakuraNotes": "-",
+      "ratingNotes": null,
+      "bound": false,
+      "status": "missing-tja",
+      "reason": "No matching single-play TJA; user supplied 1501 Ura only."
+    },
+    {
+      "id": 1501,
+      "level": 4,
+      "title": "技神暗鬼",
+      "stars": 9,
+      "catalogNotes": null,
+      "sakuraNotes": "-",
+      "ratingNotes": null,
+      "bound": false,
+      "status": "missing-tja",
+      "reason": "No matching single-play TJA; user supplied 1501 Ura only."
+    }
+  ],
+  "summary": {
+    "reviewed": 98,
+    "statuses": {
+      "verified": 86,
+      "deferred-p1-mapping": 4,
+      "deferred-double": 6,
+      "missing-tja": 2
+    },
+    "cnSongs": 1131,
+    "cnCharts": 1398,
+    "cnMissingAI": 12,
+    "retiredReferences": 0
+  }
+}

@@ -64,7 +64,7 @@ LLM 工具 `get_chart_analysis` 提供公共 TJA 谱面参考：支持未玩歌�
 LLM 工具 `search_scores` 是一个通用检索入口：曲名/日文名/分区/别名、难度、定数、单谱 Rating、精度、分数、音符数、评价等级、「可」「不可」数量、全连/全良状态、距目标评价的缺口，全部可作为筛选条件自由组合，并支持排序、分页与翻页。
 
 - 匹配方式：`contains`（包含，默认）/ `exact`（精确相等）/ `regex`（正则）/ `all`（空格分词全部命中）/ `any`（任一分词命中）
-- 检索范围：`played`（已有成绩，默认）/ `unrated`（打过但未参与评级）/ `unplayed`（没打过）/ `all`（全部 1393 张谱面）
+- 检索范围：`played`（已有成绩，默认）/ `unrated`（打过但未参与评级）/ `unplayed`（没打过）/ `all`（全部 1421 张评级资源谱面）
 - 指定 `target_rank` 后，每条结果都会附上目标门槛、还差多少分、判定路线（转几个「可」「不可」，是否必须全良）与连打路线（还差几打、总打数、秒速、是否打得出来）
 
 具体参数表见 [docs/commands.md](docs/commands.md)。
@@ -80,7 +80,7 @@ LLM 工具 `search_scores` 是一个通用检索入口：曲名/日文名/分区
 
 - 主 Rating 采用 **AI v2**（Taiko Signal Rhythm v2），参考 OurTaiko-v1 公式（MIT，来源 [OurTaiko/taiko-rating-analyzer](https://github.com/OurTaiko/taiko-rating-analyzer)）。
 - **仅评估鬼/里（魔王/里魔王）谱面**，1–3 难度无谱面定数，不参与评级。
-- 谱面元数据打包在 `resource/charts.v1.json.gz`（1393 张，覆盖 95% 谱面）。
+- 谱面元数据打包在 `resource/charts.v1.json.gz`（1421 张，其中 1413 张有 AI v2 定数）。2026-10-16 补算了 86 张已核对的国服单人谱；双打、需 P1 映射复核及缺 TJA 的谱面未估填，见[逐谱审计](docs/cn-constant-backfill-2026-10-16.html)。
 - Rating 历史保存在 AstrBot 的 `data/plugin_data/astrbot_plugin_rt_link/rt_link.db`，插件更新不会覆盖；快照不保存 apikey。
 - 每次菌菌同步都会记录同步批次；曲目成绩状态发生变化时追加到 `score_history`，相同状态不会重复占用空间。旧数据库启动时自动增量迁移。
 - 升级到新版后，旧 Rating 缓存不会被当作“全难度已同步”。首次发送 `/rtlink`、`/rtlink score <曲名>`、`/rtlink rating`、`/rtlink profile` 或 `/rtlink weakness` 会自动补同步；也可用 `/rtlink update` 手动强制同步。同步失败时会返回这些操作提示。

@@ -19,7 +19,7 @@ from scripts.build_song_names import catalog_charts  # noqa: E402
 
 
 SCHEMA_VERSION = 1
-DATA_VERSION = "2026-10-14.2"
+DATA_VERSION = "2026-10-16.1"
 RANK_ORDER = [
     "五级", "四级", "三级", "二级", "一级",
     "初段", "二段", "三段", "四段", "五段",

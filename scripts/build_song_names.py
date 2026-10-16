@@ -19,7 +19,7 @@ from scripts.build_aliases import read_tja_title
 from scripts.song_identity import exact_candidates
 from song_alias import normalize
 
-DATA_VERSION = "2026-10-15.1"
+DATA_VERSION = "2026-10-16.1"
 SOURCE_URLS = {
     "sakura": "https://viewer.sakura-bot.cn/api/content/songs",
     "kinoko": "https://kinoko.zorua.cn/api/scores/catalog?schema_version=3",
@@ -41,6 +41,37 @@ def keyed(rows, field):
             raise ValueError(f"invalid/duplicate game ID: {sid}")
         result[sid] = row
     return result
+
+
+def apply_reviewed_cn_updates(songs):
+    """Keep dated official corrections when upstream catalogs lag behind."""
+    override_path = ROOT / "scripts/data/cn_catalog_overrides.json"
+    overrides = read(override_path)
+    for entry in overrides["songs"]:
+        song = songs[str(entry["id"])]
+        old_title = song["title"]
+        song["names"].setdefault(old_title, ["previous-canonical"])
+        song["cnStatus"] = entry["cnStatus"]
+        song["cnStatusEvidence"] = {k: entry[k] for k in ("effectiveDate", "source", "reason")}
+        if entry.get("title"):
+            song["title"] = entry["title"]
+            tags = song["names"].setdefault(entry["title"], [])
+            if "cn-official:2026-10-14" not in tags:
+                tags.append("cn-official:2026-10-14")
+    review_path = ROOT / "scripts/data/cn_constant_backfill.json"
+    for row in read(review_path)["charts"]:
+        if row["status"] != "verified":
+            continue
+        song = songs[str(row["id"])]
+        song["levels"][str(row["level"])].update(stars=row["stars"], totalNotes=row["totalNotes"])
+        for name in (row["sourceTitle"], row["sourceTitleJa"]):
+            if name:
+                tags = song["names"].setdefault(name, [])
+                if "reviewed-tja:2026-10-16" not in tags:
+                    tags.append("reviewed-tja:2026-10-16")
+    for song in songs.values():
+        for meta in song["levels"].values():
+            meta["cnAvailable"] = song["cnStatus"] == "current" and meta.get("cnDifficultyListed", False)
 
 
 def build(sakura_path, kinoko_path, ese_root, mapping_path, index_path):
@@ -129,6 +160,9 @@ def build(sakura_path, kinoko_path, ese_root, mapping_path, index_path):
                 levels.setdefault(
                     row["level"], {"stars": row["stars"], "totalNotes": None}
                 )
+        for level, meta in levels.items():
+            cn_stars = s.get(f"level_{level}")
+            meta["cnDifficultyListed"] = type(cn_stars) is int and cn_stars > 0
         songs[str(sid)] = {
             "title": title,
             "titleJa": jp,
@@ -140,6 +174,8 @@ def build(sakura_path, kinoko_path, ese_root, mapping_path, index_path):
             "names": names,
             "levels": {str(level): data for level, data in sorted(levels.items())},
         }
+
+    apply_reviewed_cn_updates(songs)
 
     # Keep proven mappings; extend only with an exact independent source title, course,
     # note count AND stars, and one source chart. Ambiguous variants stay out.
@@ -199,10 +235,18 @@ def build(sakura_path, kinoko_path, ese_root, mapping_path, index_path):
         revision=index["eseRevision"],
         indexSha256=hashlib.sha256(Path(index_path).read_bytes()).hexdigest(),
     )
+    sources["cnReview"] = {
+        "url": "scripts/data/cn_catalog_overrides.json",
+        "sha256": hashlib.sha256((ROOT / "scripts/data/cn_catalog_overrides.json").read_bytes()).hexdigest(),
+    }
+    sources["cnChartReview"] = {
+        "url": "scripts/data/cn_constant_backfill.json",
+        "sha256": hashlib.sha256((ROOT / "scripts/data/cn_constant_backfill.json").read_bytes()).hexdigest(),
+    }
     return {
         "schemaVersion": 1,
         "dataVersion": DATA_VERSION,
-        "retrievedDate": "2026-10-15",
+        "retrievedDate": "2026-10-16",
         "sources": sources,
         "sourceDifferences": differences,
         "excludedSourceEntries": excluded,

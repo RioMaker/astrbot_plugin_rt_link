@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "version": "2026-10-15.1",
-  "buildId": "20261015T030345Z-2c3fff72",
-  "archiveBytes": 29046721,
-  "archiveSha256": "92b1a5d7faf5079a5d0ab6593bd62334d1704b25b4031c68a5c2476be7ef73b8",
-  "unpackedBytes": 33926425,
-  "chartsSha256": "5c1011a3a9dc4bf3ea02b81f6806eff268c7969af852b56d0f9b86b3abf5c8d9",
-  "archiveFile": "chart-library-20261014.zip"
+  "version": "2026-10-16.1",
+  "buildId": "20261016-cn-constants-v1",
+  "archiveFile": "chart-library-20261014.zip",
+  "archiveBytes": 29584979,
+  "archiveSha256": "9fd8a170c7519ca6742af41c3dd9b388f53e3ec33ee528bd3202ff482c191f05",
+  "unpackedBytes": 34589207,
+  "chartsSha256": "4da033a2115c64295272fb10ddb9b772cc23d7eb31f9917d796e055745e9d99d"
 }

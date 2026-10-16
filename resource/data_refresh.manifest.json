@@ -1,152 +1,44 @@
 {
   "schemaVersion": 1,
-  "dataVersion": "2026-10-14.1",
-  "runId": "rtlink-20261014",
-  "pluginBefore": "2b453fc5bbad1391cc0c3568baf0693872988deb",
-  "ese": {
-    "url": "https://ese.tjadataba.se/ESE/ESE.git",
-    "previousRevision": "3b9ff730d32e4777f35ed519de5a521a26fb9676",
-    "revision": "fa2374283a11e0bdac4a7ba23aafc0d5317540e5",
-    "commitDate": "2026-09-26",
-    "tjaFiles": 3095,
-    "parsedCourses": 3255,
-    "parseErrors": [
-      {
-        "path": "09 Namco Original/Revival Drumroll/Revival Drumroll.tja",
-        "reason": "empty-chart"
-      }
-    ]
-  },
+  "dataVersion": "2026-10-16.1",
+  "runId": "cn-constant-backfill-20261016",
+  "baselineCommit": "f117b2298958758613bace996d6ff146ee9f5dad",
+  "baselineChartsSha256": "5c1011a3a9dc4bf3ea02b81f6806eff268c7969af852b56d0f9b86b3abf5c8d9",
   "primaryRating": {
     "modelId": "taiko-signal-rhythm-v2-2026-08-05",
     "retrained": false,
-    "chartsChanged": false,
-    "modelWeightsSha256": "14aa800b2131398af90f80cef227567ebc6dc256f3fc050e22ebef3813e71f79",
-    "note": "Existing AI constants and rating algorithm retained; ESE configuration profiles refreshed separately."
+    "existingFeaturesPreserved": 1327,
+    "addedFeatures": 86,
+    "modelWeightsSha256": "14aa800b2131398af90f80cef227567ebc6dc256f3fc050e22ebef3813e71f79"
   },
-  "mapping": {
-    "runtimeCharts": 1393,
-    "matched": 1344,
-    "unmatched": 16,
-    "review": 33,
-    "featureChartsVerified": 1327,
-    "featureFingerprintsChanged": 188,
-    "sha256": "bb7d8b2b780be43e1f96e01abbc62421d72b05dca089a40283360fb31e95304d",
-    "overrides": [
-      {
-        "songNo": 372,
-        "level": 4,
-        "relativePath": "09 Namco Original/Senpuu no Mai Earth/Senpuu no Mai Earth.tja",
-        "course": "oni",
-        "totalNotes": 693,
-        "fingerprint": "c6b84bdec1000c873d6a0b83cd20864090926a25b432ce322e7b46fe1af55fea",
-        "warnings": [],
-        "reason": "Explicit normal chart; same-note-count anomaly excluded by TJA TITLE/SUBTITLEJA."
-      },
-      {
-        "songNo": 1224,
-        "level": 4,
-        "relativePath": "09 Namco Original/Shunyuu happy excursion/Shunyuu happy excursion Souuchi.tja",
-        "course": "oni",
-        "totalNotes": 393,
-        "fingerprint": "00f3584bc304f3937da42f2198eb4432037a473f21e1f8b090aba0abb83c6904",
-        "warnings": [],
-        "reason": "Explicit normal chart; same-note-count anomaly excluded by TJA TITLE/SUBTITLEJA."
-      }
-    ]
-  },
-  "configuration": {
-    "version": "bpm7-2026-10-14-v1",
-    "changedProfiles": 36,
-    "changedBaselines": 13,
-    "maxCeilingChange": 0.17937007652166415
-  },
-  "dan": {
-    "courses": 167,
-    "songEntries": 501,
-    "cn2026Ranks": 15,
-    "verificationStatus": "reference_cross_checked",
-    "officialArticleRetrieved": false,
-    "cn2026Opens": "2026-10-14",
-    "cn2025Closes": "2026-10-01",
-    "reference": "https://wikiwiki.jp/taiko-fumen/作品/新AC中国版/アップデート履歴"
-  },
-  "rolls": {
-    "before": 1326,
-    "after": 1344,
-    "added": 18,
-    "removed": 0,
-    "changed": 104
-  },
-  "aliases": {
-    "before": 5509,
-    "after": 5525,
-    "legacyNormalizedNamesPreserved": true,
-    "retainedLegacyNames": {
-      "914": [
-        "Synchronica Airlines"
-      ],
-      "954": [
-        "Central Dogma Part 1"
-      ],
-      "999": [
-        "Central Dogma Part.2"
-      ],
-      "1000": [
-        "Shouyou de Show You!"
-      ],
-      "1027": [
-        "Natsu Matsuri -JITTERIN’ JINN Version-"
-      ],
-      "1079": [
-        "GO ON ～Mirai e～"
-      ],
-      "1154": [
-        "Rokka no Mai"
-      ],
-      "1183": [
-        "Drawin’☆Dream!"
-      ]
-    }
-  },
-  "scoreRank": {
-    "refetchedWikiEntries": 1733,
-    "matched": 1345,
-    "semanticChanges": 0,
-    "resourceReplaced": false
-  },
-  "validation": {
-    "pytestPassed": 257,
-    "scope": "local tests and historical local-cache replay; no live API/AstrBot/QQ/deployment",
-    "replay": {
-      "beforeRating": 9.810440671065447,
-      "afterRating": 9.810440671065447,
-      "ratedCharts": 1314,
-      "changedPlayerCells": 10,
-      "changedRecommendationItems": 1
+  "summary": {
+    "reviewed": 98,
+    "statuses": {
+      "verified": 86,
+      "deferred-p1-mapping": 4,
+      "deferred-double": 6,
+      "missing-tja": 2
     },
-    "inputSha256": "3129b27ec84ca3bf2b46c5dda4d874a3bf2a4351b5c7865001bb6adf0dce2137"
+    "cnSongs": 1131,
+    "cnCharts": 1398,
+    "cnMissingAI": 12,
+    "retiredReferences": 0
   },
-  "backup": {
-    "pathFromWorkspace": ".maintenance/rtlink-20261014/before.zip",
-    "sha256": "1c5351026cedbab5d23621c5b536cb4dfc2bcd0d696ab6b3cdb5dbf5b8f55825",
-    "files": 3053,
-    "crcChecked": true
-  },
+  "reviews": [
+    "scripts/data/cn_constant_backfill.json",
+    "scripts/data/cn_catalog_overrides.json",
+    "docs/cn-constant-backfill-2026-10-16.json"
+  ],
   "resourcesSha256": {
-    "charts.v1.json.gz": "5c1011a3a9dc4bf3ea02b81f6806eff268c7969af852b56d0f9b86b3abf5c8d9",
-    "score_rank.v1.json.gz": "b70e93f5467522fc056981401776d76346f098cf329bf84f5546041916bfbf90",
-    "dan_courses.v1.json.gz": "17e92809a0012e6e328ca4598cdf17c82e62351748925f691f749ce41541afde",
-    "aliases.v1.json.gz": "fc0858f0ea8d2c8abcae30a4637b18a3230835821ad0266ed28cef2a19313599",
-    "rolls.v1.json.gz": "5ae7fb23c8a58702c8dae7d0f939720d6f6dc3c3d4e96d0d6dec844ed560482c",
-    "profile_configurations.v1.json.gz": "61da349461da1ee6d63c510c452c4b98e9e3ff638baba98593e6b1f1317e15f4",
-    "profile_configurations.provenance.json.gz": "6632cfc59951612174eb0c7f243fbfa4177a8d339647e38deda594e35f433e66"
+    "aliases.v1.json.gz": "427a897a4f2106d578707592f30ff4bd04d52da839ba34884033b22e08b66955",
+    "chart-library-20261014.zip": "9fd8a170c7519ca6742af41c3dd9b388f53e3ec33ee528bd3202ff482c191f05",
+    "charts.v1.json.gz": "4da033a2115c64295272fb10ddb9b772cc23d7eb31f9917d796e055745e9d99d",
+    "cn-tja-20261016.zip": "b4f1f087b1acc1192f641466ca77a21de8665b663d432054a8adaf909f02a471",
+    "dan_courses.v1.json.gz": "30dadfd2d02a038790953163301e9db7c79fb14027efce3e076137856687e8b6",
+    "profile_configurations.provenance.json.gz": "824382f430699b7cc53c438f20b4ffe520cc0da61ea408fe6580b443c0d3ce85",
+    "profile_configurations.v1.json.gz": "b233dd9638c397bac2a3bd910b26d4ae79fedd2c9144eadc7268265eccbeb08c",
+    "rolls.v1.json.gz": "8d34a000790571f8eb3c2cd02f671ef2a8c26836736c706a641597c4c0ff025e",
+    "score_rank.v1.json.gz": "b70e93f5467522fc056981401776d76346f098cf329bf84f5546041916bfbf90"
   },
-  "inputsSha256": {
-    "sourceMarkdown": "b21e7b96b012e52aa203a73aabe3d0ad8ad031a3f6fcc29eee091e2c0ed5c0ec",
-    "curatedAliases": "b789eee8b0b52a20ce810b309afaeb5914db4463a40cadd053b76e2cc1d8134f",
-    "fumendb": "b064c9b2bc9314b59374cf613fca1f79ffec9333053d4d40862e92749d5798ba",
-    "cnSongs": "38084979877c20a1f9d43ff111fc258bc1bef0ce010fac5aa3559d647c0d67b7",
-    "sourceEvidence": "b1d09629f7905a9f29241e4443b4006b9b8286af553be6d371ad628a0e7712ba"
-  }
+  "liveValidation": "Offline model replay, packaged source and runtime tests only; no AstrBot/QQ deployment"
 }

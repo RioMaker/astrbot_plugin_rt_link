@@ -48,15 +48,16 @@ def test_verified_names_have_the_right_identity(data, name, sid):
     assert match_names(data[1], name) == {sid}
 
 
-def test_new_dan_is_named_without_inventing_model_features(data):
+def test_new_dan_uses_verified_backfilled_features(data):
     charts, aliases, dan = data
     for sid, title, notes in [
-        (1502, "DONKYO Likelihood", 1059),
+        (1502, "钝响Likelihood", 1059),
         (1503, "活声Likelihood", 938),
     ]:
-        assert (sid, 4) not in charts
+        assert charts[sid, 4]["feature"]["aiConstant"] > 0
+        assert charts[sid, 4]["totalNotes"] == notes
         assert display_name(aliases, sid, 4) == title
-        assert aliases["songs"][f"{sid}|4"]["metadata"]["rated"] is False
+        assert aliases["songs"][f"{sid}|4"]["metadata"]["rated"] is True
         for region in ("cn", "jp_worldwide"):
             song = next(
                 s
@@ -98,7 +99,7 @@ def test_mapping_rejects_same_name_with_wrong_note_count():
 
 def test_every_name_and_collision_is_audited(data):
     report = audit()
-    assert report["summary"]["currentCnSongs"] == 1126
+    assert report["summary"]["currentCnSongs"] == 1131
     assert len(report["conflicts"]) == report["summary"]["collisionKeys"]
     assert all(c["decision"] for c in report["conflicts"])
     assert len(report["excludedSourceEntries"]) == 143

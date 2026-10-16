@@ -17,7 +17,7 @@ def test_runtime_dan_resource_is_complete_and_indexed():
     catalog = load_dan_courses(ROOT / "resource" / "dan_courses.v1.json.gz", charts)
 
     assert catalog["schema_version"] == 1
-    assert catalog["data_version"] == "2026-10-14.2"
+    assert catalog["data_version"] == "2026-10-16.1"
     # 2022–2026 五届日版/国际版 + 国服 2023/2024/2025，8 套完整课程 + 国服 2026 五级至十段
     assert len(catalog["courses"]) == 167
     assert sum(len(course["songs"]) for course in catalog["courses"]) == 501
@@ -30,7 +30,7 @@ def test_runtime_dan_resource_is_complete_and_indexed():
     ]
     # 曲目身份来自公开曲库，未评级谱面不再等同于“无 ID”。
     assert statuses.count("not_in_chart_resource") == 0
-    assert statuses.count("catalog_verified_unrated") == 12
+    assert statuses.count("catalog_verified_unrated") == 8
     assert "unmapped" not in statuses
 
 

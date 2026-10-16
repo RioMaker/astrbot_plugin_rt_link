@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "version": "2026-10-16.1",
+  "songs": [
+    {
+      "id": 1447,
+      "title": "BUBBLE LIP RAVE MACHINE",
+      "cnStatus": "current",
+      "effectiveDate": "2026-10-14",
+      "source": "https://www.bilibili.com/opus/1257129643294588951",
+      "reason": "Official CN update lists this song; Sakura shelf_status=1 snapshot is stale."
+    },
+    {
+      "id": 1448,
+      "title": "DAJARE de OSHARE",
+      "cnStatus": "current",
+      "effectiveDate": "2026-10-14",
+      "source": "https://www.bilibili.com/opus/1257129643294588951",
+      "reason": "Official CN update lists this song; Sakura shelf_status=1 snapshot is stale."
+    },
+    {
+      "id": 1449,
+      "title": "古典乐组曲（寒假篇）",
+      "cnStatus": "current",
+      "effectiveDate": "2026-10-14",
+      "source": "https://www.bilibili.com/opus/1257129643294588951",
+      "reason": "Official CN update lists this song; Sakura shelf_status=1 snapshot is stale."
+    },
+    {
+      "id": 1464,
+      "title": "ZOMEKI THUNDER",
+      "cnStatus": "current",
+      "effectiveDate": "2026-10-14",
+      "source": "https://www.bilibili.com/opus/1257129643294588951",
+      "reason": "Official CN update lists this song; Sakura shelf_status=1 snapshot is stale."
+    },
+    {
+      "id": 1465,
+      "title": "铁锤",
+      "cnStatus": "current",
+      "effectiveDate": "2026-10-14",
+      "source": "https://www.bilibili.com/opus/1257129643294588951",
+      "reason": "Official CN update lists this song; Sakura shelf_status=1 snapshot is stale."
+    },
+    {
+      "id": 1502,
+      "title": "钝响Likelihood",
+      "cnStatus": "current",
+      "effectiveDate": "2026-10-14",
+      "source": "https://www.bilibili.com/opus/1257129643294588951",
+      "reason": "Official CN update lists this song; Sakura shelf_status=1 snapshot is stale."
+    },
+    {
+      "id": 937,
+      "cnStatus": "archive",
+      "effectiveDate": "2026-08-19",
+      "source": "https://wikiwiki.jp/taiko-fumen/作品/新AC中国版/アップデート履歴",
+      "reason": "Removed on 2026-08-19 at 06:00; stale Sakura snapshot still marks current."
+    }
+  ]
+}

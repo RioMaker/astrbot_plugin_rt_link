@@ -1,8 +1,8 @@
 {
   "schemaVersion": 2,
   "modelId": "taiko-signal-rhythm-v2-2026-08-05",
-  "chartCount": 1393,
-  "source": "..\\taiko-star-rating-system-cal-by-ai\\public\\data\\charts.v1.json",
+  "chartCount": 1421,
+  "source": "frozen v2 model + scripts/data/cn_constant_backfill.json; existing AI features preserved",
   "trimmedFields": [
     "constant",
     "composite",
@@ -16,6 +16,9 @@
     "feature.proportions",
     "feature.rhythmProfile"
   ],
-  "compressedBytes": 512669,
-  "rawBytes": 4734401
+  "compressedBytes": 578509,
+  "rawBytes": 5368244,
+  "sha256": "4da033a2115c64295272fb10ddb9b772cc23d7eb31f9917d796e055745e9d99d",
+  "backfillVersion": "2026-10-16.1",
+  "catalogVersion": "taiko-signal-rhythm-v2-2026-08-05+cn-2026-10-16.1"
 }
