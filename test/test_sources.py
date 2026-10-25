@@ -69,6 +69,31 @@ def setup_services(tmp_path, charts):
     return MultiSourceService(services, selections), old_client, new_client
 
 
+def test_ai_task_routes_follow_current_source_without_cross_source_data(tmp_path, charts):
+    async def run():
+        router, old_client, new_client = setup_services(tmp_path, charts)
+        try:
+            overview = await router.get_ai_overview_text("qq")
+            assert "菌菌" in overview
+            old_calls = old_client.calls
+            assert (await router.bind_sakura("qq", "x" * 48))[0]
+            text = await router.recommend_practice_text("qq", "accuracy")
+            assert "Sakura" in text and old_client.calls == old_calls
+            new_calls = new_client.calls
+            song_id = router.services["sakura"].db.get_scores("qq")[0]["song_no"]
+            text = await router.get_song_brief_text("qq", str(song_id), "4")
+            assert "Sakura" in text and "1000000" in text
+            assert new_client.calls == new_calls
+            assert (await router.source_text("qq", "kinoko")).startswith("当前数据源：菌菌")
+            text = await router.get_song_brief_text("qq", str(song_id), "4")
+            assert "菌菌" in text and "900000" in text
+            assert new_client.calls == new_calls
+        finally:
+            for service in router.services.values():
+                service.db.close()
+    asyncio.run(run())
+
+
 def test_independent_databases_binding_cache_history_and_restart(tmp_path, charts):
     async def run():
         router, _, client = setup_services(tmp_path, charts)

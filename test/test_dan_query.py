@@ -79,10 +79,10 @@ def test_cn_2026_open_scope_and_source_limit_are_visible():
         assert "没有找到" in text
 
 
-def test_llm_tool_is_registered_and_uses_public_catalog():
+def test_public_catalog_helper_is_preserved_without_ai_registration():
     plugin = object.__new__(main.RTLinkPlugin)
     plugin.dan_courses = _catalog()
-    assert main.RTLinkPlugin.query_dan_course._llm_tool_name == "query_dan_course"
+    assert not hasattr(main.RTLinkPlugin.query_dan_course, "_llm_tool_name")
     result = asyncio.run(
         main.RTLinkPlugin.query_dan_course(
             plugin, None, year=2023, region="jp", rank="玄人"

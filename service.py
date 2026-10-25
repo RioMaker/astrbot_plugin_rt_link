@@ -17,6 +17,7 @@ from pathlib import Path
 
 # 包加载（AstrBot）时用相对导入；本地直接运行 service.py 时回退到绝对导入。
 if __package__:
+    from . import ai_coach
     from . import improve_text as improve_text_mod
     from . import rating as rating_mod
     from . import score_query as score_query_mod
@@ -35,6 +36,7 @@ if __package__:
     from .weakness_image import render_weakness_image
     from .storage import ScoreDatabase, load_charts
 else:
+    import ai_coach
     import improve_text as improve_text_mod
     import rating as rating_mod
     import score_query as score_query_mod
@@ -1110,6 +1112,51 @@ class ScoreService:
     async def generate_weakness_image(self, qq) -> tuple[bool, str]:
         """生成节奏弱项图片，冷门配置在图中独立展示。"""
         return await self._generate_analysis_image(qq, "weakness", render_weakness_image, "节奏弱项")
+
+    async def get_ai_overview_text(self, qq) -> str:
+        analysis, error = await self._get_analysis(qq)
+        if error:
+            return error
+        return ai_coach.overview(analysis)
+
+    async def recommend_practice_text(self, qq, goal="general", level="", target_rank="", scope="") -> str:
+        difficulty = parse_difficulty(level) if level else None
+        if level and difficulty not in (4, 5):
+            return "难度仅支持鬼/里（4/5），省略表示鬼/里都看。"
+        rank = score_rank_mod.parse_score_rank(target_rank) if target_rank else None
+        if target_rank and rank not in range(2, 9):
+            return "目标评价无效：请填写白粹、铜粹、银粹、金雅、粉雅、紫雅、极或 2–8。"
+        # Validate before fetching player data, so invalid tool arguments never sync.
+        if goal not in ai_coach.GOALS or scope not in ("", "played", "unplayed", "all"):
+            return "目标或范围无效，请按工具参数提供目标及 played/unplayed/all 范围。"
+        if ((goal in ("accuracy", "full_combo", "score_rank") and scope not in ("", "played"))
+                or (goal == "explore" and scope not in ("", "unplayed"))
+                or (target_rank and goal != "score_rank")):
+            return "参数冲突：精度/全连/评价提升仅支持已有成绩，探索仅支持未玩，目标评价仅用于 score_rank。"
+        analysis, error = await self._get_analysis(qq)
+        if error:
+            return error
+        records = [r for r in self._records(analysis) if difficulty is None or r.get("level") == difficulty]
+        return await asyncio.to_thread(
+            ai_coach.recommendations, analysis, self.charts, self.score_rank, self.rolls,
+            goal, difficulty, rank, scope, self._default_target_rank(records),
+        )
+
+    async def get_song_brief_text(self, qq, song_name, level="") -> str:
+        prefix, query = parse_song_query(song_name)
+        difficulty = parse_difficulty(level) if level else prefix
+        if (level or prefix is not None) and difficulty not in (4, 5):
+            return "难度仅支持鬼/里（4/5）。"
+        if level and prefix is not None and prefix != difficulty:
+            return "曲名前缀与 level 难度冲突。"
+        if not query.strip():
+            return "请提供单首歌曲的曲名、别名或歌曲 ID。"
+        alias_id = (await self._get_alias_map()).get(query.strip().lower())
+        song, error = self._resolve_song(str(alias_id) if alias_id is not None else query)
+        if error:
+            return error
+        analysis, player_error = await self._get_analysis(qq)
+        return ai_coach.song_brief(self.charts, song["id"], difficulty, analysis, player_error)
 
     async def get_profile_text(self, qq) -> str:
         analysis, err = await self._get_analysis(qq)

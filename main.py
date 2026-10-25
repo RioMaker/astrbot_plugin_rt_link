@@ -8,8 +8,10 @@ rt_link 插件：将 QQ 号绑定到「菌菌控制台」apikey，查询太鼓�
 - 交互：命令（/rtlink ...）+ LLM 工具（模型可自动调用）
 """
 
+import asyncio
 import hashlib
 import re
+import time
 from pathlib import Path
 
 from astrbot.api import logger
@@ -44,7 +46,7 @@ else:
 PLUGIN_NAME = "rt_link"
 PLUGIN_AUTHOR = "Rio"
 PLUGIN_DESC = "支持菌菌与 Sakura 独立绑定、成绩存储与太鼓实力评估"
-PLUGIN_VERSION = "v0.16.0"
+PLUGIN_VERSION = "v0.17.0"
 
 COMMAND_NAME = "rtlink"
 BINDINGS_KEY = "bindings"
@@ -569,9 +571,71 @@ class RTLinkPlugin(Star):
         return level if level in RATED_LEVELS else (None if level == 0 else level)
 
     # ------------------------------------------------------------------
-    # LLM 工具：允许模型在对话中直接调用（安全约定：只返回成绩/画像文本，绝不返回 apikey）
+    # 仅以下四个任务入口注册给模型；命令和旧的内部查询方法继续保留。
     # ------------------------------------------------------------------
-    @filter.llm_tool(name="query_taiko_score")
+    async def _run_ai_tool(self, event, key, producer):
+        """Per-message budget and deduplication, isolated from ordinary commands."""
+        state = getattr(event, "_rtlink_ai_state", None)
+        if state is None:
+            state = {"lock": asyncio.Lock(), "seen": set(), "calls": 0}
+            event._rtlink_ai_state = state
+        async with state["lock"]:
+            if key in state["seen"]:
+                return "本次请求已提供该查询材料，请复用已有结果直接回答，不要重复调用。"
+            if state["calls"] >= 2:
+                return "本次请求的 RTLink 查询预算已用完，请根据已有材料回答，说明仍缺少的依据。"
+            state["calls"] += 1
+            started = time.perf_counter()
+            result = await producer()
+            state["seen"].add(key)
+            # All normal coach results are bounded structurally. For legacy dan
+            # or error text, retain both the beginning and the final limitations.
+            if len(result) > 2500:
+                result = result[:1600] + "\n部分材料已省略，勿推断未显示项目。\n" + result[-800:]
+            logger.info(f"rt_link AI：tool={key[0]} calls={state['calls']} chars={len(result)} "
+                        f"elapsed={time.perf_counter() - started:.3f}s")
+            return result
+
+    @filter.llm_tool(name="get_player_overview")
+    async def get_player_overview(self, event: AstrMessageEvent) -> str:
+        """一次获取当前玩家的 Rating、能力、主要弱项与成绩证据。推荐歌曲直接用 recommend_practice，无需先调用本工具。"""
+        return await self._run_ai_tool(
+            event, ("get_player_overview",),
+            lambda: self.service.get_ai_overview_text(event.get_sender_id()),
+        )
+
+    @filter.llm_tool(name="recommend_practice")
+    async def recommend_practice(
+        self, event: AstrMessageEvent, goal: str = "general", level: str = "",
+        target_rank: str = "", scope: str = "",
+    ) -> str:
+        """一次返回玩家背景及 5 首练习曲、成绩/配置依据和目标；不足 5 首会说明。拿到结果即可回答，不必逐曲补查。
+
+        Args:
+            goal(string): general 综合练习（默认）、weakness 补弱项、accuracy 精度、full_combo 全连、score_rank 升评价、explore 探索未玩曲
+            level(string): 4/鬼或5/里；省略看鬼/里
+            target_rank(string): 仅 score_rank 使用，白粹/铜粹/银粹/金雅/粉雅/紫雅/极；省略自动取常见评价上一档
+            scope(string): played 已玩、unplayed 未玩、all；省略默认已玩，explore 默认未玩；精度/全连/升评价仅支持已玩
+        """
+        return await self._run_ai_tool(
+            event, ("recommend_practice", goal, level, target_rank, scope),
+            lambda: self.service.recommend_practice_text(event.get_sender_id(), goal, level, target_rank, scope),
+        )
+
+    @filter.llm_tool(name="query_song_brief")
+    async def query_song_brief(self, event: AstrMessageEvent, song_name: str, level: str = "") -> str:
+        """一次查询单首歌的成绩和公共谱面配置摘要。支持未玩曲；不提供逐小节或原始特征翻页。
+
+        Args:
+            song_name(string): 单首歌的名称、别名或歌曲 ID，支持鬼夏祭这类前缀
+            level(string): 4/鬼或5/里；省略返回该曲鬼/里资料
+        """
+        return await self._run_ai_tool(
+            event, ("query_song_brief", song_name, level),
+            lambda: self.service.get_song_brief_text(event.get_sender_id(), song_name, level),
+        )
+
+    # 以下兼容方法不注册为 AI 工具，避免零散查询形成多轮工具链。
     async def query_taiko_score(self, event: AstrMessageEvent, song_name: str, level: str = "") -> str:
         """查询当前 QQ 用户绑定账号中，指定歌曲的成绩与 Rating。支持别名与「鬼夏祭」这类难度前缀组合名。
 
@@ -583,7 +647,6 @@ class RTLinkPlugin(Star):
             event.get_sender_id(), song_name, parse_difficulty(level) if level else None
         )
 
-    @filter.llm_tool(name="query_dan_course")
     async def query_dan_course(
         self,
         event: AstrMessageEvent,
@@ -628,20 +691,21 @@ class RTLinkPlugin(Star):
     ) -> str:
         """按玩家三首课题曲的实际良/可/不可/连打数据，核对指定段位的可计算合格条件。
 
-        用户询问「我能不能过某段」「评价我的过段能力」「哪些课题曲条件没达到」时，
-        应调用本工具，而不是只调用 query_dan_course。返回结果会明确区分可核对条件与
-        无法由单曲成绩证明的魂槽、连续演奏条件。
+        用于「我能不能过某段」「哪些课题条件没达到」。一次提供成绩与条件核对，
+        不需要额外查询；单曲最佳成绩不能证明魂槽、连续演奏或实际过段。
 
         Args:
             year(int): 段位年份，可选 2022、2023、2024、2025、2026
             rank(string): 段位，如 五级、初段、十段、玄人、达人
             region(string): 区域，可选 cn/国服/中国大陆 或 jp/日版/国际版；省略时按玩家绑定服务器选择
         """
-        return await self.service.get_player_dan_capability_text(
-            event.get_sender_id(), self.dan_courses, year, region, rank
+        return await self._run_ai_tool(
+            event, ("evaluate_player_dan", year, rank, region),
+            lambda: self.service.get_player_dan_capability_text(
+                event.get_sender_id(), self.dan_courses, year, region, rank
+            ),
         )
 
-    @filter.llm_tool(name="get_player_rating")
     async def get_player_rating(self, event: AstrMessageEvent) -> str:
         """查询当前 QQ 用户的综合 Rating 与七维能力（谱面底力/持续耐力/爆发手速/击打精度/配置处理/节奏适应/读谱）。
 
@@ -650,7 +714,6 @@ class RTLinkPlugin(Star):
         """
         return await self.service.get_rating_text(event.get_sender_id())
 
-    @filter.llm_tool(name="get_player_profile")
     async def get_player_profile(self, event: AstrMessageEvent) -> str:
         """查询当前 QQ 用户的实力画像：综合 Rating、七维能力、强项与弱项、全连/咚大福数量。
 
@@ -658,7 +721,6 @@ class RTLinkPlugin(Star):
         """
         return await self.service.get_profile_text(event.get_sender_id())
 
-    @filter.llm_tool(name="get_rhythm_weakness")
     async def get_rhythm_weakness(self, event: AstrMessageEvent) -> str:
         """查询当前 QQ 用户在具体节奏型上的弱项，并给出参考曲目（用于回答「该练什么」）。
 
@@ -666,7 +728,6 @@ class RTLinkPlugin(Star):
         """
         return await self.service.get_rhythm_weakness_text(event.get_sender_id())
 
-    @filter.llm_tool(name="get_difficulty_stats")
     async def get_difficulty_stats(self, event: AstrMessageEvent, level: int = 0) -> str:
         """查询指定难度的曲目数、全连率、咚大福数、平均 Rating、最高定数。
 
@@ -675,7 +736,6 @@ class RTLinkPlugin(Star):
         """
         return await self.service.get_difficulty_stats_text(event.get_sender_id(), self._level_arg(level))
 
-    @filter.llm_tool(name="get_rank_distribution")
     async def get_rank_distribution(self, event: AstrMessageEvent, level: int = 0) -> str:
         """查询当前 QQ 用户评价等级的分布（评价越高代表段位越高），含各档代表曲目。
 
@@ -684,12 +744,10 @@ class RTLinkPlugin(Star):
         """
         return await self.service.get_rank_distribution_text(event.get_sender_id(), self._level_arg(level))
 
-    @filter.llm_tool(name="get_genre_strength")
     async def get_genre_strength(self, event: AstrMessageEvent) -> str:
         """查询当前 QQ 用户各曲风分区（J-POP/アニメ/ナムコオリジナル等）的平均 Rating 与全连数，识别擅长曲风。"""
         return await self.service.get_genre_strength_text(event.get_sender_id())
 
-    @filter.llm_tool(name="get_accuracy_summary")
     async def get_accuracy_summary(self, event: AstrMessageEvent, level: int = 0) -> str:
         """查询当前 QQ 用户的精度概况：平均精度、精度区间、精度最高/最低的曲目。
 
@@ -698,7 +756,6 @@ class RTLinkPlugin(Star):
         """
         return await self.service.get_accuracy_summary_text(event.get_sender_id(), self._level_arg(level))
 
-    @filter.llm_tool(name="search_scores")
     async def search_scores(
         self,
         event: AstrMessageEvent,
@@ -825,7 +882,6 @@ class RTLinkPlugin(Star):
             event.get_sender_id(), detail or "brief", **filters
         )
 
-    @filter.llm_tool(name="get_chart_analysis")
     async def get_chart_analysis(
         self, event: AstrMessageEvent, song_name: str, level: str = "",
         route: str = "", detail: str = "summary", start_measure: int = 0,
@@ -855,7 +911,6 @@ class RTLinkPlugin(Star):
             start_measure=start_measure, end_measure=end_measure, offset=offset, limit=limit,
         )
 
-    @filter.llm_tool(name="get_song_full")
     async def get_song_full(self, event: AstrMessageEvent, song_name: str) -> str:
         """查询指定歌曲的鬼/里全部难度成绩、定数、Rating 与七维能力。
 
@@ -866,7 +921,6 @@ class RTLinkPlugin(Star):
         """
         return await self.service.get_song_full_text(event.get_sender_id(), song_name)
 
-    @filter.llm_tool(name="get_recent_scores")
     async def get_recent_scores(self, event: AstrMessageEvent, days: int = 1) -> str:
         """查询当前 QQ 用户最近游玩/更新的成绩（按更新时间排序）。
 
@@ -875,7 +929,6 @@ class RTLinkPlugin(Star):
         """
         return await self.service.get_recent_scores_text(event.get_sender_id(), days)
 
-    @filter.llm_tool(name="get_growth_trend")
     async def get_growth_trend(self, event: AstrMessageEvent, song_name: str = "") -> str:
         """查询指定歌曲（省略则取 Rating 最高的曲目）的分数/精度/评价随时间的变化。
 
@@ -884,7 +937,6 @@ class RTLinkPlugin(Star):
         """
         return await self.service.get_growth_trend_text(event.get_sender_id(), song_name or None)
 
-    @filter.llm_tool(name="get_improvement_candidates")
     async def get_improvement_candidates(self, event: AstrMessageEvent, level: int = 0) -> str:
         """查询「差一点全连/差一点咚大福」的谱面清单，用于给玩家提升建议。
 
@@ -893,7 +945,6 @@ class RTLinkPlugin(Star):
         """
         return await self.service.get_improvement_candidates_text(event.get_sender_id(), self._level_arg(level))
 
-    @filter.llm_tool(name="set_song_alias")
     async def set_song_alias(self, event: AstrMessageEvent, song: str, alias: str) -> str:
         """为指定歌曲设置别名（需管理员审核通过后生效）。设置前会返回歌曲 ID/名称等信息供确认。
 
@@ -903,7 +954,6 @@ class RTLinkPlugin(Star):
         """
         return await self.service.request_alias(event.get_sender_id(), song, alias)
 
-    @filter.llm_tool(name="find_rank_improvements")
     async def find_rank_improvements(
         self, event: AstrMessageEvent, target_rank: str = "", level: str = ""
     ) -> str:
@@ -937,7 +987,6 @@ class RTLinkPlugin(Star):
             parse_difficulty(level) if level else None,
         )
 
-    @filter.llm_tool(name="generate_rating_image")
     async def generate_rating_image(self, event: AstrMessageEvent):
         """生成当前 QQ 用户的鼓点画像评价图片（Rating 环 + 七维能力 + 强弱项 + 表现证据），并直接发送给用户。
 

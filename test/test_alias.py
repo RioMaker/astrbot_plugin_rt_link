@@ -33,11 +33,12 @@ def test_pure():
     print("[OK] 难度解析 + 组合名解析")
 
 
-async def _alias_flow():
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    if os.path.exists(DB_PATH):
-        os.remove(DB_PATH)
-    db = ScoreDatabase(DB_PATH)
+async def _alias_flow(db_path=None):
+    db_path = db_path or DB_PATH
+    os.makedirs(os.path.dirname(db_path), exist_ok=True)
+    if os.path.exists(db_path):
+        os.remove(db_path)
+    db = ScoreDatabase(db_path)
 
     rid = db.add_alias_request(303, "夏祭", "Natsumatsuri", "夏祭り", "123456789")
     assert rid is not None
@@ -90,11 +91,12 @@ async def _alias_flow():
     matched = await svc._resolve_query_to_records(records, "Jitterin")
     assert len(matched) == 1 and matched[0]["id"] == 1027
     print("[OK] 别名查询解析")
+    db.close()
 
 
-def test_alias_flow():
+def test_alias_flow(tmp_path):
     """pytest 直接跑同步包装；本机没装 pytest-asyncio 也能执行。"""
-    asyncio.run(_alias_flow())
+    asyncio.run(_alias_flow(str(tmp_path / "alias_test.db")))
 
 
 async def main():

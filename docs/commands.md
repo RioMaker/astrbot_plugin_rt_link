@@ -44,24 +44,21 @@
 
 | 工具名 | 作用 | 参数 |
 | --- | --- | --- |
-| `query_taiko_score` | 查指定歌曲成绩/Rating（支持别名、难度前缀组合名） | `song_name`（必填）、`level`（难度别名，可选） |
-| `search_scores` | **通用检索**：任意条件组合查成绩／谱面库（见下方参数表） | 见下方 |
-| `get_song_full` | 查指定歌曲鬼/里全部难度 + 七维能力 | `song_name` |
-| `get_player_rating` | 综合 Rating + 七维能力（文本） | 无 |
-| `get_player_profile` | 实力画像文本（强项/弱项） | 无 |
-| `get_rhythm_weakness` | 节奏型弱项与参考曲目 | 无 |
-| `get_difficulty_stats` | 指定难度的统计 | `level`（int，0=鬼/里合计） |
-| `get_rank_distribution` | 评价等级分布 | `level` |
-| `get_genre_strength` | 各曲风强弱 | 无 |
-| `get_accuracy_summary` | 精度概况 | `level` |
-| `get_recent_scores` | 最近成绩 | `days`（默认 1） |
-| `get_growth_trend` | 单曲成长趋势 | `song_name`（可选） |
-| `get_improvement_candidates` | 「差一点全连/咚大福」清单 | `level` |
-| `find_rank_improvements` | 「还差一点就能提升成绩评价」的曲目，按分区给出判定路线与连打路线（还差几打 / 总打数 / 秒速 / 是否打得出来；无黄条与必须全良会明确标注） | `target_rank`（可选，白粹/铜粹/银粹/金雅/粉雅/紫雅/极或 2-8）、`level`（可选） |
-| `set_song_alias` | 发起歌曲别名设置（两步确认第一步） | `song`、`alias` |
-| `query_dan_course` | 查段位道场课题曲、普通/金合格条件、开放时间与来源（曲名支持别名与难度前缀） | `year`、`region`、`rank`、`song_name`、`song_no`（均可省略） |
-| `evaluate_player_dan` | 用玩家三首课题曲的最佳记录核对可计算的合格条件 | `year`、`rank`、`region`
-| `generate_rating_image` | 生成实力画像图片并发送 | 无 |
+| `get_player_overview` | 玩家 Rating、能力摘要、主要弱项及少量成绩证据 | 无 |
+| `recommend_practice` | 一次给出必要玩家背景及 5 首练习曲、依据和目标 | `goal`、`level`、`target_rank`、`scope` |
+| `query_song_brief` | 单首歌曲的鬼/里成绩、定数、音符和主要配置摘要；未绑定也可看公共资料 | `song_name`（必填）、`level`（可选） |
+| `evaluate_player_dan` | 用玩家三首课题曲的最佳记录核对可计算的合格条件 | `year`、`rank`、`region` |
+
+仅注册以上四个入口。原有命令保留，旧工具名不再注册；推荐直接调用 `recommend_practice`，无需先查概览或逐曲补查。每条消息最多执行两次不同查询，重复查询提示复用材料；新消息重新计数。每次最多返回 2500 字符，不支持翻页。预算只限制本插件的查询工作，不限制其他插件或整个 Agent 的模型轮次。
+
+`recommend_practice` 参数：
+
+- `goal`：`general`（默认综合练习）、`weakness`（补节奏弱项）、`accuracy`（精度）、`full_combo`（全连）、`score_rank`（提升评价）、`explore`（探索未玩曲）。
+- `level`：鬼/4 或里/5；省略看鬼/里。其他难度或无效值明确报错，不悄悄放宽。
+- `target_rank`：仅 `score_rank` 支持；白粹、铜粹、银粹、金雅、粉雅、紫雅、极或 2–8。省略取所选难度常见评价的上一档，已经是极时仍取极。
+- `scope`：`played`、`unplayed`、`all`；省略默认 `played`，`explore` 默认 `unplayed`。精度、全连、升评价仅支持 `played`；`explore` 仅支持 `unplayed`。
+
+候选固定最多 5 首不同歌曲，同一首鬼/里只保留排序更靠前的一个难度，无条数和翻页参数。依据不足时返回较少候选并说明。未玩曲需匹配公共配置并附已玩参考，已玩但未评级的曲目不会误报为未玩；不推测精度或过关概率。评价推荐保留实测/估算门槛、连打资料不足及不可行路线提示。单曲摘要不提供原始特征或逐小节查询；同名歌曲无法唯一定位时先由用户明确 ID。
 
 ---
 
@@ -87,9 +84,9 @@
 
 ---
 
-## `search_scores` 参数表
+## 内部兼容检索 `search_scores` 参数表（不向 AI 注册）
 
-所有条件都是「且」的关系，全部可省略、可自由组合。
+以下保留内部服务的开发参考；模型不能调用这个入口。所有条件都是「且」的关系，全部可省略、可自由组合。
 
 ### 匹配
 

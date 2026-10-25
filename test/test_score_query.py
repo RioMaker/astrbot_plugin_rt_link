@@ -395,7 +395,8 @@ class FakeEvent:
 
 
 def _plugin():
-    plugin = main.RTLinkPlugin(main.Context({}))
+    # Dispatch tests replace the service; avoid opening persistent test databases.
+    plugin = object.__new__(main.RTLinkPlugin)
     plugin.service = FakeService()
     return plugin
 
