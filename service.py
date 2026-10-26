@@ -65,9 +65,9 @@ DIFFICULTY_NAMES = {
 
 # 精简画像缓存的数据契约版本。字段新增后提升版本，避免继续读取旧缓存
 # 中缺少图片证据字段或节奏配置常见度分组。
-RATING_CACHE_SCHEMA = 7
+RATING_CACHE_SCHEMA = 8
 RATING_HISTORY_SCHEMA = 2
-RATING_ALGORITHM_VERSION = "taiko-signal-rhythm-v2-r1-branches-v1"
+RATING_ALGORITHM_VERSION = rating_mod.RATING_ALGORITHM_VERSION
 SCORE_STORAGE_SCHEMA = 2
 
 
@@ -307,6 +307,7 @@ def _slim_result(result: dict) -> dict:
 
     return {
         "_cacheSchema": RATING_CACHE_SCHEMA,
+        "ratingAlgorithmVersion": RATING_ALGORITHM_VERSION,
         "_ts": time.time(),
         "summary": {k: round(v, 2) for k, v in result["summary"].items()},
         "ourTaikoV1": {

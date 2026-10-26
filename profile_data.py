@@ -18,7 +18,7 @@ BANDS=[('ultraslow','超慢速','0–<110'),('slow','慢速','110–<140'),
        ('normal','常规','140–<180'),('fast','高速','180–<220'),
        ('ultrafast','超高速','220–<280'),('rapid','急速','280–330'),('laser','激光级','>330')]
 RESOURCE=Path(__file__).resolve().parent/'resource'/'profile_configurations.v1.json.gz'
-CONFIGURATION_ALGORITHM = 'rhythm-v2-r1-bpm7-branches-v1'
+CONFIGURATION_ALGORITHM = 'rhythm-v2-r2-constant-cap-bpm7-branches-v1'
 
 def bpm_band(value):
     value=abs(float(value))
@@ -32,6 +32,8 @@ def load_configuration_catalog(charts,path=None):
         raw=path.read_bytes();payload=json.loads(gzip.decompress(raw))
         if payload['schemaVersion']!=1 or payload['bands']!=[list(b) for b in BANDS]:
             raise ValueError('不支持的 BPM 分档版本')
+        if payload.get('algorithmVersion') != CONFIGURATION_ALGORITHM:
+            raise ValueError('配置理论上限与玩家 Rating 算法不匹配')
         source=RESOURCE.parent/'charts.v1.json.gz'
         if payload['chartsSha256']!=hashlib.sha256(source.read_bytes()).hexdigest():
             raise ValueError('配置资源与谱面库版本不匹配')
@@ -161,7 +163,7 @@ def score_sync_changes(previous, current):
 def add_profile_rating_changes(changes, previous, current, previous_scores=None):
     """Compare player Rating only; chart difficulty constants are fixed inputs."""
     changes = copy.deepcopy(changes)
-    compatible = (
+    same_identity = (
         bool(previous)
         and changes["baseline"]
         and all(
@@ -171,6 +173,10 @@ def add_profile_rating_changes(changes, previous, current, previous_scores=None)
         )
         and previous.get("profileSource") == current["profileSource"]
     )
+    compatible = same_identity and previous.get(
+        "ratingAlgorithmVersion"
+    ) == current.get("ratingAlgorithmVersion")
+    changes["ratingModelChanged"] = bool(same_identity and not compatible)
     changes["ratingBaseline"] = bool(compatible)
     if not compatible:
         return changes
@@ -243,6 +249,7 @@ def profile_rating_baseline(analysis):
     return {
         "meta": {key: analysis["meta"].get(key) for key in ("playerId", "server")},
         "profileSource": analysis["profileSource"],
+        "ratingAlgorithmVersion": analysis.get("ratingAlgorithmVersion"),
         "profileScoreRows": analysis["profileScoreRows"],
         "records": [{key: r.get(key) for key in fields} for r in analysis["records"]],
     }

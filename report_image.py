@@ -16,8 +16,14 @@ from statistics import median
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
+if __package__:
+    from .rating import MAX_PLAYER_RATING
+else:
+    from rating import MAX_PLAYER_RATING
+
 WIDTH, HEIGHT = 1440, 2720
-MAX_RATING = 15.5
+MAX_RATING = MAX_PLAYER_RATING
+MAX_ABILITY_RATING = math.sqrt(MAX_RATING * 15.5)
 INK, INK_SOFT = "#17202a", "#26313d"
 PAPER, SURFACE = "#f3f0e8", "#fffdf8"
 SURFACE_SOFT, LINE = "#ebe7dd", "#d7d2c6"
@@ -81,6 +87,7 @@ def _fixed(value, digits=2):
 
 
 def _stage(rating):
+    rating = round(rating * 15.5 / MAX_RATING, 12)
     if rating < 1: return {"key": "frozen", "label": "冰冻石核", "detail": "核心尚未点燃，表面被冰层与岩石覆盖。", "headline": "你的 Rating 正孕育一颗冰冻星核", "color": "#8bb8cf"}
     if rating < 5: return {"key": "thawing", "label": "逐步解冻", "detail": "内部热量上升，冰层裂开并出现微弱熔光。", "headline": "你的 Rating 正在解冻一颗沉睡星核", "color": "#b7c3bf"}
     if rating < 7: return {"key": "magma", "label": "岩浆混合体", "detail": "岩石地壳与岩浆共存，裂隙开始持续喷发。", "headline": "你的 Rating 正在唤醒一颗岩浆星", "color": "#ef7044"}
@@ -359,7 +366,7 @@ def _draw_hero(draw, data):
     _text(draw, "AI 综合 RATING", 108, 192, 18, MINT, True)
     _draw_ring(draw, data["rating"])
     _text(draw, _fixed(data["rating"]), 265, 290, 54, "#ffffff", True, "center")
-    _text(draw, "/ 15.50", 265, 355, 16, "#8f9ca8", False, "center")
+    _text(draw, f"/ {MAX_RATING:.2f}", 265, 355, 16, "#8f9ca8", False, "center")
     _box(draw, 108, 426, 314, 36, "#26313d", radius=18)
     _text(draw, f"恒星阶段 · {data['stage']['label']}", 265, 434, 14, data["stage"]["color"], True, "center")
     _box(draw, 480, 148, 890, 340, SURFACE, LINE)
@@ -418,7 +425,7 @@ def _draw_galaxy(image, draw, data):
         _text(draw, f"{planet['charts']} 张 · {planet['delta']:+.2f}", 1183, y + 2, 12, "#c4ced9")
         _text(draw, _format_period(planet["period"]), 1328, y + 2, 13, "#93a3b5", True, "right")
         _box(draw, 812, y + 32, 348, 7, "#1b2430", radius=4)
-        _box(draw, 812, y + 32, max(5, min(348, planet["score"] / MAX_RATING * 348)), 7, planet["color"], radius=4)
+        _box(draw, 812, y + 32, max(5, min(348, planet["score"] / MAX_ABILITY_RATING * 348)), 7, planet["color"], radius=4)
 
 
 def _draw_actions(draw, data):

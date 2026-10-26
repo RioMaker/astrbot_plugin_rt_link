@@ -9,14 +9,14 @@ if __package__:
     from .profile_theme import txt,box,PAPER,WHITE,INK,MUTED,LINE,TEAL,RED
     from .report_image import _font,_draw_galaxy,build_report_data,RHYTHM_META,_stage
     from .score_rank import SCORE_RANK_RATIOS
-    from .rating import calc_rating
+    from .rating import MAX_PLAYER_RATING, calc_rating
     from .profile_data import build_profile_data
 else:
     import profile_theme as theme
     from profile_theme import txt,box,PAPER,WHITE,INK,MUTED,LINE,TEAL,RED
     from report_image import _font,_draw_galaxy,build_report_data,RHYTHM_META,_stage
     from score_rank import SCORE_RANK_RATIOS
-    from rating import calc_rating
+    from rating import MAX_PLAYER_RATING, calc_rating
     from profile_data import build_profile_data
 ASSETS=theme.ASSETS
 def title(row):
@@ -25,7 +25,7 @@ def title(row):
 TEXT_RAINBOW = ['#ca3861', '#b96813', '#948211', '#328759', '#237f9e', '#546cc2', '#9b51b0']
 RANK_COLORS = {1: '#69747d', 2: '#fffefa', 3: '#a36534', 4: '#7687a4', 5: '#aa7c15', 6: '#cf5892', 7: '#8660bc'}
 TEXT_RANK_COLORS = {**RANK_COLORS, 2: RANK_COLORS[1]}
-STAGE_STARTS = (0, 1, 5, 7, 9, 10, 13)
+STAGE_STARTS = tuple(v * MAX_PLAYER_RATING / 15.5 for v in (0, 1, 5, 7, 9, 10, 13))
 STAGES = [{**_stage(float(value)), 'startsAt': value} for value in STAGE_STARTS]
 PLANET_COLORS = ['#ef967e', '#e7c565', '#b69bdd', '#80cfba', '#81b8dc', '#df96b8', '#aabcc9']
 TAG_COLORS = ['#2d615a', '#59877b']
@@ -215,6 +215,19 @@ def sync_changes_height(changes):
     return 98 + rows_height + 42
 
 
+def card_rating_text(row):
+    """Rounding must not make a non-perfect record look like it reached its cap."""
+    value = row["rating"]
+    ceiling = card_rating_ceiling(row)
+    if (
+        row.get("accuracy", 0) < 1
+        and ceiling is not None
+        and round(value, 2) >= ceiling
+    ):
+        return f"{ceiling - 0.01:.2f}"
+    return f"{value:.2f}"
+
+
 def card(im, row, index, x, y, w=420, h=276, change=None):
     d = ImageDraw.Draw(im)
     ura = row["level"] == 5
@@ -267,7 +280,7 @@ def card(im, row, index, x, y, w=420, h=276, change=None):
     txt(d, "单谱 Rating", x + 24, y + 155, 15, MUTED)
     colored_text(
         im,
-        f"{row['rating']:.2f}",
+        card_rating_text(row),
         x + 24,
         y + 176,
         23,
@@ -279,7 +292,8 @@ def card(im, row, index, x, y, w=420, h=276, change=None):
     ceiling_text = f"{ceiling:.2f}" if ceiling is not None else "—"
     txt(d, f"全良上限 {ceiling_text}", x + 24, y + 214, 15, MUTED)
     txt(d, "精度", x + w - 24, y + 155, 15, MUTED, align="right")
-    accuracy = f"{row['accuracy'] * 100:.2f}%"
+    accuracy_value = min(row["accuracy"] * 100, 99.99) if row["accuracy"] < 1 else 100
+    accuracy = f"{accuracy_value:.2f}%"
     if row["accuracy"] >= 1:
         colored_text(im, accuracy, x + w - 24, y + 176, 23, 8, "right")
     else:
@@ -491,6 +505,8 @@ class ProfileRenderer:
             note = "与上次同步相比，最高分与玩家 Rating 无变化。"
             if not changes["baseline"]:
                 note = "首次同步已建立成绩与玩家 Rating 基线，下次同步将显示升降。"
+            elif changes.get("ratingModelChanged"):
+                note = "Rating 算法已升级，本次重建基线；最高分继续与上次同步比较。"
             elif not changes.get("ratingBaseline"):
                 note = "最高分无变化；玩家 Rating 基线已建立，下次同步将显示变化。"
             txt(d, note, 94, top + 24, 22, MUTED)
@@ -665,7 +681,7 @@ class ProfileRenderer:
         theme.ring(im, 265, 321, 98, rating)
         d = ImageDraw.Draw(im)
         txt(d, f"{rating:.2f}", 265, 284, 59, "#ffffff", True, "center")
-        txt(d, "/ 15.50", 265, 355, 19, "#bac7ce", align="center")
+        txt(d, f"/ {MAX_PLAYER_RATING:.2f}", 265, 355, 19, "#bac7ce", align="center")
         txt(
             d,
             f"已评级 {len(self.analysis['records']):,} 张",

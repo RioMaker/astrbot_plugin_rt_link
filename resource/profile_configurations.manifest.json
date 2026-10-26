@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "bpm7-2026-10-16-v1",
+  "version": "bpm7-2026-10-26-cap-v1",
   "chartsSha256": "4da033a2115c64295272fb10ddb9b772cc23d7eb31f9917d796e055745e9d99d",
   "profiles": 1413,
   "configurations": 116,
@@ -41,10 +41,11 @@
       ">330"
     ]
   ],
-  "sha256": "b233dd9638c397bac2a3bd910b26d4ae79fedd2c9144eadc7268265eccbeb08c",
-  "compressedBytes": 427418,
-  "rawBytes": 4840040,
+  "sha256": "623b6cdee3371ce6a9029b94e7db7315fe3b78ddb4623b706c19a00cfcd0af74",
+  "compressedBytes": 427462,
+  "rawBytes": 4840101,
   "source": "Preserved baseline BPM7 profiles + verified CN single-play TJA",
   "reviewSha256": "215195020f8e95629c07f9334613c87ddd2f985285128048c4154fd88cf7ec79",
-  "baseline": "Full-good catalog with unchanged rating.py configuration aggregation"
+  "baseline": "Full-good catalog under fixed-constant-capped nonlinear player Rating; verified profiles unchanged",
+  "algorithmVersion": "rhythm-v2-r2-constant-cap-bpm7-branches-v1"
 }

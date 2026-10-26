@@ -16,6 +16,7 @@ from __future__ import annotations
 import math
 from collections import defaultdict
 from datetime import datetime
+from functools import lru_cache
 
 # ---------------------------------------------------------------------------
 # 常量（与 ratingCore.js 保持一致）
@@ -36,6 +37,8 @@ CONSTANT_TO_X = [
     (11.2, 14), (11.3, 14.5), (11.4, 15), (11.5, 15.25), (11.6, 15.5),
 ]
 CONSTANT_TO_X_DICT = dict(CONSTANT_TO_X)
+MAX_PLAYER_RATING = max(CONSTANT_TO_X_DICT)
+RATING_ALGORITHM_VERSION = "taiko-signal-rhythm-v2-r2-constant-cap-envelope-v1"
 
 # OurTaiko-v1 参考维度
 REFERENCE_DIMENSIONS = [
@@ -161,7 +164,7 @@ def calc_y(accuracy: float) -> float:
     return base + (y3(accuracy) - base) / (y3(1.0) - base) * (15.5 - base)
 
 
-def calc_rating(constant: float, accuracy: float) -> float:
+def calc_reference_rating(constant: float, accuracy: float) -> float:
     """定数 + 精度 → 单谱 Rating（幂平均）。"""
     x = CONSTANT_TO_X_DICT.get(constant)
     if x is None:
@@ -174,6 +177,38 @@ def calc_rating(constant: float, accuracy: float) -> float:
     if p == 0:
         return x ** w * y ** (1 - w)
     return (w * x ** p + (1 - w) * y ** p) ** (1 / p)
+
+
+_LEGAL_CONSTANTS = tuple(float(c) for c, _ in CONSTANT_TO_X)
+_REFERENCE_CEILINGS = tuple(calc_reference_rating(c, 1.0) for c in _LEGAL_CONSTANTS)
+
+
+@lru_cache(maxsize=4096)
+def _bounded_rating_values(accuracy: float) -> tuple:
+    """The monotone envelope corrects small cross-difficulty inversions."""
+    values = []
+    envelope = 0.0
+    for constant, ceiling in zip(_LEGAL_CONSTANTS, _REFERENCE_CEILINGS):
+        normalized = constant * calc_reference_rating(constant, accuracy) / ceiling
+        envelope = max(envelope, normalized)
+        values.append(max(0.0, min(envelope, math.nextafter(constant, 0.0))))
+    return tuple(values)
+
+
+def calc_rating(constant: float, accuracy: float) -> float:
+    """Fixed chart constant is the ceiling; only full-good precision reaches it.
+
+    Normalize the existing difficulty-dependent nonlinear curve. The lower-
+    difficulty envelope also guarantees that harder charts never score less at
+    identical precision. No fitted coefficients or player-dependent inputs.
+    """
+    if constant not in CONSTANT_TO_X_DICT:
+        raise RatingError(f"未知定数 {constant}")
+    if not math.isfinite(accuracy) or not 0.75 <= accuracy <= 1.0:
+        raise RatingError("精度必须在 75% 到 100% 之间")
+    if accuracy == 1.0:
+        return float(constant)
+    return _bounded_rating_values(float(accuracy))[_LEGAL_CONSTANTS.index(constant)]
 
 
 def calc_accuracy(good: int, ok: int, bad: int, total_notes: int, dondaful: int = 0) -> float:
@@ -216,7 +251,7 @@ def calculate_values(chart: dict, score: dict, constant_override=None) -> dict:
     if x is None:
         raise RatingError(f"未知定数 {constant}")
     y = calc_y(accuracy)
-    rating = calc_rating(constant, accuracy)
+    rating = calc_reference_rating(constant, accuracy)
     average = float(public.get("avgDensity") or 0)
     instant = float(public.get("instDensity") or 0)
     if average <= 0 or instant <= 0:

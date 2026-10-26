@@ -5,8 +5,10 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageColor
 if __package__:
     from .report_image import _font, _lines, _text, _box
+    from .rating import MAX_PLAYER_RATING
 else:
     from report_image import _font, _lines, _text, _box
+    from rating import MAX_PLAYER_RATING
 ASSETS=Path(__file__).resolve().parent/'resource'/'profile'
 PAPER='#f3f0e8'; WHITE='#fffdf9'; INK='#202f36'; MUTED='#5e6a6c'; LINE='#d8d9cf'; TEAL='#236f63'; RED='#b94330'
 def txt(d,value,x,y,size=24,color=INK,bold=False,align='left'):
@@ -37,20 +39,34 @@ def ring(im, cx, cy, r, rating):
     width = 20
     pad = width + 4
     side = 2 * (r + pad)
-    mask = Image.new('L', (side, side))
+    mask = Image.new("L", (side, side))
     d = ImageDraw.Draw(mask)
-    end = -90 + 360 * min(max(rating / 15.5, 0), 1)
+    end = -90 + 360 * min(max(rating / MAX_PLAYER_RATING, 0), 1)
     bounds = (pad, pad, pad + 2 * r, pad + 2 * r)
     d.arc(bounds, -90, end, fill=255, width=width)
     for a in (-90, end):
         xx = r + pad + math.cos(math.radians(a)) * (r - width / 2)
         yy = r + pad + math.sin(math.radians(a)) * (r - width / 2)
-        d.ellipse((xx - width / 2, yy - width / 2, xx + width / 2, yy + width / 2), fill=255)
-    colors = ['#9cd9fa'] * 2 if rating < 6 else ['#ee6547'] * 2 if rating < 10 else SILVER if rating < 15 else GOLD
+        d.ellipse(
+            (xx - width / 2, yy - width / 2, xx + width / 2, yy + width / 2), fill=255
+        )
+    relative_rating = rating * 15.5 / MAX_PLAYER_RATING
+    colors = (
+        ["#9cd9fa"] * 2
+        if relative_rating < 6
+        else ["#ee6547"] * 2
+        if relative_rating < 10
+        else SILVER
+        if relative_rating < 15
+        else GOLD
+    )
     draw = ImageDraw.Draw(im)
-    draw.ellipse((cx - r, cy - r, cx + r, cy + r), outline='#34424f', width=width)
+    draw.ellipse((cx - r, cy - r, cx + r, cy + r), outline="#34424f", width=width)
     if rating > 0:
-        im.paste(gradient((side, side), colors), (int(cx - r - pad), int(cy - r - pad)), mask)
+        im.paste(
+            gradient((side, side), colors), (int(cx - r - pad), int(cy - r - pad)), mask
+        )
+
 
 def asset(im, name, x, y, w, h, opacity=1):
     a = Image.open(ASSETS / (name + '.png')).convert('RGBA')

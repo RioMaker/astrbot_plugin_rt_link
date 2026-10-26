@@ -21,7 +21,7 @@ from scripts.build_branch_profiles import (
     split_body,
     tap_count,
 )
-from service import MemoryBindingsStore, ScoreService, _slim_result
+from service import RATING_CACHE_SCHEMA, MemoryBindingsStore, ScoreService, _slim_result
 from storage import ScoreDatabase, load_charts
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -207,13 +207,13 @@ def test_service_sync_persists_branch_and_invalidates_old_cache(tmp_path, charts
                 row["branchProfile"] for row in db.get_rating_cache("qq")["records"]
             )
             old = copy.deepcopy(slim)
-            old["_cacheSchema"] = 6
+            old["_cacheSchema"] = RATING_CACHE_SCHEMA - 1
             db.put_rating_cache("qq", old)
             calls = client.calls
             refreshed, error = await service._get_analysis("qq")
             assert (
                 not error
-                and refreshed["_cacheSchema"] == 7
+                and refreshed["_cacheSchema"] == RATING_CACHE_SCHEMA
                 and client.calls == calls + 2
             )
         finally:

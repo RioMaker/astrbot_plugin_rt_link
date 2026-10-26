@@ -401,3 +401,29 @@ def test_constant_changes_alone_do_not_create_player_changes():
         {"baseline": True, "items": []}, previous, current
     )
     assert result["items"] == []
+
+
+def test_algorithm_switch_rebuilds_rating_baseline_but_preserves_score_delta():
+    previous = {
+        "meta": {"playerId": "p1", "server": "cn"},
+        "profileSource": "kinoko",
+        "ratingAlgorithmVersion": "old",
+        "profileScoreRows": [{"id": 1, "level": 4, "highScore": 900000}],
+        "records": [{"id": 1, "level": 4, "rating": 11}],
+    }
+    current = copy.deepcopy(previous)
+    current["ratingAlgorithmVersion"] = "new"
+    current["records"][0]["rating"] = 9
+    change = {
+        "id": 1,
+        "level": 4,
+        "delta": 1000,
+        "highScore": 901000,
+        "previousScore": 900000,
+    }
+    result = add_profile_rating_changes(
+        {"baseline": True, "items": [change]}, previous, current
+    )
+    assert result["ratingModelChanged"] and not result["ratingBaseline"]
+    assert result["items"] == [change]
+    assert profile_rating_baseline(current)["ratingAlgorithmVersion"] == "new"
