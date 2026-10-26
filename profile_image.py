@@ -171,22 +171,36 @@ def card_score_rank(row):
         return None
     return value if 2 <= value <= 8 else None
 
-def card(im, row, index, x, y, w=420, h=204):
+def score_change_label(change):
+    delta = change.get("delta")
+    if delta is None:
+        return "新收录", TEAL
+    return (f"↑ +{delta:,}", TEAL) if delta > 0 else (f"↓ {delta:,}", RED)
+
+
+def sync_changes_height(changes):
+    if changes is None:
+        return 0
+    rows_height = math.ceil(len(changes["items"]) / 2) * 108 if changes["items"] else 72
+    return 98 + rows_height + 42
+
+
+def card(im, row, index, x, y, w=420, h=244, change=None):
     d = ImageDraw.Draw(im)
-    ura = row['level'] == 5
+    ura = row["level"] == 5
     state = theme.crown_state(row)
-    box(d, x, y, w, h, '#f7f5fe' if ura else WHITE, '#d9d3e4' if ura else LINE, 16)
+    box(d, x, y, w, h, "#f7f5fe" if ura else WHITE, "#d9d3e4" if ura else LINE, 16)
     if ura:
-        theme.asset(im, 'ura', x + w - 158, y + 6, 156, 119, 0.08)
+        theme.asset(im, "ura", x + w - 158, y + 6, 156, 119, 0.08)
     if index is not None:
         corner_tag(im, index, x, y)
-    if state == 'ap':
+    if state == "ap":
         rainbow_border(im, x, y, w, h)
-    if state != 'none':
-        theme.asset(im, 'crown-' + state, x + 15, y + 34, 60, 56)
+    if state != "none":
+        theme.asset(im, "crown-" + state, x + 15, y + 34, 60, 56)
     rank = card_score_rank(row)
     if rank is not None:
-        asset(im, f'rank-{rank}', x + 81, y + 37, 48, 50)
+        asset(im, f"rank-{rank}", x + 81, y + 37, 48, 50)
     d = ImageDraw.Draw(im)
     name = title(row)
     size = 23
@@ -196,24 +210,54 @@ def card(im, row, index, x, y, w=420, h=204):
         size -= 1
     lines = theme.title_lines(d, name, title_width, size)
     if len(lines) > 2:
-        lines = [lines[0], theme.ellipsize(lines[1] + '…', title_width, size, force=True)]
+        lines = [
+            lines[0],
+            theme.ellipsize(lines[1] + "…", title_width, size, force=True),
+        ]
     text_y = y + (34 if len(lines) == 2 else 49)
-    for (i, line) in enumerate(lines):
+    for i, line in enumerate(lines):
         txt(d, line, title_x, text_y + i * (size + 6), size, INK, True)
-    for (j, (key, icon)) in enumerate((('goodCount', 'good'), ('okCount', 'ok'), ('ngCount', 'ng'))):
+    for j, (key, icon) in enumerate(
+        (("goodCount", "good"), ("okCount", "ok"), ("ngCount", "ng"))
+    ):
         xx = x + (24, 157, 282)[j]
         judgment_icon(im, icon, xx, y + 105, 32)
-        txt(ImageDraw.Draw(im), f'{int(row.get(key) or 0):,}', x + (128, 259, 400)[j], y + 109, 23, INK, align='right')
+        txt(
+            ImageDraw.Draw(im),
+            f"{int(row.get(key) or 0):,}",
+            x + (128, 259, 400)[j],
+            y + 109,
+            23,
+            INK,
+            align="right",
+        )
     d = ImageDraw.Draw(im)
-    d.line((x + 20, y + 146, x + w - 20, y + 146), fill='#ddd9e1', width=1)
-    txt(d, 'Rating / AI 定数', x + 24, y + 155, 15, MUTED)
-    score_pair(im, row['rating'], row['aiConstant'], x + 24, y + 176, 23, full_digits=1, align='left')
-    txt(d, '精度', x + w - 24, y + 155, 15, MUTED, align='right')
+    d.line((x + 20, y + 146, x + w - 20, y + 146), fill="#ddd9e1", width=1)
+    txt(d, "Rating / AI 定数", x + 24, y + 155, 15, MUTED)
+    score_pair(
+        im,
+        row["rating"],
+        row["aiConstant"],
+        x + 24,
+        y + 176,
+        23,
+        full_digits=1,
+        align="left",
+    )
+    txt(d, "精度", x + w - 24, y + 155, 15, MUTED, align="right")
     accuracy = f"{row['accuracy'] * 100:.2f}%"
-    if row['accuracy'] >= 1:
-        colored_text(im, accuracy, x + w - 24, y + 176, 23, 8, 'right')
+    if row["accuracy"] >= 1:
+        colored_text(im, accuracy, x + w - 24, y + 176, 23, 8, "right")
     else:
-        txt(d, accuracy, x + w - 24, y + 176, 23, TEAL, True, 'right')
+        txt(d, accuracy, x + w - 24, y + 176, 23, TEAL, True, "right")
+
+    score = row.get("highScore")
+    score_text = f"{int(score):,}" if score is not None else "—"
+    txt(d, f"最高分 {score_text}", x + 24, y + 214, 18, INK)
+    if change is not None:
+        label, color = score_change_label(change)
+        txt(d, label, x + w - 24, y + 214, 18, color, True, "right")
+
 
 def sphere(im, cx, cy, radius, color, locked=False):
     r = math.ceil(radius)
@@ -350,20 +394,87 @@ class ProfileRenderer:
         txt(d, note, 96, y + 464, 18, MUTED)
 
     def best20(self, im, y):
-        rows = sorted(self.analysis['records'], key=lambda r: (-r['rating'], -r.get('accuracy', 0), r['id'], r['level']))[:20]
+        rows = sorted(
+            self.analysis["records"],
+            key=lambda r: (-r["rating"], -r.get("accuracy", 0), r["id"], r["level"]),
+        )[:20]
         if not rows:
             box(ImageDraw.Draw(im), 70, y, 1300, 110)
-            txt(ImageDraw.Draw(im), '暂无可评级谱面，游玩后同步成绩即可生成 BEST 20。', 98, y + 40, 23, MUTED)
-        for (i, row) in enumerate(rows):
-            card(im, row, i + 1, 70 + i % 3 * 440, y + i // 3 * 220)
-
-    def next_plays(self, im, y, count=8):
-        items = self.improvement['items'][:count]
-        if not items:
-            box(ImageDraw.Draw(im), 70, y, 1300, 110, '#edf2e9', '#ccd8ca', 14)
             txt(
                 ImageDraw.Draw(im),
-                '当前没有符合条件的推荐，可用 /rtlink improve 指定其他目标评价。',
+                "暂无可评级谱面，游玩后同步成绩即可生成 BEST 20。",
+                98,
+                y + 40,
+                23,
+                MUTED,
+            )
+        changes = {
+            (r["id"], r["level"]): r
+            for r in (self.analysis.get("profileSyncChanges") or {}).get("items", [])
+        }
+        scores = {
+            (r["id"], r["level"]): r.get("highScore") for r in self.data["scoreRows"]
+        }
+        for i, row in enumerate(rows):
+            key = (row["id"], row["level"])
+            card(
+                im,
+                {**row, "highScore": scores.get(key, row.get("highScore"))},
+                i + 1,
+                70 + i % 3 * 440,
+                y + i // 3 * 260,
+                change=changes.get(key),
+            )
+
+    def sync_changes(self, im, y):
+        changes = self.analysis.get("profileSyncChanges")
+        if changes is None:
+            return 0
+        items = changes["items"]
+        up = sum(r["delta"] is not None and r["delta"] > 0 for r in items)
+        down = sum(r["delta"] is not None and r["delta"] < 0 for r in items)
+        new = sum(r["delta"] is None for r in items)
+        source = changes.get("source", "")
+        theme.section(
+            ImageDraw.Draw(im),
+            "03 / SYNC CHANGES",
+            "本次同步变化",
+            y,
+            f"{source} · 鬼 / 里 · ↑ {up} 首 · ↓ {down} 首 · 新收录 {new} 首",
+        )
+        top = y + 98
+        if not items:
+            d = ImageDraw.Draw(im)
+            box(d, 70, top, 1300, 72)
+            note = (
+                "与上次同步相比，最高分无变化。"
+                if changes["baseline"]
+                else "首次同步已建立成绩基线，下次同步将显示分数升降。"
+            )
+            txt(d, note, 94, top + 24, 22, MUTED)
+        for i, row in enumerate(items):
+            x, yy = 70 + i % 2 * 665, top + i // 2 * 108
+            d = ImageDraw.Draw(im)
+            box(d, x, yy, 635, 94)
+            difficulty = "里" if row["level"] == 5 else "鬼"
+            name = f"{difficulty} · {title(row)}"
+            txt(d, theme.ellipsize(name, 583, 22), x + 24, yy + 15, 22, INK, True)
+            previous = (
+                f"{row['previousScore']:,}"
+                if row["previousScore"] is not None
+                else "首次收录"
+            )
+            txt(d, f"{previous} → {row['highScore']:,}", x + 24, yy + 55, 20, MUTED)
+            label, color = score_change_label(row)
+            txt(d, label, x + 611, yy + 55, 20, color, True, "right")
+
+    def next_plays(self, im, y, count=8):
+        items = self.improvement["items"][:count]
+        if not items:
+            box(ImageDraw.Draw(im), 70, y, 1300, 110, "#edf2e9", "#ccd8ca", 14)
+            txt(
+                ImageDraw.Draw(im),
+                "当前没有符合条件的推荐，可用 /rtlink improve 指定其他目标评价。",
                 98,
                 y + 40,
                 23,
@@ -452,41 +563,78 @@ class ProfileRenderer:
         txt(d, '连打指黄条额外打数，不含风船；实际达成以游戏结算为准。', 70, note_y + 30, 18, MUTED)
 
     def profile(self, data):
-        best_rows = max(1, math.ceil(min(20, len(self.analysis['records'])) / 3))
-        recommendation_count = min(8, len(self.improvement['items']))
-        next_heading = 2038 + best_rows * 220 + 42
+        best_rows = max(1, math.ceil(min(20, len(self.analysis["records"])) / 3))
+        recommendation_count = min(8, len(self.improvement["items"]))
+        changes = self.analysis.get("profileSyncChanges")
+        changes_height = sync_changes_height(changes)
+        best_heading = 1937 + changes_height
+        best_y = best_heading + 101
+        next_heading = (
+            best_y + best_rows * (260 if self.analysis["records"] else 220) + 42
+        )
         next_y = next_heading + 98
         height = next_y + next_plays_height(recommendation_count) + 56
-        im = Image.new('RGBA', (1440, height), PAPER)
+        im = Image.new("RGBA", (1440, height), PAPER)
         d = ImageDraw.Draw(im)
-        rating = self.analysis['summary']['rating']
-        txt(d, '鼓迹', 70, 52, 35, INK, True)
-        txt(d, 'RTLINK / PROFILE', 170, 65, 19, RED)
-        txt(d, f"PLAYER {self.data['playerId']} · {self.data['serverLabel']}", 1370, 54, 22, INK, align='right')
-        txt(d, self.sync_label, 1370, 86, 18, MUTED, align='right')
+        rating = self.analysis["summary"]["rating"]
+        txt(d, "鼓迹", 70, 52, 35, INK, True)
+        txt(d, "RTLINK / PROFILE", 170, 65, 19, RED)
+        txt(
+            d,
+            f"PLAYER {self.data['playerId']} · {self.data['serverLabel']}",
+            1370,
+            54,
+            22,
+            INK,
+            align="right",
+        )
+        txt(d, self.sync_label, 1370, 86, 18, MUTED, align="right")
         d.line((70, 120, 1370, 120), fill=LINE, width=1)
-        box(d, 70, 148, 390, 340, '#17202a', '#17202a', 24)
-        txt(d, 'AI 综合 RATING', 108, 185, 22, '#b9deda')
+        box(d, 70, 148, 390, 340, "#17202a", "#17202a", 24)
+        txt(d, "AI 综合 RATING", 108, 185, 22, "#b9deda")
         theme.ring(im, 265, 321, 98, rating)
         d = ImageDraw.Draw(im)
-        txt(d, f'{rating:.2f}', 265, 284, 59, '#ffffff', True, 'center')
-        txt(d, '/ 15.50', 265, 355, 19, '#bac7ce', align='center')
-        txt(d, f"已评级 {len(self.analysis['records']):,} 张", 265, 444, 18, '#c9d2d8', align='center')
+        txt(d, f"{rating:.2f}", 265, 284, 59, "#ffffff", True, "center")
+        txt(d, "/ 15.50", 265, 355, 19, "#bac7ce", align="center")
+        txt(
+            d,
+            f"已评级 {len(self.analysis['records']):,} 张",
+            265,
+            444,
+            18,
+            "#c9d2d8",
+            align="center",
+        )
         self.overview(im)
         galaxy(im, build_report_data(self.analysis))
         d = ImageDraw.Draw(im)
-        txt(d, '右侧正负值为相对七维中位数，不代表历史涨跌。', 70, 1250, 19, MUTED)
-        theme.section(d, '02 / CONFIGURATIONS', '配置评分概览', 1296, '7 个速度档 · 6 种常用配置')
+        txt(d, "右侧正负值为相对七维中位数，不代表历史涨跌。", 70, 1250, 19, MUTED)
+        theme.section(
+            d, "02 / CONFIGURATIONS", "配置评分概览", 1296, "7 个速度档 · 6 种常用配置"
+        )
         self.config_frame(im, 1390, data)
-        theme.section(ImageDraw.Draw(im), '03 / BEST 20', '综合评分最佳 20 谱面', 1937, '按单谱 Rating 排序')
-        self.best20(im, 2038)
-        theme.section(ImageDraw.Draw(im), '04 / NEXT PLAY', '下一步可以尝试', next_heading, f'按分数差排序 · {recommendation_count} 首 · 更多见 /rtlink improve')
+        self.sync_changes(im, 1937)
+        theme.section(
+            ImageDraw.Draw(im),
+            "04 / BEST 20" if changes is not None else "03 / BEST 20",
+            "综合评分最佳 20 谱面",
+            best_heading,
+            "按单谱 Rating 排序 · 最高分箭头为本次同步差值",
+        )
+        self.best20(im, best_y)
+        theme.section(
+            ImageDraw.Draw(im),
+            "05 / NEXT PLAY" if changes is not None else "04 / NEXT PLAY",
+            "下一步可以尝试",
+            next_heading,
+            f"按分数差排序 · {recommendation_count} 首 · 更多见 /rtlink improve",
+        )
         self.next_plays(im, next_y)
-        txt(ImageDraw.Draw(im), self.data['footer'], 70, height - 40, 18, MUTED)
-        return im.convert('RGB')
+        txt(ImageDraw.Draw(im), self.data["footer"], 70, height - 40, 18, MUTED)
+        return im.convert("RGB")
 
     def config_details(self, data):
-        has_history = len(self.data['history']) >= 2
+        has_history = len(self.data["history"]) >= 2
         height = 5430 if has_history else 3630
         im = Image.new('RGBA', (1440, height), PAPER)
         d = ImageDraw.Draw(im)

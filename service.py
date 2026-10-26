@@ -30,7 +30,7 @@ if __package__:
     from .improve_image import render_improve_image
     from .profile_image import render_profile_image, render_configuration_image
     from .profile_data import (load_configuration_catalog, configuration_scores,
-                               unique_score_rows, configuration_history_payload,
+                               unique_score_rows, score_sync_changes, configuration_history_payload,
                                archive_configuration_resources, CONFIGURATION_ALGORITHM)
     from .report_image import render_report_image
     from .weakness_image import render_weakness_image
@@ -49,7 +49,7 @@ else:
     from improve_image import render_improve_image
     from profile_image import render_profile_image, render_configuration_image
     from profile_data import (load_configuration_catalog, configuration_scores,
-                              unique_score_rows, configuration_history_payload,
+                              unique_score_rows, score_sync_changes, configuration_history_payload,
                               archive_configuration_resources, CONFIGURATION_ALGORITHM)
     from report_image import render_report_image
     from weakness_image import render_weakness_image
@@ -538,13 +538,26 @@ class ScoreService:
 
         if await self._binding(qq) != b:
             return False, "绑定在同步期间发生变化，请重新发送 /rtlink。", None
-        errors, stored = {}, {}
+        errors, stored, previous_scores = {}, {}, {}
         for source_name, payload in fetched.items():
             if isinstance(payload, BaseException):
                 errors[source_name] = str(payload)
                 continue
             try:
-                await asyncio.to_thread(self._store_payload, qq, source_name, payload, player_id, server)
+                previous = (
+                    await asyncio.to_thread(self.db.get_scores, qq, source_name)
+                    if self.db is not None
+                    else []
+                )
+                previous_scores[source_name] = [
+                    {**row, "high_score": json.loads(row["raw_json"]).get("high_score")}
+                    for row in previous
+                    if str(row.get("game_player_id") or "") == player_id
+                    and str(row.get("server") or "") == server
+                ]
+                await asyncio.to_thread(
+                    self._store_payload, qq, source_name, payload, player_id, server
+                )
                 stored[source_name] = payload
             except Exception:
                 errors[source_name] = "成绩解析或存储失败"
@@ -568,16 +581,43 @@ class ScoreService:
         slim = _slim_result(result)
         # Freeze identity from the binding used by this sync, not optional API metadata.
         slim['meta'] = {**slim['meta'], 'playerId':player_id, 'server':server, 'provider':self.provider_label}
-        fields = ('id','level','highScore','bestScoreRank','clearCount','fullComboCount','dondafulComboCount')
+        fields = ('id','level','title','highScore','bestScoreRank','clearCount','fullComboCount','dondafulComboCount')
         normalized = rating_mod.normalize_scores(payload_for_rating, rated_only=False)
-        slim['profileScoreRows'] = unique_score_rows([{key:row.get(key) for key in fields} for row in normalized['rows']])
-        for row in slim['records']:
-            row['title'] = self.charts.get((row['id'], row['level']), {}).get('title') or row['title']
-        slim['profileConfigurations'] = await asyncio.to_thread(configuration_scores, result['records'], self.configuration_catalog)
-        target = self._default_target_rank(result['records'])
+        slim["profileScoreRows"] = unique_score_rows(
+            [
+                {
+                    **{key: row.get(key) for key in fields},
+                    "highScore": row["raw"].get("high_score"),
+                }
+                for row in normalized["rows"]
+            ]
+        )
+        for row in slim["profileScoreRows"]:
+            row["title"] = (
+                self.charts.get((row["id"], row["level"]), {}).get("title")
+                or row["title"]
+            )
+        slim["profileSyncChanges"] = score_sync_changes(
+            previous_scores.get(source, []), slim["profileScoreRows"]
+        )
+        slim["profileSyncChanges"]["source"] = source
+        for row in slim["records"]:
+            row["title"] = (
+                self.charts.get((row["id"], row["level"]), {}).get("title")
+                or row["title"]
+            )
+        slim["profileConfigurations"] = await asyncio.to_thread(
+            configuration_scores, result["records"], self.configuration_catalog
+        )
+        target = self._default_target_rank(result["records"])
         improvement = await asyncio.to_thread(
-            score_rank_mod.analyze_rank_improvements, result['records'], self.charts,
-            self.score_rank, target, per_genre=3, rolls_data=self.rolls
+            score_rank_mod.analyze_rank_improvements,
+            result["records"],
+            self.charts,
+            self.score_rank,
+            target,
+            per_genre=3,
+            rolls_data=self.rolls,
         )
         improvement['items'] = improvement['items'][:8]
         for item in improvement['items']:

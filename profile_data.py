@@ -119,6 +119,44 @@ def unique_score_rows(rows):
         selected[key]=row
     return list(selected.values())
 
+
+def score_sync_changes(previous, current):
+    """Compare current bests with the preceding sync, never a historical peak."""
+    old = {(row["song_no"], row["level"]): row for row in previous}
+    items = []
+    if old:
+        for row in unique_score_rows(current):
+            before = old.get((row["id"], row["level"]))
+            score = row.get("highScore")
+            if score is None:
+                continue
+            previous_score = before.get("high_score") if before else None
+            if before and previous_score is None:
+                continue
+            delta = int(score) - int(previous_score) if before else None
+            if delta == 0:
+                continue
+            items.append(
+                {
+                    "id": row["id"],
+                    "level": row["level"],
+                    "title": row.get("title"),
+                    "previousScore": int(previous_score) if before else None,
+                    "highScore": int(score),
+                    "delta": delta,
+                }
+            )
+    items.sort(
+        key=lambda row: (
+            row["delta"] is None,
+            -abs(row["delta"] or 0),
+            row["id"],
+            row["level"],
+        )
+    )
+    return {"baseline": bool(old), "items": items}
+
+
 def build_profile_data(analysis,generated_at=None):
     generated_at=generated_at or datetime.now(timezone.utc)
     analysis=copy.deepcopy(analysis)
