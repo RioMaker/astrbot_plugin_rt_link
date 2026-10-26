@@ -1,7 +1,6 @@
 """Approved V7 Profile and configuration detail renderer. No network or player globals."""
 from __future__ import annotations
 import copy, math, os
-from collections import Counter
 from datetime import datetime, timedelta, timezone
 from PIL import Image,ImageDraw,ImageFilter,ImageColor,ImageChops
 if __package__:
@@ -10,14 +9,14 @@ if __package__:
     from .report_image import _font,_draw_galaxy,build_report_data,RHYTHM_META,_stage,draw_delta_badge
     from .score_rank import SCORE_RANK_RATIOS
     from .rating import MAX_PLAYER_RATING, calc_rating
-    from .profile_data import build_profile_data
+    from .profile_data import build_profile_data, profile_overview_counts
 else:
     import profile_theme as theme
     from profile_theme import txt,box,PAPER,WHITE,INK,MUTED,LINE,TEAL,RED
     from report_image import _font,_draw_galaxy,build_report_data,RHYTHM_META,_stage,draw_delta_badge
     from score_rank import SCORE_RANK_RATIOS
     from rating import MAX_PLAYER_RATING, calc_rating
-    from profile_data import build_profile_data
+    from profile_data import build_profile_data, profile_overview_counts
 ASSETS=theme.ASSETS
 def title(row):
     return str(row.get('title') or row.get('titleJa') or row.get('id') or '未知曲目')
@@ -108,7 +107,12 @@ def colored_text(im, text, x, y, size, rank, align='left'):
     else:
         txt(ImageDraw.Draw(im), text, x, y, size, TEXT_RANK_COLORS.get(rank, MUTED))
 
+def score_text_color(rank):
+    return TEXT_RAINBOW[-1] if rank == 8 else TEXT_RANK_COLORS.get(rank, MUTED)
+
+
 def score_pair(im, current, full, cx, y, size=20, full_digits=2, align='center'):
+    """Draw player / theoretical scores and return the player's right text edge."""
     rank = grade_ratio(current, full)
     left = f'{current:.2f}' if current is not None else '—'
     right = f'{full:.{full_digits}f}' if full is not None else '—'
@@ -118,6 +122,8 @@ def score_pair(im, current, full, cx, y, size=20, full_digits=2, align='center')
     colored_text(im, left, x, y, size, rank)
     txt(ImageDraw.Draw(im), ' / ', x + font.getlength(left), y, size, MUTED)
     colored_text(im, right, x + font.getlength(left + ' / '), y, size, 8 if rank == 8 else None)
+    return x + font.getlength(left)
+
 
 def rainbow_border(im, x, y, w, h):
     pad = 16
@@ -312,6 +318,7 @@ def card(im, row, index, x, y, w=420, h=244, change=None):
             x + 24 + _font(23).getlength(card_rating_text(row)) + 5,
             y + 169,
             12,
+            base_color=score_text_color(grade_ratio(row["rating"], ceiling)),
         )
 
 
@@ -397,8 +404,14 @@ class ProfileRenderer:
     def overview(self, im):
         d = ImageDraw.Draw(im)
         rows = [r for r in self.normalized['rows'] if r['level'] in (4, 5)]
-        ranks = Counter((int(r.get('bestScoreRank') or 1) for r in rows))
-        states = Counter((theme.crown_state(r) for r in rows))
+        counts = profile_overview_counts(rows)
+        ranks = {rank: counts[f"rank:{rank}"] for rank in range(1, 9)}
+        states = {
+            state: counts[f"crown:{state}"] for state in ("none", "clear", "fc", "ap")
+        }
+        deltas = (
+            (self.analysis.get("profileSyncChanges") or {}).get("metricDeltas") or {}
+        ).get("overview", {})
         box(d, 480, 148, 890, 340, '#fff8fb', '#e5d5e1', 24)
         txt(d, '成绩概况', 512, 178, 26, INK, True)
         columns = [510, 789, 1068]
@@ -406,13 +419,55 @@ class ProfileRenderer:
             x = columns[col]
             asset(im, f'rank-{rank}', x, y, 66, 62)
             txt(ImageDraw.Draw(im), ranks[rank], x + 237, y + 16, 37, INK, True, 'right')
+            draw_delta_badge(
+                ImageDraw.Draw(im),
+                deltas.get(f"rank:{rank}"),
+                x + 244,
+                y - 7,
+                13,
+                align="right",
+                base_color=INK,
+                digits=0,
+            )
         for (col, state) in enumerate(('clear', 'fc', 'ap')):
             x = columns[col]
             theme.asset(im, 'crown-' + state, x + 3, 382, 60, 60)
             txt(ImageDraw.Draw(im), states[state], x + 237, 397, 37, INK, True, 'right')
+            draw_delta_badge(
+                ImageDraw.Draw(im),
+                deltas.get(f"crown:{state}"),
+                x + 244,
+                375,
+                13,
+                align="right",
+                base_color=INK,
+                digits=0,
+            )
         d = ImageDraw.Draw(im)
         txt(d, f'已玩 {len(rows):,}', 512, 451, 17, MUTED)
-        txt(d, f"未通过 {states['none']} · 无评价 {ranks[1]}", 1336, 451, 17, MUTED, align='right')
+        footer = [
+            (f"未通过 {states['none']}", deltas.get("crown:none")),
+            (f"无评价 {ranks[1]}", deltas.get("rank:1")),
+        ]
+        widths = [
+            (
+                _font(17).getlength(label),
+                math.ceil(_font(11, True).getlength(f"{delta:+d}")) + 12
+                if delta
+                else 0,
+            )
+            for label, delta in footer
+        ]
+        cursor = 1336 - sum(a + b for a, b in widths) - 24
+        for i, ((label, delta), (width, badge_width)) in enumerate(zip(footer, widths)):
+            txt(d, label, cursor, 451, 17, MUTED)
+            draw_delta_badge(
+                d, delta, cursor + width - 4, 441, 11, base_color=MUTED, digits=0
+            )
+            cursor += width + badge_width
+            if i == 0:
+                txt(d, "·", cursor + 12, 451, 17, MUTED, align="center")
+                cursor += 24
         x = 501.0
         total = max(1, len(rows))
         for rank in range(1, 9):
@@ -451,7 +506,7 @@ class ProfileRenderer:
             txt(d, interval + " BPM", 99, yy + 24, 14, MUTED)
             for j, pat in enumerate(theme.COMPACT_PATTERNS):
                 c = cells.get(pat + "|" + band)
-                score_pair(
+                player_right = score_pair(
                     im,
                     c.get("score") if c else None,
                     c.get("ceiling") if c else None,
@@ -472,10 +527,12 @@ class ProfileRenderer:
                     draw_delta_badge(
                         ImageDraw.Draw(im),
                         delta,
-                        x0 + (j + 1) * cw - 10,
+                        player_right - 4,
                         yy - 3,
                         11,
-                        align="right",
+                        base_color=score_text_color(
+                            grade_ratio(c.get("score"), c.get("ceiling"))
+                        ),
                     )
         note = "分母：相关谱面全良后按同一配置算法计算。— 表示数据或样本不足。"
         if not data.get("available"):
@@ -718,7 +775,7 @@ class ProfileRenderer:
         d = ImageDraw.Draw(im)
         txt(d, f"{rating:.2f}", 265, 284, 59, "#ffffff", True, "center")
         delta = ((self.analysis.get('profileSyncChanges') or {}).get('metricDeltas') or {}).get('rating')
-        draw_delta_badge(d,delta,max(374,265+_font(59,True).getlength(f'{rating:.2f}')/2+8),268,15,True)
+        draw_delta_badge(d, delta, 265, 252, 15, True, "center", base_color="#ffffff")
         txt(d, f"/ {MAX_PLAYER_RATING:.2f}", 265, 355, 19, "#bac7ce", align="center")
         txt(
             d,
@@ -785,9 +842,16 @@ class ProfileRenderer:
                     current = c.get('score') if c else None
                     full = c.get('ceiling') if c else None
                     txt(d, name, x, yy, 20, INK)
-                    score_pair(im, current, full, x + 326, yy, 20)
+                    player_right = score_pair(im, current, full, x + 326, yy, 20)
                     delta = ((self.analysis.get('profileSyncChanges') or {}).get('metricDeltas') or {}).get('configurations',{}).get(c['key']) if c else None
-                    draw_delta_badge(ImageDraw.Draw(im),delta,x+414,yy-6,12)
+                    draw_delta_badge(
+                        ImageDraw.Draw(im),
+                        delta,
+                        player_right - 4,
+                        yy - 16,
+                        12,
+                        base_color=score_text_color(grade_ratio(current, full)),
+                    )
                     sample = str(c['playerSamples']) if c and current is not None else '—'
                     txt(d, f"{sample} / {(c['catalogSamples'] if c else 0)}", x + 594, yy, 18, MUTED, align='right')
             txt(d, '—：该档无配置或未达到评分所需样本数。', 97, y + 411, 15, MUTED)

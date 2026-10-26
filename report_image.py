@@ -14,7 +14,7 @@ from datetime import datetime
 from functools import lru_cache
 from statistics import median
 
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageColor, ImageDraw, ImageFilter, ImageFont
 
 if __package__:
     from .rating import MAX_PLAYER_RATING
@@ -275,20 +275,30 @@ def _measure(draw, value, size, bold=False):
 
 
 
-def draw_delta_badge(draw, delta, x, y, size=14, dark=False, align="left"):
+def draw_delta_badge(
+    draw, delta, x, y, size=14, dark=False, align="left", *, base_color=None, digits=2
+):
     """A plain signed superscript without a background; return its layout bounds."""
-    if delta is None or not math.isfinite(float(delta)) or round(float(delta), 2) == 0:
+    if (
+        delta is None
+        or not math.isfinite(float(delta))
+        or round(float(delta), digits) == 0
+    ):
         return None
-    delta = round(float(delta), 2)
-    label = f"{delta:+.2f}"
-    positive = delta > 0
-    if dark:
-        color = "#8fe1c4" if positive else "#ffb1a3"
+    delta = round(float(delta), digits)
+    label = f"{delta:+.{digits}f}"
+    if delta > 0:
+        base_color = base_color or ("#8fe1c4" if dark else "#236f63")
     else:
-        color = "#236f63" if positive else "#b94330"
+        base_color = "#e9a09a" if dark else "#b94330"
+    foreground = ImageColor.getrgb(base_color)
+    background = ImageColor.getrgb("#050911" if dark else "#fffdf9")
+    color = tuple(
+        round(bg + (fg - bg) * 0.78) for fg, bg in zip(foreground, background)
+    )
     width = math.ceil(_measure(draw, label, size, True)) + 12
     height = size + 8
-    left = x - width if align == "right" else x
+    left = x - width if align == "right" else x - width / 2 if align == "center" else x
     _text(draw, label, left + 6, y + 3, size, color, True)
     return (left, y, left + width, y + height)
 
@@ -386,7 +396,16 @@ def _draw_hero(draw, data):
     _text(draw, "AI 综合 RATING", 108, 192, 18, MINT, True)
     _draw_ring(draw, data["rating"])
     _text(draw, _fixed(data["rating"]), 265, 290, 54, "#ffffff", True, "center")
-    draw_delta_badge(draw,data.get('updateDelta'),max(374,265+_measure(draw,_fixed(data['rating']),54,True)/2+8),273,15,True)
+    draw_delta_badge(
+        draw,
+        data.get("updateDelta"),
+        265,
+        252,
+        15,
+        True,
+        "center",
+        base_color="#ffffff",
+    )
     _text(draw, f"/ {MAX_RATING:.2f}", 265, 355, 16, "#8f9ca8", False, "center")
     _box(draw, 108, 426, 314, 36, "#26313d", radius=18)
     _text(draw, f"恒星阶段 · {data['stage']['label']}", 265, 434, 14, data["stage"]["color"], True, "center")
@@ -428,7 +447,15 @@ def _draw_galaxy(image, draw, data):
     _planet_glow(image, cx, cy, 38, data["stage"]["color"])
     draw.ellipse((cx - 39, cy - 39, cx + 39, cy + 39), fill=data["stage"]["color"])
     _text(draw, _fixed(data["rating"]), cx, cy - 15, 22, INK, True, "center")
-    draw_delta_badge(draw,data.get('updateDelta'),cx+32,cy-62,14,True)
+    draw_delta_badge(
+        draw,
+        data.get("updateDelta"),
+        cx + 32,
+        cy - 62,
+        14,
+        True,
+        base_color=data["stage"]["color"],
+    )
     _box(draw, 106, 1142, 570, 58, "#101722", "#36475c", radius=14)
     _text(draw, f"阶段 {data['stage']['label']}", 128, 1158, 14, data["stage"]["color"], True)
     _text(draw, f"中位 {_fixed(data['center'])}  ·  最大差 {_fixed(data['spread'])}", 650, 1158, 14, "#c4ced9", True, "right")
@@ -444,7 +471,15 @@ def _draw_galaxy(image, draw, data):
         _text(draw, planet["label"], 920, y + 1, 14, "#9caaba")
         _text(draw, f"#{planet['rank']}" if planet["rank"] else "--", 1062, y + 2, 12, "#75869a", True)
         _text(draw, _fixed(planet["score"]), 1160, y - 3, 23, planet["color"], True, "right")
-        draw_delta_badge(draw,planet.get('updateDelta'),1167,y-10,13,True)
+        draw_delta_badge(
+            draw,
+            planet.get("updateDelta"),
+            1167,
+            y - 10,
+            13,
+            True,
+            base_color=planet["color"],
+        )
         _text(draw, f"{planet['charts']} 张 · 中位差 {planet['delta']:+.2f}", 1183, y + 29, 11, "#c4ced9")
         _text(draw, _format_period(planet["period"]), 1328, y + 2, 13, "#93a3b5", True, "right")
         _box(draw, 812, y + 32, 348, 7, "#1b2430", radius=4)

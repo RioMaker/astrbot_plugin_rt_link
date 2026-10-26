@@ -160,12 +160,42 @@ def score_sync_changes(previous, current):
 
 
 
+def profile_overview_counts(rows):
+    """Count the same exclusive grades and crowns shown in the Profile overview."""
+    counts = {f"rank:{rank}": 0 for rank in range(1, 9)}
+    counts.update({f"crown:{state}": 0 for state in ("none", "clear", "fc", "ap")})
+    for row in unique_score_rows(rows):
+        rank_key = f"rank:{int(row.get('bestScoreRank') or 1)}"
+        counts[rank_key] = counts.get(rank_key, 0) + 1
+        state = next(
+            (
+                state
+                for field, state in (
+                    ("dondafulComboCount", "ap"),
+                    ("fullComboCount", "fc"),
+                    ("clearCount", "clear"),
+                )
+                if row.get(field)
+            ),
+            "none",
+        )
+        counts[f"crown:{state}"] += 1
+    return counts
+
+
 def profile_metric_snapshot(analysis):
     """Compact scalar baselines; do not persist evidence rows or credentials twice."""
+    overview = (
+        profile_overview_counts(analysis["profileScoreRows"])
+        if "profileScoreRows" in analysis
+        else None
+    )
     if "profileSummary" in analysis:
-        return analysis["profileSummary"]
+        # Older compact baselines already retain the complete score rows.
+        return {"overview": overview, **analysis["profileSummary"]}
     config = analysis.get("profileConfigurations") or {}
     return {
+        "overview": overview,
         "rating": analysis.get(
             "profileRating", (analysis.get("summary") or {}).get("rating")
         ),
@@ -202,7 +232,14 @@ def profile_metric_deltas(previous, current):
         "rating": visible_metric_delta(old["rating"], new["rating"]),
         "abilities": {},
         "configurations": {},
+        "overview": {},
     }
+    if old.get("overview") is not None and new.get("overview") is not None:
+        result["overview"] = {
+            key: count - old["overview"][key]
+            for key, count in new["overview"].items()
+            if key in old["overview"] and count != old["overview"][key]
+        }
     for key, row in new["abilities"].items():
         before = old["abilities"].get(key)
         if before and before["charts"] >= 3 and row["charts"] >= 3:
