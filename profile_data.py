@@ -158,8 +158,8 @@ def score_sync_changes(previous, current):
 
 
 
-def add_profile_value_changes(changes, previous, current, previous_scores=None):
-    """Merge displayed Rating/constant changes without conflating them with game scores."""
+def add_profile_rating_changes(changes, previous, current, previous_scores=None):
+    """Compare player Rating only; chart difficulty constants are fixed inputs."""
     changes = copy.deepcopy(changes)
     compatible = (
         bool(previous)
@@ -171,7 +171,7 @@ def add_profile_value_changes(changes, previous, current, previous_scores=None):
         )
         and previous.get("profileSource") == current["profileSource"]
     )
-    changes["valuesBaseline"] = bool(compatible)
+    changes["ratingBaseline"] = bool(compatible)
     if not compatible:
         return changes
     old = {(r["id"], r["level"]): r for r in previous.get("records", [])}
@@ -193,10 +193,7 @@ def add_profile_value_changes(changes, previous, current, previous_scores=None):
         if before is None:
             continue
         values = {}
-        for field, prefix, digits in (
-            ("rating", "rating", 2),
-            ("aiConstant", "constant", 1),
-        ):
+        for field, prefix, digits in (("rating", "rating", 2),):
             a, b = before.get(field), row.get(field)
             if a is None or b is None:
                 continue
@@ -231,7 +228,6 @@ def add_profile_value_changes(changes, previous, current, previous_scores=None):
         items.values(),
         key=lambda r: (
             r["delta"] is None,
-            -abs(r.get("constantDelta") or 0),
             -abs(r.get("ratingDelta") or 0),
             -abs(r["delta"] or 0),
             r["id"],
@@ -241,9 +237,9 @@ def add_profile_value_changes(changes, previous, current, previous_scores=None):
     return changes
 
 
-def profile_value_baseline(analysis):
-    """Small per-source baseline survives cache invalidation and model/resource updates."""
-    fields = ("id", "level", "title", "rating", "aiConstant", "highScore")
+def profile_rating_baseline(analysis):
+    """Small player Rating baseline, isolated by account, server and source."""
+    fields = ("id", "level", "title", "rating", "highScore")
     return {
         "meta": {key: analysis["meta"].get(key) for key in ("playerId", "server")},
         "profileSource": analysis["profileSource"],
@@ -252,9 +248,24 @@ def profile_value_baseline(analysis):
     }
 
 
-def build_profile_data(analysis,generated_at=None):
-    generated_at=generated_at or datetime.now(timezone.utc)
-    analysis=copy.deepcopy(analysis)
+def build_profile_data(analysis, generated_at=None):
+    generated_at = generated_at or datetime.now(timezone.utc)
+    analysis = copy.deepcopy(analysis)
+    # Ignore constant-change annotations left in a cache by the earlier UI.
+    changes = analysis.get("profileSyncChanges")
+    if changes is not None:
+        changes["ratingBaseline"] = changes.get(
+            "ratingBaseline", changes.get("valuesBaseline", False)
+        )
+        changes["items"] = [
+            {
+                k: v
+                for k, v in row.items()
+                if k not in ("constantDelta", "previousConstant", "aiConstant")
+            }
+            for row in changes["items"]
+            if row.get("delta") != 0 or row.get("ratingDelta")
+        ]
     records=[]
     for row in analysis.get('records') or []:
         if row.get('level') not in (4,5):continue

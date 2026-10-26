@@ -9,12 +9,14 @@ if __package__:
     from .profile_theme import txt,box,PAPER,WHITE,INK,MUTED,LINE,TEAL,RED
     from .report_image import _font,_draw_galaxy,build_report_data,RHYTHM_META,_stage
     from .score_rank import SCORE_RANK_RATIOS
+    from .rating import calc_rating
     from .profile_data import build_profile_data
 else:
     import profile_theme as theme
     from profile_theme import txt,box,PAPER,WHITE,INK,MUTED,LINE,TEAL,RED
     from report_image import _font,_draw_galaxy,build_report_data,RHYTHM_META,_stage
     from score_rank import SCORE_RANK_RATIOS
+    from rating import calc_rating
     from profile_data import build_profile_data
 ASSETS=theme.ASSETS
 def title(row):
@@ -27,6 +29,7 @@ STAGE_STARTS = (0, 1, 5, 7, 9, 10, 13)
 STAGES = [{**_stage(float(value)), 'startsAt': value} for value in STAGE_STARTS]
 PLANET_COLORS = ['#ef967e', '#e7c565', '#b69bdd', '#80cfba', '#81b8dc', '#df96b8', '#aabcc9']
 TAG_COLORS = ['#2d615a', '#59877b']
+BEST_CARD_STEP = 292
 NEXT_CARD_HEIGHT = 312
 NEXT_CARD_STEP = 330
 NEXT_NOTE_HEIGHT = 88
@@ -190,22 +193,14 @@ def metric_change_label(delta, digits):
 
 
 def sync_pair_step(items):
-    return (
-        172
-        if any(r.get("ratingDelta") or r.get("constantDelta") for r in items)
-        else 108
-    )
+    return 140 if any(r.get("ratingDelta") for r in items) else 108
 
 
-def best20_step(changes):
-    return (
-        292
-        if any(
-            r.get("ratingDelta") or r.get("constantDelta")
-            for r in (changes or {}).get("items", [])
-        )
-        else 260
-    )
+def card_rating_ceiling(row):
+    try:
+        return calc_rating(float(row["aiConstant"]), 1.0)
+    except (KeyError, TypeError, ValueError):
+        return None
 
 
 def sync_changes_height(changes):
@@ -220,7 +215,7 @@ def sync_changes_height(changes):
     return 98 + rows_height + 42
 
 
-def card(im, row, index, x, y, w=420, h=244, change=None):
+def card(im, row, index, x, y, w=420, h=276, change=None):
     d = ImageDraw.Draw(im)
     ura = row["level"] == 5
     state = theme.crown_state(row)
@@ -268,17 +263,21 @@ def card(im, row, index, x, y, w=420, h=244, change=None):
         )
     d = ImageDraw.Draw(im)
     d.line((x + 20, y + 146, x + w - 20, y + 146), fill="#ddd9e1", width=1)
-    txt(d, "Rating / AI 定数", x + 24, y + 155, 15, MUTED)
-    score_pair(
+    ceiling = card_rating_ceiling(row)
+    txt(d, "单谱 Rating", x + 24, y + 155, 15, MUTED)
+    colored_text(
         im,
-        row["rating"],
-        row["aiConstant"],
+        f"{row['rating']:.2f}",
         x + 24,
         y + 176,
         23,
-        full_digits=1,
-        align="left",
+        grade_ratio(row["rating"], ceiling),
     )
+    txt(d, "AI 定数", x + 210, y + 155, 15, MUTED, align="center")
+    constant = f"{row['aiConstant']:.1f}" if row["aiConstant"] is not None else "—"
+    txt(d, constant, x + 210, y + 176, 23, INK, align="center")
+    ceiling_text = f"{ceiling:.2f}" if ceiling is not None else "—"
+    txt(d, f"全良上限 {ceiling_text}", x + 24, y + 214, 15, MUTED)
     txt(d, "精度", x + w - 24, y + 155, 15, MUTED, align="right")
     accuracy = f"{row['accuracy'] * 100:.2f}%"
     if row["accuracy"] >= 1:
@@ -288,20 +287,15 @@ def card(im, row, index, x, y, w=420, h=244, change=None):
 
     score = row.get("highScore")
     score_text = f"{int(score):,}" if score is not None else "—"
-    score_y = y + (246 if h > 244 else 214)
+    score_y = y + 246
     txt(d, f"最高分 {score_text}", x + 24, score_y, 18, INK)
     if change is not None and change.get("delta") != 0:
         label, color = score_change_label(change)
         txt(d, label, x + w - 24, score_y, 18, color, True, "right")
 
-    if change is not None:
-        for key, label, digits, xx, align in (
-            ("ratingDelta", "Rating", 2, x + 24, "left"),
-            ("constantDelta", "定数", 1, x + w - 24, "right"),
-        ):
-            if change.get(key):
-                value, color = metric_change_label(change[key], digits)
-                txt(d, f"{label} {value}", xx, y + 214, 16, color, True, align)
+    if change is not None and change.get("ratingDelta"):
+        value, color = metric_change_label(change["ratingDelta"], 2)
+        txt(d, f"Rating {value}", x + w - 24, y + 214, 16, color, True, "right")
 
 
 def sphere(im, cx, cy, radius, color, locked=False):
@@ -460,7 +454,7 @@ class ProfileRenderer:
         scores = {
             (r["id"], r["level"]): r.get("highScore") for r in self.data["scoreRows"]
         }
-        step = best20_step(self.analysis.get("profileSyncChanges"))
+        step = BEST_CARD_STEP
         for i, row in enumerate(rows):
             key = (row["id"], row["level"])
             card(
@@ -482,24 +476,23 @@ class ProfileRenderer:
         down = sum(r["delta"] is not None and r["delta"] < 0 for r in items)
         new = sum(r["delta"] is None for r in items)
         ratings = sum(bool(r.get("ratingDelta")) for r in items)
-        constants = sum(bool(r.get("constantDelta")) for r in items)
         source = changes.get("source", "")
         theme.section(
             ImageDraw.Draw(im),
             "03 / SYNC CHANGES",
             "本次同步变化",
             y,
-            f"{source} · 分数 ↑ {up} / ↓ {down} · Rating {ratings} 首 · 定数 {constants} 首 · 新收录 {new} 首",
+            f"{source} · 分数 ↑ {up} / ↓ {down} · Rating {ratings} 首 · 新收录 {new} 首",
         )
         top = y + 98
         if not items:
             d = ImageDraw.Draw(im)
             box(d, 70, top, 1300, 72)
-            note = "与上次同步相比，最高分、Rating 与 AI 定数无变化。"
+            note = "与上次同步相比，最高分与玩家 Rating 无变化。"
             if not changes["baseline"]:
-                note = "首次同步已建立成绩与定数基线，下次同步将显示升降。"
-            elif not changes.get("valuesBaseline"):
-                note = "最高分无变化；Rating 与定数基线已建立，下次同步将显示变化。"
+                note = "首次同步已建立成绩与玩家 Rating 基线，下次同步将显示升降。"
+            elif not changes.get("ratingBaseline"):
+                note = "最高分无变化；玩家 Rating 基线已建立，下次同步将显示变化。"
             txt(d, note, 94, top + 24, 22, MUTED)
         yy = top
         for start in range(0, len(items), 2):
@@ -530,28 +523,17 @@ class ProfileRenderer:
                 txt(d, f"{previous} → {current}", x + 24, yy + 55, 20, MUTED)
                 label, color = score_change_label(row)
                 txt(d, label, x + 611, yy + 55, 20, color, True, "right")
-                for key, label, previous_key, current_key, digits, offset in (
-                    ("ratingDelta", "Rating", "previousRating", "rating", 2, 89),
-                    (
-                        "constantDelta",
-                        "AI 定数",
-                        "previousConstant",
-                        "aiConstant",
-                        1,
-                        121,
-                    ),
-                ):
-                    if row.get(key):
-                        value, color = metric_change_label(row[key], digits)
-                        txt(
-                            d,
-                            f"{label} {row[previous_key]:.{digits}f} → {row[current_key]:.{digits}f}",
-                            x + 24,
-                            yy + offset,
-                            19,
-                            INK,
-                        )
-                        txt(d, value, x + 611, yy + offset, 19, color, True, "right")
+                if row.get("ratingDelta"):
+                    value, color = metric_change_label(row["ratingDelta"], 2)
+                    txt(
+                        d,
+                        f"Rating {row['previousRating']:.2f} → {row['rating']:.2f}",
+                        x + 24,
+                        yy + 89,
+                        19,
+                        INK,
+                    )
+                    txt(d, value, x + 611, yy + 89, 19, color, True, "right")
             yy += step
 
     def next_plays(self, im, y, count=8):
@@ -657,7 +639,7 @@ class ProfileRenderer:
         best_y = best_heading + 101
         next_heading = (
             best_y
-            + best_rows * (best20_step(changes) if self.analysis["records"] else 220)
+            + best_rows * (BEST_CARD_STEP if self.analysis["records"] else 220)
             + 42
         )
         next_y = next_heading + 98
@@ -707,7 +689,7 @@ class ProfileRenderer:
             "04 / BEST 20" if changes is not None else "03 / BEST 20",
             "综合评分最佳 20 谱面",
             best_heading,
-            "按单谱 Rating 排序 · 箭头为分数 / Rating / 定数同步差值",
+            "按单谱 Rating 排序 · 定数固定 · 箭头为分数 / 玩家 Rating 同步差值",
         )
         self.best20(im, best_y)
         theme.section(

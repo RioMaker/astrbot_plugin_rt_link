@@ -30,7 +30,7 @@ if __package__:
     from .improve_image import render_improve_image
     from .profile_image import render_profile_image, render_configuration_image
     from .profile_data import (load_configuration_catalog, configuration_scores,
-                               unique_score_rows, score_sync_changes, add_profile_value_changes, profile_value_baseline, configuration_history_payload,
+                               unique_score_rows, score_sync_changes, add_profile_rating_changes, profile_rating_baseline, configuration_history_payload,
                                archive_configuration_resources, CONFIGURATION_ALGORITHM)
     from .report_image import render_report_image
     from .weakness_image import render_weakness_image
@@ -49,7 +49,7 @@ else:
     from improve_image import render_improve_image
     from profile_image import render_profile_image, render_configuration_image
     from profile_data import (load_configuration_catalog, configuration_scores,
-                              unique_score_rows, score_sync_changes, add_profile_value_changes, profile_value_baseline, configuration_history_payload,
+                              unique_score_rows, score_sync_changes, add_profile_rating_changes, profile_rating_baseline, configuration_history_payload,
                               archive_configuration_resources, CONFIGURATION_ALGORITHM)
     from report_image import render_report_image
     from weakness_image import render_weakness_image
@@ -632,7 +632,7 @@ class ScoreService:
             )
             if previous_profile is None:
                 previous_profile = await asyncio.to_thread(self.db.get_rating_cache, qq)
-            slim["profileSyncChanges"] = add_profile_value_changes(
+            slim["profileSyncChanges"] = add_profile_rating_changes(
                 slim["profileSyncChanges"], previous_profile, slim,
                 previous_scores.get(source, []),
             )
@@ -649,7 +649,7 @@ class ScoreService:
                     slim['_historySaved'] = False
             await asyncio.to_thread(self.db.put_rating_cache, qq, slim)
             await asyncio.to_thread(
-                self.db.kv_set, f"profile_values:{qq}:{source}", profile_value_baseline(slim)
+                self.db.kv_set, f"profile_values:{qq}:{source}", profile_rating_baseline(slim)
             )
             await asyncio.to_thread(self.db.set_sync_state, qq, source, True)
 

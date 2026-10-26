@@ -7,8 +7,8 @@ import pytest
 from PIL import Image
 
 from profile_data import (
-    add_profile_value_changes,
-    profile_value_baseline,
+    add_profile_rating_changes,
+    profile_rating_baseline,
     score_sync_changes,
 )
 from profile_image import render_profile_image, score_change_label
@@ -52,6 +52,7 @@ def test_consecutive_sync_cache_restart_failure_and_identity(tmp_path, source):
     )
     score = 900000
     fail = False
+    judgment_ok = 2
 
     class Client:
         def payload(self, value):
@@ -68,8 +69,8 @@ def test_consecutive_sync_cache_restart_failure_and_identity(tmp_path, source):
                             {
                                 "song_no": key[0],
                                 "level": 4,
-                                "good_cnt": chart["totalNotes"] - 2,
-                                "ok_cnt": 2,
+                                "good_cnt": chart["totalNotes"] - judgment_ok,
+                                "ok_cnt": judgment_ok,
                                 "ng_cnt": 0,
                                 "high_score": value,
                                 "best_score_rank": 5,
@@ -104,8 +105,8 @@ def test_consecutive_sync_cache_restart_failure_and_identity(tmp_path, source):
                         {
                             "song_no": key[0],
                             "level": 4,
-                            "good_cnt": chart["totalNotes"] - 2,
-                            "ok_cnt": 2,
+                            "good_cnt": chart["totalNotes"] - judgment_ok,
+                            "ok_cnt": judgment_ok,
                             "ng_cnt": 0,
                             "high_score": score,
                             "best_score_rank": 5,
@@ -115,7 +116,7 @@ def test_consecutive_sync_cache_restart_failure_and_identity(tmp_path, source):
             }
 
     async def run():
-        nonlocal score, fail
+        nonlocal score, fail, judgment_ok
         path = tmp_path / "scores.db"
         db = ScoreDatabase(path)
         store = MemoryBindingsStore(
@@ -178,13 +179,13 @@ def test_consecutive_sync_cache_restart_failure_and_identity(tmp_path, source):
             # Preserve a per-source baseline even when the display cache is removed.
             db._conn.execute("DELETE FROM rating_cache")
             db._conn.commit()
-            charts[key]["feature"]["aiConstant"] = old_constant + 0.2
+            judgment_ok = 1
             _, _, rerated = await svc._sync("qq")
             changed = rerated["profileSyncChanges"]["items"][0]
             assert changed["delta"] == 0
-            assert changed["constantDelta"] == pytest.approx(0.2)
+            assert "constantDelta" not in changed
             assert changed["ratingDelta"] > 0
-            assert changed["previousConstant"] == old_constant
+            assert rerated["records"][0]["aiConstant"] == old_constant
             assert changed["previousScore"] == changed["highScore"]
             assert (
                 db.get_rating_cache("qq")["profileSyncChanges"]
@@ -193,11 +194,9 @@ def test_consecutive_sync_cache_restart_failure_and_identity(tmp_path, source):
             db.close()
             db = ScoreDatabase(path)
             svc.db = db
-            charts[key]["feature"]["aiConstant"] = old_constant
+            judgment_ok = 2
             _, _, decreased = await svc._sync("qq")
-            assert decreased["profileSyncChanges"]["items"][0][
-                "constantDelta"
-            ] == pytest.approx(-0.2)
+            assert decreased["records"][0]["aiConstant"] == old_constant
             assert decreased["profileSyncChanges"]["items"][0]["ratingDelta"] < 0
             _, _, stable = await svc._sync("qq")
             assert stable["profileSyncChanges"]["items"] == []
@@ -276,10 +275,10 @@ def test_profile_values_reject_other_identities(mismatch):
         current["profileSource"] = "hiroba"
     else:
         current["meta"][mismatch] = "other"
-    result = add_profile_value_changes(
+    result = add_profile_rating_changes(
         {"baseline": True, "items": []}, previous, current
     )
-    assert result["items"] == [] and result["valuesBaseline"] is False
+    assert result["items"] == [] and result["ratingBaseline"] is False
 
 
 def test_profile_values_only_displayed_deltas_and_missing_baselines():
@@ -292,28 +291,28 @@ def test_profile_values_only_displayed_deltas_and_missing_baselines():
     current = copy.deepcopy(previous)
     current["records"][0]["rating"] = 9.500000001
     changes = {"baseline": True, "items": []}
-    assert add_profile_value_changes(changes, previous, current)["items"] == []
+    assert add_profile_rating_changes(changes, previous, current)["items"] == []
     current["records"][0]["rating"] = 9.63
     current["records"][0]["aiConstant"] = 9.8
-    merged = add_profile_value_changes(changes, previous, current)
+    merged = add_profile_rating_changes(changes, previous, current)
     assert changes["items"] == []
     row = merged["items"][0]
-    assert row["ratingDelta"] == 0.13 and row["constantDelta"] == -0.2
+    assert row["ratingDelta"] == 0.13 and "constantDelta" not in row
     assert row["delta"] == 0
     assert (
-        add_profile_value_changes({"baseline": False, "items": []}, previous, current)[
+        add_profile_rating_changes({"baseline": False, "items": []}, previous, current)[
             "items"
         ]
         == []
     )
     previous["records"][0].update(rating=None, aiConstant=float("nan"))
-    assert add_profile_value_changes(changes, previous, current)["items"] == []
-    baseline = profile_value_baseline(current)
+    assert add_profile_rating_changes(changes, previous, current)["items"] == []
+    baseline = profile_rating_baseline(current)
     assert set(baseline["meta"]) == {"playerId", "server"}
-    assert baseline["records"][0]["aiConstant"] == 9.8
+    assert "aiConstant" not in baseline["records"][0]
 
 
-def test_render_constant_only_changes(tmp_path, monkeypatch):
+def test_render_rating_changes_ignores_legacy_constant_arrows(tmp_path, monkeypatch):
     import profile_image
 
     texts = []
@@ -352,7 +351,7 @@ def test_render_constant_only_changes(tmp_path, monkeypatch):
         "summary": {"rating": 10.2},
         "profileSyncChanges": {
             "baseline": True,
-            "valuesBaseline": True,
+            "ratingBaseline": True,
             "source": "kinoko",
             "items": [changed],
         },
@@ -360,8 +359,10 @@ def test_render_constant_only_changes(tmp_path, monkeypatch):
     render_profile_image(data, tmp_path / "constant-only.png")
     assert "分数持平" in texts
     assert "Rating 10.00 → 10.20" in texts
-    assert "AI 定数 10.0 → 10.2" in texts
-    assert "定数 ↑ +0.2" in texts
+    assert "AI 定数 10.0 → 10.2" not in texts
+    assert "定数 ↑ +0.2" not in texts
+    assert "AI 定数" in texts
+    assert any(t.startswith("全良上限 ") for t in texts)
     assert "Rating ↑ +0.20" in texts
     assert "新收录" not in texts
 
@@ -378,10 +379,25 @@ def test_value_baseline_does_not_replace_previous_sync_score():
     current["records"][0]["rating"] = 9.2
     current["profileScoreRows"][0]["highScore"] = 950000
     scores = [{"song_no": 1, "level": 4, "high_score": 950000}]
-    result = add_profile_value_changes(
+    result = add_profile_rating_changes(
         {"baseline": True, "items": []}, previous, current, scores
     )
     assert result["items"][0]["previousScore"] == 950000
     assert result["items"][0]["highScore"] == 950000
     assert result["items"][0]["delta"] == 0
     assert result["items"][0]["ratingDelta"] == 0.2
+
+
+def test_constant_changes_alone_do_not_create_player_changes():
+    previous = {
+        "meta": {"playerId": "p1", "server": "cn"},
+        "profileSource": "kinoko",
+        "profileScoreRows": [{"id": 1, "level": 4, "highScore": 900000}],
+        "records": [{"id": 1, "level": 4, "rating": 9.5, "aiConstant": 10.0}],
+    }
+    current = copy.deepcopy(previous)
+    current["records"][0]["aiConstant"] = 10.2
+    result = add_profile_rating_changes(
+        {"baseline": True, "items": []}, previous, current
+    )
+    assert result["items"] == []
