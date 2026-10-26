@@ -276,20 +276,19 @@ def _measure(draw, value, size, bold=False):
 
 
 def draw_delta_badge(draw, delta, x, y, size=14, dark=False, align="left"):
-    """A small signed update superscript; return its bounds for layout checks."""
+    """A plain signed superscript without a background; return its layout bounds."""
     if delta is None or not math.isfinite(float(delta)) or round(float(delta), 2) == 0:
         return None
     delta = round(float(delta), 2)
     label = f"{delta:+.2f}"
     positive = delta > 0
     if dark:
-        color, fill = ("#8fe1c4", "#173d34") if positive else ("#ffb1a3", "#492b2b")
+        color = "#8fe1c4" if positive else "#ffb1a3"
     else:
-        color, fill = ("#236f63", "#e4f3ed") if positive else ("#b94330", "#fbe8e2")
+        color = "#236f63" if positive else "#b94330"
     width = math.ceil(_measure(draw, label, size, True)) + 12
     height = size + 8
     left = x - width if align == "right" else x
-    _box(draw, left, y, width, height, fill, radius=6)
     _text(draw, label, left + 6, y + 3, size, color, True)
     return (left, y, left + width, y + height)
 
@@ -387,7 +386,7 @@ def _draw_hero(draw, data):
     _text(draw, "AI 综合 RATING", 108, 192, 18, MINT, True)
     _draw_ring(draw, data["rating"])
     _text(draw, _fixed(data["rating"]), 265, 290, 54, "#ffffff", True, "center")
-    draw_delta_badge(draw,data.get('updateDelta'),265+_measure(draw,_fixed(data['rating']),54,True)/2+8,273,15,True)
+    draw_delta_badge(draw,data.get('updateDelta'),max(374,265+_measure(draw,_fixed(data['rating']),54,True)/2+8),273,15,True)
     _text(draw, f"/ {MAX_RATING:.2f}", 265, 355, 16, "#8f9ca8", False, "center")
     _box(draw, 108, 426, 314, 36, "#26313d", radius=18)
     _text(draw, f"恒星阶段 · {data['stage']['label']}", 265, 434, 14, data["stage"]["color"], True, "center")

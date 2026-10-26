@@ -718,7 +718,7 @@ class ProfileRenderer:
         d = ImageDraw.Draw(im)
         txt(d, f"{rating:.2f}", 265, 284, 59, "#ffffff", True, "center")
         delta = ((self.analysis.get('profileSyncChanges') or {}).get('metricDeltas') or {}).get('rating')
-        draw_delta_badge(d,delta,265+_font(59,True).getlength(f'{rating:.2f}')/2+8,268,15,True)
+        draw_delta_badge(d,delta,max(374,265+_font(59,True).getlength(f'{rating:.2f}')/2+8),268,15,True)
         txt(d, f"/ {MAX_PLAYER_RATING:.2f}", 265, 355, 19, "#bac7ce", align="center")
         txt(
             d,
