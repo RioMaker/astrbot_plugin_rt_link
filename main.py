@@ -46,7 +46,7 @@ else:
 PLUGIN_NAME = "rt_link"
 PLUGIN_AUTHOR = "Rio"
 PLUGIN_DESC = "支持菌菌与 Sakura 独立绑定、成绩存储与太鼓实力评估"
-PLUGIN_VERSION = "v0.18.0"
+PLUGIN_VERSION = "v0.18.1"
 
 COMMAND_NAME = "rtlink"
 BINDINGS_KEY = "bindings"

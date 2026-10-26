@@ -175,6 +175,16 @@ def test_consecutive_sync_cache_restart_failure_and_identity(tmp_path, source):
             score = saved_score
             _, _, restored = await svc._sync("qq")
             assert restored["profileSyncChanges"]["items"] == []
+            if source == "kinoko":
+                # Older plugin baselines have no aggregate fields; seed from the existing image cache.
+                legacy = db.kv_get(f"profile_values:qq:{source}")
+                legacy.pop("profileSummary")
+                db.kv_set(f"profile_values:qq:{source}", legacy)
+                judgment_ok = 1
+                _, _, upgraded = await svc._sync("qq")
+                assert upgraded["profileSyncChanges"]["metricDeltas"]["rating"] > 0
+                judgment_ok = 2
+                await svc._sync("qq")
             old_constant = restored["records"][0]["aiConstant"]
             # Preserve a per-source baseline even when the display cache is removed.
             db._conn.execute("DELETE FROM rating_cache")
@@ -185,6 +195,8 @@ def test_consecutive_sync_cache_restart_failure_and_identity(tmp_path, source):
             assert changed["delta"] == 0
             assert "constantDelta" not in changed
             assert changed["ratingDelta"] > 0
+            assert rerated["profileSyncChanges"]["metricDeltas"]["rating"] > 0
+            assert "profileSummary" in db.kv_get(f"profile_values:qq:{source}")
             assert rerated["records"][0]["aiConstant"] == old_constant
             assert changed["previousScore"] == changed["highScore"]
             assert (
@@ -362,8 +374,8 @@ def test_render_rating_changes_ignores_legacy_constant_arrows(tmp_path, monkeypa
     assert "AI 定数 10.0 → 10.2" not in texts
     assert "定数 ↑ +0.2" not in texts
     assert "AI 定数" in texts
-    assert any(t.startswith("全良上限 ") for t in texts)
-    assert "Rating ↑ +0.20" in texts
+    assert not any(t.startswith("全良上限 ") for t in texts)
+    assert "Rating 10.00 → 10.20" in texts
     assert "新收录" not in texts
 
 

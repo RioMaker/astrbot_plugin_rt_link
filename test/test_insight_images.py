@@ -105,7 +105,7 @@ def test_profile_image_renders_approved_canvas(tmp_path: Path):
     assert data["weakest"]["key"] == "hitPrecision"
     output = render_profile_image(analysis, str(tmp_path / "profile.png"), datetime(2026, 9, 3))
     with Image.open(output) as image:
-        assert image.size == (1440, 2670)  # One BEST20 row with separate Rating, fixed constant and full-good ceiling.
+        assert image.size == (1440, 2638)  # One BEST20 row with separate Rating and fixed constant; no redundant cap line.
         assert image.mode == "RGB"
 
 

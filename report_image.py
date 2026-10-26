@@ -145,6 +145,7 @@ def build_report_data(analysis: dict, generated_at: datetime | None = None) -> d
     """Build the same compact summary consumed by the website Canvas renderer."""
     generated_at = generated_at or datetime.now()
     rating = _number((analysis.get("summary") or {}).get("rating"))
+    updates = (analysis.get('profileSyncChanges') or {}).get('metricDeltas') or {}
     raw_families = (analysis.get("featureAbility") or {}).get("families") or []
     families = []
     for raw in raw_families:
@@ -189,7 +190,7 @@ def build_report_data(analysis: dict, generated_at: datetime | None = None) -> d
         planets.append({**item, "key": key, "name": meta["planet"], "label": meta["label"],
                         "color": meta["planetColor"], "score": score, "charts": int(_number(item.get("charts"))),
                         "normalized": max(0.0, min(1.0, score / 14.0)), "period": _orbit_period(score),
-                        "delta": score - center, "rank": ranked_keys.index(key) + 1 if key in ranked_keys else 0,
+                        "delta": score - center, "updateDelta": (updates.get("abilities") or {}).get(key), "rank": ranked_keys.index(key) + 1 if key in ranked_keys else 0,
                         "index": index})
 
     actions = []
@@ -228,7 +229,7 @@ def build_report_data(analysis: dict, generated_at: datetime | None = None) -> d
     return {
         "playerId": str(meta.get("playerId") or "未提供编号"), "server": str(meta.get("server") or "未知服务器") + (f" · {meta['provider']}" if meta.get("provider") else ""),
         "generatedAt": f"{generated_at.year}年{generated_at.month}月{generated_at.day}日", "model": "Taiko Signal Rhythm v2 2026-08-05",
-        "rating": rating, "stage": stage, "planets": planets, "center": center,
+        "rating": rating, "updateDelta": updates.get("rating"), "stage": stage, "planets": planets, "center": center,
         "spread": strongest["score"] - weakest["score"] if strongest and weakest else 0,
         "galaxyHeadline": stage["headline"],
         "headline": f"{strongest['label']}最突出，{weakest['label']}是当前突破口" if strongest and weakest else "有效成绩已生成，能力证据仍待补充",
@@ -271,6 +272,26 @@ def _text(draw, value, x, y, size, color=INK, bold=False, align="left"):
 
 def _measure(draw, value, size, bold=False):
     return draw.textlength(str(value), font=_font(size, bold))
+
+
+
+def draw_delta_badge(draw, delta, x, y, size=14, dark=False, align="left"):
+    """A small signed update superscript; return its bounds for layout checks."""
+    if delta is None or not math.isfinite(float(delta)) or round(float(delta), 2) == 0:
+        return None
+    delta = round(float(delta), 2)
+    label = f"{delta:+.2f}"
+    positive = delta > 0
+    if dark:
+        color, fill = ("#8fe1c4", "#173d34") if positive else ("#ffb1a3", "#492b2b")
+    else:
+        color, fill = ("#236f63", "#e4f3ed") if positive else ("#b94330", "#fbe8e2")
+    width = math.ceil(_measure(draw, label, size, True)) + 12
+    height = size + 8
+    left = x - width if align == "right" else x
+    _box(draw, left, y, width, height, fill, radius=6)
+    _text(draw, label, left + 6, y + 3, size, color, True)
+    return (left, y, left + width, y + height)
 
 
 def _lines(draw, value, max_width, size, bold=False):
@@ -366,6 +387,7 @@ def _draw_hero(draw, data):
     _text(draw, "AI 综合 RATING", 108, 192, 18, MINT, True)
     _draw_ring(draw, data["rating"])
     _text(draw, _fixed(data["rating"]), 265, 290, 54, "#ffffff", True, "center")
+    draw_delta_badge(draw,data.get('updateDelta'),265+_measure(draw,_fixed(data['rating']),54,True)/2+8,273,15,True)
     _text(draw, f"/ {MAX_RATING:.2f}", 265, 355, 16, "#8f9ca8", False, "center")
     _box(draw, 108, 426, 314, 36, "#26313d", radius=18)
     _text(draw, f"恒星阶段 · {data['stage']['label']}", 265, 434, 14, data["stage"]["color"], True, "center")
@@ -407,12 +429,13 @@ def _draw_galaxy(image, draw, data):
     _planet_glow(image, cx, cy, 38, data["stage"]["color"])
     draw.ellipse((cx - 39, cy - 39, cx + 39, cy + 39), fill=data["stage"]["color"])
     _text(draw, _fixed(data["rating"]), cx, cy - 15, 22, INK, True, "center")
+    draw_delta_badge(draw,data.get('updateDelta'),cx+32,cy-62,14,True)
     _box(draw, 106, 1142, 570, 58, "#101722", "#36475c", radius=14)
     _text(draw, f"阶段 {data['stage']['label']}", 128, 1158, 14, data["stage"]["color"], True)
     _text(draw, f"中位 {_fixed(data['center'])}  ·  最大差 {_fixed(data['spread'])}", 650, 1158, 14, "#c4ced9", True, "right")
     draw.line((735, 650, 735, 1200), fill="#263345", width=2)
     _text(draw, "七颗能力行星", 778, 654, 18, "#ffffff", True)
-    _text(draw, "分数 / 证据 / 相对中位 / 公转周期", 1328, 658, 12, "#93a3b5", False, "right")
+    _text(draw, "分数 / 同步角标 / 中位差 / 公转周期", 1328, 658, 12, "#93a3b5", False, "right")
     for index, planet in enumerate(data["planets"]):
         y = 706 + index * 68
         if index:
@@ -422,7 +445,8 @@ def _draw_galaxy(image, draw, data):
         _text(draw, planet["label"], 920, y + 1, 14, "#9caaba")
         _text(draw, f"#{planet['rank']}" if planet["rank"] else "--", 1062, y + 2, 12, "#75869a", True)
         _text(draw, _fixed(planet["score"]), 1160, y - 3, 23, planet["color"], True, "right")
-        _text(draw, f"{planet['charts']} 张 · {planet['delta']:+.2f}", 1183, y + 2, 12, "#c4ced9")
+        draw_delta_badge(draw,planet.get('updateDelta'),1167,y-10,13,True)
+        _text(draw, f"{planet['charts']} 张 · 中位差 {planet['delta']:+.2f}", 1183, y + 29, 11, "#c4ced9")
         _text(draw, _format_period(planet["period"]), 1328, y + 2, 13, "#93a3b5", True, "right")
         _box(draw, 812, y + 32, 348, 7, "#1b2430", radius=4)
         _box(draw, 812, y + 32, max(5, min(348, planet["score"] / MAX_ABILITY_RATING * 348)), 7, planet["color"], radius=4)

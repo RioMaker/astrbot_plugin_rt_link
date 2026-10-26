@@ -7,14 +7,14 @@ from PIL import Image,ImageDraw,ImageFilter,ImageColor,ImageChops
 if __package__:
     from . import profile_theme as theme
     from .profile_theme import txt,box,PAPER,WHITE,INK,MUTED,LINE,TEAL,RED
-    from .report_image import _font,_draw_galaxy,build_report_data,RHYTHM_META,_stage
+    from .report_image import _font,_draw_galaxy,build_report_data,RHYTHM_META,_stage,draw_delta_badge
     from .score_rank import SCORE_RANK_RATIOS
     from .rating import MAX_PLAYER_RATING, calc_rating
     from .profile_data import build_profile_data
 else:
     import profile_theme as theme
     from profile_theme import txt,box,PAPER,WHITE,INK,MUTED,LINE,TEAL,RED
-    from report_image import _font,_draw_galaxy,build_report_data,RHYTHM_META,_stage
+    from report_image import _font,_draw_galaxy,build_report_data,RHYTHM_META,_stage,draw_delta_badge
     from score_rank import SCORE_RANK_RATIOS
     from rating import MAX_PLAYER_RATING, calc_rating
     from profile_data import build_profile_data
@@ -29,7 +29,7 @@ STAGE_STARTS = tuple(v * MAX_PLAYER_RATING / 15.5 for v in (0, 1, 5, 7, 9, 10, 1
 STAGES = [{**_stage(float(value)), 'startsAt': value} for value in STAGE_STARTS]
 PLANET_COLORS = ['#ef967e', '#e7c565', '#b69bdd', '#80cfba', '#81b8dc', '#df96b8', '#aabcc9']
 TAG_COLORS = ['#2d615a', '#59877b']
-BEST_CARD_STEP = 292
+BEST_CARD_STEP = 260
 NEXT_CARD_HEIGHT = 312
 NEXT_CARD_STEP = 330
 NEXT_NOTE_HEIGHT = 88
@@ -228,7 +228,7 @@ def card_rating_text(row):
     return f"{value:.2f}"
 
 
-def card(im, row, index, x, y, w=420, h=276, change=None):
+def card(im, row, index, x, y, w=420, h=244, change=None):
     d = ImageDraw.Draw(im)
     ura = row["level"] == 5
     state = theme.crown_state(row)
@@ -289,8 +289,6 @@ def card(im, row, index, x, y, w=420, h=276, change=None):
     txt(d, "AI 定数", x + 210, y + 155, 15, MUTED, align="center")
     constant = f"{row['aiConstant']:.1f}" if row["aiConstant"] is not None else "—"
     txt(d, constant, x + 210, y + 176, 23, INK, align="center")
-    ceiling_text = f"{ceiling:.2f}" if ceiling is not None else "—"
-    txt(d, f"全良上限 {ceiling_text}", x + 24, y + 214, 15, MUTED)
     txt(d, "精度", x + w - 24, y + 155, 15, MUTED, align="right")
     accuracy_value = min(row["accuracy"] * 100, 99.99) if row["accuracy"] < 1 else 100
     accuracy = f"{accuracy_value:.2f}%"
@@ -301,15 +299,20 @@ def card(im, row, index, x, y, w=420, h=276, change=None):
 
     score = row.get("highScore")
     score_text = f"{int(score):,}" if score is not None else "—"
-    score_y = y + 246
+    score_y = y + 214
     txt(d, f"最高分 {score_text}", x + 24, score_y, 18, INK)
     if change is not None and change.get("delta") != 0:
         label, color = score_change_label(change)
         txt(d, label, x + w - 24, score_y, 18, color, True, "right")
 
     if change is not None and change.get("ratingDelta"):
-        value, color = metric_change_label(change["ratingDelta"], 2)
-        txt(d, f"Rating {value}", x + w - 24, y + 214, 16, color, True, "right")
+        draw_delta_badge(
+            d,
+            change["ratingDelta"],
+            x + 24 + _font(23).getlength(card_rating_text(row)) + 5,
+            y + 169,
+            12,
+        )
 
 
 def sphere(im, cx, cy, radius, color, locked=False):
@@ -425,25 +428,58 @@ class ProfileRenderer:
     def config_frame(self, im, y, data):
         d = ImageDraw.Draw(im)
         box(d, 70, y, 1300, 502)
-        txt(d, '当前评分 / 理论满分', 95, y + 22, 23, INK, True)
-        txt(d, '按评价比例着色 · 更多配置与历史见 /rtlink progress', 1345, y + 26, 18, MUTED, align='right')
+        txt(d, "当前评分 / 理论满分", 95, y + 22, 23, INK, True)
+        txt(
+            d,
+            "按评价比例着色 · 更多配置与历史见 /rtlink progress",
+            1345,
+            y + 26,
+            18,
+            MUTED,
+            align="right",
+        )
         x0 = 269
         cw = 180
-        for (j, label) in enumerate(theme.COMPACT_LABELS):
-            txt(d, label, x0 + j * cw + cw / 2, y + 69, 21, INK, align='center')
-        cells = {c['key']: c for c in data['cells']}
-        for (i, (band, label, interval)) in enumerate(data['bands']):
+        for j, label in enumerate(theme.COMPACT_LABELS):
+            txt(d, label, x0 + j * cw + cw / 2, y + 69, 21, INK, align="center")
+        cells = {c["key"]: c for c in data["cells"]}
+        for i, (band, label, interval) in enumerate(data["bands"]):
             yy = y + 107 + i * 48
             if i % 2 == 0:
-                box(d, 85, yy - 5, 1270, 47, '#f1f3ed', '#f1f3ed', 6)
-            txt(d, label, 99, yy - 1, 20, TEAL if i < 6 else '#8560ac')
-            txt(d, interval + ' BPM', 99, yy + 24, 14, MUTED)
-            for (j, pat) in enumerate(theme.COMPACT_PATTERNS):
-                c = cells.get(pat + '|' + band)
-                score_pair(im, c.get('score') if c else None, c.get('ceiling') if c else None, x0 + j * cw + cw / 2, yy + 10)
-        note = '分母：相关谱面全良后按同一配置算法计算。— 表示数据或样本不足。'
-        if not data.get('available'):
-            note = '配置资源不可用或与谱面库不匹配，请更新完整插件资源后重新同步。'
+                box(d, 85, yy - 5, 1270, 47, "#f1f3ed", "#f1f3ed", 6)
+            txt(d, label, 99, yy - 1, 20, TEAL if i < 6 else "#8560ac")
+            txt(d, interval + " BPM", 99, yy + 24, 14, MUTED)
+            for j, pat in enumerate(theme.COMPACT_PATTERNS):
+                c = cells.get(pat + "|" + band)
+                score_pair(
+                    im,
+                    c.get("score") if c else None,
+                    c.get("ceiling") if c else None,
+                    x0 + j * cw + cw / 2,
+                    yy + 19,
+                )
+                if c is not None:
+                    delta = (
+                        (
+                            (self.analysis.get("profileSyncChanges") or {}).get(
+                                "metricDeltas"
+                            )
+                            or {}
+                        )
+                        .get("configurations", {})
+                        .get(c["key"])
+                    )
+                    draw_delta_badge(
+                        ImageDraw.Draw(im),
+                        delta,
+                        x0 + (j + 1) * cw - 10,
+                        yy - 3,
+                        11,
+                        align="right",
+                    )
+        note = "分母：相关谱面全良后按同一配置算法计算。— 表示数据或样本不足。"
+        if not data.get("available"):
+            note = "配置资源不可用或与谱面库不匹配，请更新完整插件资源后重新同步。"
         txt(d, note, 96, y + 464, 18, MUTED)
 
     def best20(self, im, y):
@@ -681,6 +717,8 @@ class ProfileRenderer:
         theme.ring(im, 265, 321, 98, rating)
         d = ImageDraw.Draw(im)
         txt(d, f"{rating:.2f}", 265, 284, 59, "#ffffff", True, "center")
+        delta = ((self.analysis.get('profileSyncChanges') or {}).get('metricDeltas') or {}).get('rating')
+        draw_delta_badge(d,delta,265+_font(59,True).getlength(f'{rating:.2f}')/2+8,268,15,True)
         txt(d, f"/ {MAX_PLAYER_RATING:.2f}", 265, 355, 19, "#bac7ce", align="center")
         txt(
             d,
@@ -694,7 +732,7 @@ class ProfileRenderer:
         self.overview(im)
         galaxy(im, build_report_data(self.analysis))
         d = ImageDraw.Draw(im)
-        txt(d, "右侧正负值为相对七维中位数，不代表历史涨跌。", 70, 1250, 19, MUTED)
+        txt(d, "角标 +/- 为本次同步变化；“中位差”为相对七维中位数。", 70, 1250, 19, MUTED)
         theme.section(
             d, "02 / CONFIGURATIONS", "配置评分概览", 1296, "7 个速度档 · 6 种常用配置"
         )
@@ -748,6 +786,8 @@ class ProfileRenderer:
                     full = c.get('ceiling') if c else None
                     txt(d, name, x, yy, 20, INK)
                     score_pair(im, current, full, x + 326, yy, 20)
+                    delta = ((self.analysis.get('profileSyncChanges') or {}).get('metricDeltas') or {}).get('configurations',{}).get(c['key']) if c else None
+                    draw_delta_badge(ImageDraw.Draw(im),delta,x+414,yy-6,12)
                     sample = str(c['playerSamples']) if c and current is not None else '—'
                     txt(d, f"{sample} / {(c['catalogSamples'] if c else 0)}", x + 594, yy, 18, MUTED, align='right')
             txt(d, '—：该档无配置或未达到评分所需样本数。', 97, y + 411, 15, MUTED)

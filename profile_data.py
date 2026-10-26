@@ -160,8 +160,73 @@ def score_sync_changes(previous, current):
 
 
 
+def profile_metric_snapshot(analysis):
+    """Compact scalar baselines; do not persist evidence rows or credentials twice."""
+    if "profileSummary" in analysis:
+        return analysis["profileSummary"]
+    config = analysis.get("profileConfigurations") or {}
+    return {
+        "rating": analysis.get(
+            "profileRating", (analysis.get("summary") or {}).get("rating")
+        ),
+        "abilities": {
+            r["key"]: {"score": r.get("score"), "charts": int(r.get("charts") or 0)}
+            for r in (analysis.get("featureAbility") or {}).get("families", [])
+        },
+        "configurations": {
+            **{
+                k: config.get(k)
+                for k in ("available", "version", "resourceHash", "algorithmVersion")
+            },
+            "cells": {r["key"]: r.get("score") for r in config.get("cells", [])},
+        },
+    }
+
+
+def visible_metric_delta(before, after):
+    if before is None or after is None:
+        return None
+    try:
+        before, after = float(before), float(after)
+    except (TypeError, ValueError):
+        return None
+    if not (math.isfinite(before) and math.isfinite(after)):
+        return None
+    delta = round(round(after, 2) - round(before, 2), 2)
+    return delta if delta else None
+
+
+def profile_metric_deltas(previous, current):
+    old, new = profile_metric_snapshot(previous), profile_metric_snapshot(current)
+    result = {
+        "rating": visible_metric_delta(old["rating"], new["rating"]),
+        "abilities": {},
+        "configurations": {},
+    }
+    for key, row in new["abilities"].items():
+        before = old["abilities"].get(key)
+        if before and before["charts"] >= 3 and row["charts"] >= 3:
+            delta = visible_metric_delta(before["score"], row["score"])
+            if delta is not None:
+                result["abilities"][key] = delta
+    a, b = old["configurations"], new["configurations"]
+    if (
+        a.get("available")
+        and b.get("available")
+        and all(
+            b.get(key) is not None and a.get(key) == b.get(key)
+            for key in ("version", "resourceHash", "algorithmVersion")
+        )
+    ):
+        for key, score in b["cells"].items():
+            delta = visible_metric_delta(a["cells"].get(key), score)
+            if delta is not None:
+                result["configurations"][key] = delta
+    return result
+
+
 def add_profile_rating_changes(changes, previous, current, previous_scores=None):
-    """Compare player Rating only; chart difficulty constants are fixed inputs."""
+    """Compare player and aggregate scores under one isolated algorithm baseline."""
     changes = copy.deepcopy(changes)
     same_identity = (
         bool(previous)
@@ -180,6 +245,7 @@ def add_profile_rating_changes(changes, previous, current, previous_scores=None)
     changes["ratingBaseline"] = bool(compatible)
     if not compatible:
         return changes
+    changes["metricDeltas"] = profile_metric_deltas(previous, current)
     old = {(r["id"], r["level"]): r for r in previous.get("records", [])}
     old_scores = {
         (r["id"], r["level"]): r.get("highScore")
@@ -252,6 +318,7 @@ def profile_rating_baseline(analysis):
         "ratingAlgorithmVersion": analysis.get("ratingAlgorithmVersion"),
         "profileScoreRows": analysis["profileScoreRows"],
         "records": [{key: r.get(key) for key in fields} for r in analysis["records"]],
+        "profileSummary": profile_metric_snapshot(analysis),
     }
 
 

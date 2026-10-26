@@ -631,8 +631,16 @@ class ScoreService:
             previous_profile = await asyncio.to_thread(
                 self.db.kv_get, f"profile_values:{qq}:{source}", None
             )
-            if previous_profile is None:
-                previous_profile = await asyncio.to_thread(self.db.get_rating_cache, qq)
+            if previous_profile is None or 'profileSummary' not in previous_profile:
+                cached_profile = await asyncio.to_thread(self.db.get_rating_cache, qq)
+                if (
+                    cached_profile is not None
+                    and cached_profile.get('profileSource') == source
+                    and cached_profile.get('ratingAlgorithmVersion') == RATING_ALGORITHM_VERSION
+                    and str((cached_profile.get('meta') or {}).get('playerId') or '') == player_id
+                    and str((cached_profile.get('meta') or {}).get('server') or '') == server
+                ):
+                    previous_profile = cached_profile
             slim["profileSyncChanges"] = add_profile_rating_changes(
                 slim["profileSyncChanges"], previous_profile, slim,
                 previous_scores.get(source, []),
