@@ -30,7 +30,7 @@ if __package__:
     from .improve_image import render_improve_image
     from .profile_image import render_profile_image, render_configuration_image
     from .profile_data import (load_configuration_catalog, configuration_scores,
-                               unique_score_rows, score_sync_changes, configuration_history_payload,
+                               unique_score_rows, score_sync_changes, add_profile_value_changes, profile_value_baseline, configuration_history_payload,
                                archive_configuration_resources, CONFIGURATION_ALGORITHM)
     from .report_image import render_report_image
     from .weakness_image import render_weakness_image
@@ -49,7 +49,7 @@ else:
     from improve_image import render_improve_image
     from profile_image import render_profile_image, render_configuration_image
     from profile_data import (load_configuration_catalog, configuration_scores,
-                              unique_score_rows, score_sync_changes, configuration_history_payload,
+                              unique_score_rows, score_sync_changes, add_profile_value_changes, profile_value_baseline, configuration_history_payload,
                               archive_configuration_resources, CONFIGURATION_ALGORITHM)
     from report_image import render_report_image
     from weakness_image import render_weakness_image
@@ -625,7 +625,17 @@ class ScoreService:
         slim['profileImprovement'] = improvement
         slim['profileSyncedAt'] = datetime.now(timezone.utc).isoformat()
         slim['profileRating'] = result['summary']['rating']
-        slim['profileSource'] = source
+        slim["profileSource"] = source
+        if self.db is not None:
+            previous_profile = await asyncio.to_thread(
+                self.db.kv_get, f"profile_values:{qq}:{source}", None
+            )
+            if previous_profile is None:
+                previous_profile = await asyncio.to_thread(self.db.get_rating_cache, qq)
+            slim["profileSyncChanges"] = add_profile_value_changes(
+                slim["profileSyncChanges"], previous_profile, slim,
+                previous_scores.get(source, []),
+            )
         if await self._binding(qq) != b:
             return False, "绑定在同步期间发生变化，请重新发送 /rtlink。", None
         slim['_historySaved'] = await self._record_rating_snapshot(qq, slim, 'sync')
@@ -638,6 +648,9 @@ class ScoreService:
                     self._logger.error(f"记录配置历史失败：{error}")
                     slim['_historySaved'] = False
             await asyncio.to_thread(self.db.put_rating_cache, qq, slim)
+            await asyncio.to_thread(
+                self.db.kv_set, f"profile_values:{qq}:{source}", profile_value_baseline(slim)
+            )
             await asyncio.to_thread(self.db.set_sync_state, qq, source, True)
 
         # 空间告警检查（同步后触发）

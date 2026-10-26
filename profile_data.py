@@ -157,6 +157,101 @@ def score_sync_changes(previous, current):
     return {"baseline": bool(old), "items": items}
 
 
+
+def add_profile_value_changes(changes, previous, current, previous_scores=None):
+    """Merge displayed Rating/constant changes without conflating them with game scores."""
+    changes = copy.deepcopy(changes)
+    compatible = (
+        bool(previous)
+        and changes["baseline"]
+        and all(
+            str((previous.get("meta") or {}).get(key) or "")
+            == str(current["meta"].get(key) or "")
+            for key in ("playerId", "server")
+        )
+        and previous.get("profileSource") == current["profileSource"]
+    )
+    changes["valuesBaseline"] = bool(compatible)
+    if not compatible:
+        return changes
+    old = {(r["id"], r["level"]): r for r in previous.get("records", [])}
+    old_scores = {
+        (r["id"], r["level"]): r.get("highScore")
+        for r in previous.get("profileScoreRows", [])
+    }
+    if previous_scores is not None:
+        old_scores = {
+            (r["song_no"], r["level"]): r.get("high_score") for r in previous_scores
+        }
+    scores = {
+        (r["id"], r["level"]): r.get("highScore") for r in current["profileScoreRows"]
+    }
+    items = {(r["id"], r["level"]): r for r in changes["items"]}
+    for row in current["records"]:
+        key = (row["id"], row["level"])
+        before = old.get(key)
+        if before is None:
+            continue
+        values = {}
+        for field, prefix, digits in (
+            ("rating", "rating", 2),
+            ("aiConstant", "constant", 1),
+        ):
+            a, b = before.get(field), row.get(field)
+            if a is None or b is None:
+                continue
+            try:
+                a, b = float(a), float(b)
+            except (TypeError, ValueError):
+                continue
+            if not (math.isfinite(a) and math.isfinite(b)):
+                continue
+            delta = round(round(b, digits) - round(a, digits), digits)
+            if delta:
+                values.update(
+                    {
+                        prefix + "Delta": delta,
+                        "previous" + prefix.capitalize(): a,
+                        field: b,
+                    }
+                )
+        if not values:
+            continue
+        if key not in items:
+            items[key] = {
+                "id": row["id"],
+                "level": row["level"],
+                "title": row.get("title"),
+                "previousScore": old_scores.get(key, before.get("highScore")),
+                "highScore": scores.get(key),
+                "delta": 0,
+            }
+        items[key].update(values)
+    changes["items"] = sorted(
+        items.values(),
+        key=lambda r: (
+            r["delta"] is None,
+            -abs(r.get("constantDelta") or 0),
+            -abs(r.get("ratingDelta") or 0),
+            -abs(r["delta"] or 0),
+            r["id"],
+            r["level"],
+        ),
+    )
+    return changes
+
+
+def profile_value_baseline(analysis):
+    """Small per-source baseline survives cache invalidation and model/resource updates."""
+    fields = ("id", "level", "title", "rating", "aiConstant", "highScore")
+    return {
+        "meta": {key: analysis["meta"].get(key) for key in ("playerId", "server")},
+        "profileSource": analysis["profileSource"],
+        "profileScoreRows": analysis["profileScoreRows"],
+        "records": [{key: r.get(key) for key in fields} for r in analysis["records"]],
+    }
+
+
 def build_profile_data(analysis,generated_at=None):
     generated_at=generated_at or datetime.now(timezone.utc)
     analysis=copy.deepcopy(analysis)

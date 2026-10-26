@@ -6,7 +6,11 @@ import copy
 import pytest
 from PIL import Image
 
-from profile_data import score_sync_changes
+from profile_data import (
+    add_profile_value_changes,
+    profile_value_baseline,
+    score_sync_changes,
+)
 from profile_image import render_profile_image, score_change_label
 from service import MemoryBindingsStore, ScoreService
 from storage import ScoreDatabase, load_charts
@@ -170,6 +174,33 @@ def test_consecutive_sync_cache_restart_failure_and_identity(tmp_path, source):
             score = saved_score
             _, _, restored = await svc._sync("qq")
             assert restored["profileSyncChanges"]["items"] == []
+            old_constant = restored["records"][0]["aiConstant"]
+            # Preserve a per-source baseline even when the display cache is removed.
+            db._conn.execute("DELETE FROM rating_cache")
+            db._conn.commit()
+            charts[key]["feature"]["aiConstant"] = old_constant + 0.2
+            _, _, rerated = await svc._sync("qq")
+            changed = rerated["profileSyncChanges"]["items"][0]
+            assert changed["delta"] == 0
+            assert changed["constantDelta"] == pytest.approx(0.2)
+            assert changed["ratingDelta"] > 0
+            assert changed["previousConstant"] == old_constant
+            assert changed["previousScore"] == changed["highScore"]
+            assert (
+                db.get_rating_cache("qq")["profileSyncChanges"]
+                == rerated["profileSyncChanges"]
+            )
+            db.close()
+            db = ScoreDatabase(path)
+            svc.db = db
+            charts[key]["feature"]["aiConstant"] = old_constant
+            _, _, decreased = await svc._sync("qq")
+            assert decreased["profileSyncChanges"]["items"][0][
+                "constantDelta"
+            ] == pytest.approx(-0.2)
+            assert decreased["profileSyncChanges"]["items"][0]["ratingDelta"] < 0
+            _, _, stable = await svc._sync("qq")
+            assert stable["profileSyncChanges"]["items"] == []
             # A different identity must never inherit deltas from old current rows.
             db._conn.execute("UPDATE scores SET game_player_id='other', server='jp'")
             db._conn.commit()
@@ -229,3 +260,128 @@ def test_render_all_changes_and_best20_markers(tmp_path, monkeypatch):
     assert texts.count("↓ -10,000") == 21
     with Image.open(path) as im:
         assert im.width == 1440 and im.height > 5000
+
+
+@pytest.mark.parametrize("mismatch", ["playerId", "server", "source"])
+def test_profile_values_reject_other_identities(mismatch):
+    previous = {
+        "meta": {"playerId": "p1", "server": "cn"},
+        "profileSource": "kinoko",
+        "profileScoreRows": [{"id": 1, "level": 4, "highScore": 900000}],
+        "records": [{"id": 1, "level": 4, "rating": 9.5, "aiConstant": 10.0}],
+    }
+    current = copy.deepcopy(previous)
+    current["records"][0].update(rating=9.7, aiConstant=10.2)
+    if mismatch == "source":
+        current["profileSource"] = "hiroba"
+    else:
+        current["meta"][mismatch] = "other"
+    result = add_profile_value_changes(
+        {"baseline": True, "items": []}, previous, current
+    )
+    assert result["items"] == [] and result["valuesBaseline"] is False
+
+
+def test_profile_values_only_displayed_deltas_and_missing_baselines():
+    previous = {
+        "meta": {"playerId": "p1", "server": "cn"},
+        "profileSource": "kinoko",
+        "profileScoreRows": [{"id": 1, "level": 4, "highScore": 900000}],
+        "records": [{"id": 1, "level": 4, "rating": 9.50, "aiConstant": 10.0}],
+    }
+    current = copy.deepcopy(previous)
+    current["records"][0]["rating"] = 9.500000001
+    changes = {"baseline": True, "items": []}
+    assert add_profile_value_changes(changes, previous, current)["items"] == []
+    current["records"][0]["rating"] = 9.63
+    current["records"][0]["aiConstant"] = 9.8
+    merged = add_profile_value_changes(changes, previous, current)
+    assert changes["items"] == []
+    row = merged["items"][0]
+    assert row["ratingDelta"] == 0.13 and row["constantDelta"] == -0.2
+    assert row["delta"] == 0
+    assert (
+        add_profile_value_changes({"baseline": False, "items": []}, previous, current)[
+            "items"
+        ]
+        == []
+    )
+    previous["records"][0].update(rating=None, aiConstant=float("nan"))
+    assert add_profile_value_changes(changes, previous, current)["items"] == []
+    baseline = profile_value_baseline(current)
+    assert set(baseline["meta"]) == {"playerId", "server"}
+    assert baseline["records"][0]["aiConstant"] == 9.8
+
+
+def test_render_constant_only_changes(tmp_path, monkeypatch):
+    import profile_image
+
+    texts = []
+    original = profile_image.txt
+
+    def capture(d, value, *args, **kwargs):
+        texts.append(str(value))
+        return original(d, value, *args, **kwargs)
+
+    monkeypatch.setattr(profile_image, "txt", capture)
+    row = {
+        "id": 1,
+        "level": 4,
+        "title": "Constant only",
+        "rating": 10.2,
+        "aiConstant": 10.2,
+        "accuracy": 1.0,
+        "highScore": 1000000,
+    }
+    changed = {
+        "id": 1,
+        "level": 4,
+        "title": "Constant only",
+        "delta": 0,
+        "highScore": 1000000,
+        "previousScore": 1000000,
+        "rating": 10.2,
+        "previousRating": 10.0,
+        "ratingDelta": 0.2,
+        "aiConstant": 10.2,
+        "previousConstant": 10.0,
+        "constantDelta": 0.2,
+    }
+    data = {
+        "records": [row],
+        "summary": {"rating": 10.2},
+        "profileSyncChanges": {
+            "baseline": True,
+            "valuesBaseline": True,
+            "source": "kinoko",
+            "items": [changed],
+        },
+    }
+    render_profile_image(data, tmp_path / "constant-only.png")
+    assert "分数持平" in texts
+    assert "Rating 10.00 → 10.20" in texts
+    assert "AI 定数 10.0 → 10.2" in texts
+    assert "定数 ↑ +0.2" in texts
+    assert "Rating ↑ +0.20" in texts
+    assert "新收录" not in texts
+
+
+def test_value_baseline_does_not_replace_previous_sync_score():
+    # A fallback source can have an older rated baseline than its last raw sync.
+    previous = {
+        "meta": {"playerId": "p1", "server": "cn"},
+        "profileSource": "hiroba",
+        "profileScoreRows": [{"id": 1, "level": 4, "highScore": 900000}],
+        "records": [{"id": 1, "level": 4, "rating": 9.0, "aiConstant": 10.0}],
+    }
+    current = copy.deepcopy(previous)
+    current["records"][0]["rating"] = 9.2
+    current["profileScoreRows"][0]["highScore"] = 950000
+    scores = [{"song_no": 1, "level": 4, "high_score": 950000}]
+    result = add_profile_value_changes(
+        {"baseline": True, "items": []}, previous, current, scores
+    )
+    assert result["items"][0]["previousScore"] == 950000
+    assert result["items"][0]["highScore"] == 950000
+    assert result["items"][0]["delta"] == 0
+    assert result["items"][0]["ratingDelta"] == 0.2

@@ -175,13 +175,48 @@ def score_change_label(change):
     delta = change.get("delta")
     if delta is None:
         return "新收录", TEAL
+    if delta == 0:
+        return (
+            "分数待比较"
+            if change.get("previousScore") is None or change.get("highScore") is None
+            else "分数持平"
+        ), MUTED
     return (f"↑ +{delta:,}", TEAL) if delta > 0 else (f"↓ {delta:,}", RED)
+
+
+def metric_change_label(delta, digits):
+    arrow = "↑" if delta > 0 else "↓"
+    return f"{arrow} {delta:+.{digits}f}", TEAL if delta > 0 else RED
+
+
+def sync_pair_step(items):
+    return (
+        172
+        if any(r.get("ratingDelta") or r.get("constantDelta") for r in items)
+        else 108
+    )
+
+
+def best20_step(changes):
+    return (
+        292
+        if any(
+            r.get("ratingDelta") or r.get("constantDelta")
+            for r in (changes or {}).get("items", [])
+        )
+        else 260
+    )
 
 
 def sync_changes_height(changes):
     if changes is None:
         return 0
-    rows_height = math.ceil(len(changes["items"]) / 2) * 108 if changes["items"] else 72
+    items = changes["items"]
+    rows_height = (
+        sum(sync_pair_step(items[i : i + 2]) for i in range(0, len(items), 2))
+        if items
+        else 72
+    )
     return 98 + rows_height + 42
 
 
@@ -253,10 +288,20 @@ def card(im, row, index, x, y, w=420, h=244, change=None):
 
     score = row.get("highScore")
     score_text = f"{int(score):,}" if score is not None else "—"
-    txt(d, f"最高分 {score_text}", x + 24, y + 214, 18, INK)
-    if change is not None:
+    score_y = y + (246 if h > 244 else 214)
+    txt(d, f"最高分 {score_text}", x + 24, score_y, 18, INK)
+    if change is not None and change.get("delta") != 0:
         label, color = score_change_label(change)
-        txt(d, label, x + w - 24, y + 214, 18, color, True, "right")
+        txt(d, label, x + w - 24, score_y, 18, color, True, "right")
+
+    if change is not None:
+        for key, label, digits, xx, align in (
+            ("ratingDelta", "Rating", 2, x + 24, "left"),
+            ("constantDelta", "定数", 1, x + w - 24, "right"),
+        ):
+            if change.get(key):
+                value, color = metric_change_label(change[key], digits)
+                txt(d, f"{label} {value}", xx, y + 214, 16, color, True, align)
 
 
 def sphere(im, cx, cy, radius, color, locked=False):
@@ -415,6 +460,7 @@ class ProfileRenderer:
         scores = {
             (r["id"], r["level"]): r.get("highScore") for r in self.data["scoreRows"]
         }
+        step = best20_step(self.analysis.get("profileSyncChanges"))
         for i, row in enumerate(rows):
             key = (row["id"], row["level"])
             card(
@@ -422,51 +468,91 @@ class ProfileRenderer:
                 {**row, "highScore": scores.get(key, row.get("highScore"))},
                 i + 1,
                 70 + i % 3 * 440,
-                y + i // 3 * 260,
+                y + i // 3 * step,
+                h=step - 16,
                 change=changes.get(key),
             )
 
     def sync_changes(self, im, y):
         changes = self.analysis.get("profileSyncChanges")
         if changes is None:
-            return 0
+            return
         items = changes["items"]
         up = sum(r["delta"] is not None and r["delta"] > 0 for r in items)
         down = sum(r["delta"] is not None and r["delta"] < 0 for r in items)
         new = sum(r["delta"] is None for r in items)
+        ratings = sum(bool(r.get("ratingDelta")) for r in items)
+        constants = sum(bool(r.get("constantDelta")) for r in items)
         source = changes.get("source", "")
         theme.section(
             ImageDraw.Draw(im),
             "03 / SYNC CHANGES",
             "本次同步变化",
             y,
-            f"{source} · 鬼 / 里 · ↑ {up} 首 · ↓ {down} 首 · 新收录 {new} 首",
+            f"{source} · 分数 ↑ {up} / ↓ {down} · Rating {ratings} 首 · 定数 {constants} 首 · 新收录 {new} 首",
         )
         top = y + 98
         if not items:
             d = ImageDraw.Draw(im)
             box(d, 70, top, 1300, 72)
-            note = (
-                "与上次同步相比，最高分无变化。"
-                if changes["baseline"]
-                else "首次同步已建立成绩基线，下次同步将显示分数升降。"
-            )
+            note = "与上次同步相比，最高分、Rating 与 AI 定数无变化。"
+            if not changes["baseline"]:
+                note = "首次同步已建立成绩与定数基线，下次同步将显示升降。"
+            elif not changes.get("valuesBaseline"):
+                note = "最高分无变化；Rating 与定数基线已建立，下次同步将显示变化。"
             txt(d, note, 94, top + 24, 22, MUTED)
-        for i, row in enumerate(items):
-            x, yy = 70 + i % 2 * 665, top + i // 2 * 108
-            d = ImageDraw.Draw(im)
-            box(d, x, yy, 635, 94)
-            difficulty = "里" if row["level"] == 5 else "鬼"
-            name = f"{difficulty} · {title(row)}"
-            txt(d, theme.ellipsize(name, 583, 22), x + 24, yy + 15, 22, INK, True)
-            previous = (
-                f"{row['previousScore']:,}"
-                if row["previousScore"] is not None
-                else "首次收录"
-            )
-            txt(d, f"{previous} → {row['highScore']:,}", x + 24, yy + 55, 20, MUTED)
-            label, color = score_change_label(row)
-            txt(d, label, x + 611, yy + 55, 20, color, True, "right")
+        yy = top
+        for start in range(0, len(items), 2):
+            pair = items[start : start + 2]
+            step = sync_pair_step(pair)
+            for i, row in enumerate(pair):
+                x = 70 + i * 665
+                d = ImageDraw.Draw(im)
+                box(d, x, yy, 635, step - 14)
+                difficulty = "里" if row["level"] == 5 else "鬼"
+                txt(
+                    d,
+                    theme.ellipsize(f"{difficulty} · {title(row)}", 583, 22),
+                    x + 24,
+                    yy + 15,
+                    22,
+                    INK,
+                    True,
+                )
+                previous = (
+                    f"{row['previousScore']:,}"
+                    if row["previousScore"] is not None
+                    else "—"
+                )
+                current = (
+                    f"{row['highScore']:,}" if row["highScore"] is not None else "—"
+                )
+                txt(d, f"{previous} → {current}", x + 24, yy + 55, 20, MUTED)
+                label, color = score_change_label(row)
+                txt(d, label, x + 611, yy + 55, 20, color, True, "right")
+                for key, label, previous_key, current_key, digits, offset in (
+                    ("ratingDelta", "Rating", "previousRating", "rating", 2, 89),
+                    (
+                        "constantDelta",
+                        "AI 定数",
+                        "previousConstant",
+                        "aiConstant",
+                        1,
+                        121,
+                    ),
+                ):
+                    if row.get(key):
+                        value, color = metric_change_label(row[key], digits)
+                        txt(
+                            d,
+                            f"{label} {row[previous_key]:.{digits}f} → {row[current_key]:.{digits}f}",
+                            x + 24,
+                            yy + offset,
+                            19,
+                            INK,
+                        )
+                        txt(d, value, x + 611, yy + offset, 19, color, True, "right")
+            yy += step
 
     def next_plays(self, im, y, count=8):
         items = self.improvement["items"][:count]
@@ -570,7 +656,9 @@ class ProfileRenderer:
         best_heading = 1937 + changes_height
         best_y = best_heading + 101
         next_heading = (
-            best_y + best_rows * (260 if self.analysis["records"] else 220) + 42
+            best_y
+            + best_rows * (best20_step(changes) if self.analysis["records"] else 220)
+            + 42
         )
         next_y = next_heading + 98
         height = next_y + next_plays_height(recommendation_count) + 56
@@ -619,7 +707,7 @@ class ProfileRenderer:
             "04 / BEST 20" if changes is not None else "03 / BEST 20",
             "综合评分最佳 20 谱面",
             best_heading,
-            "按单谱 Rating 排序 · 最高分箭头为本次同步差值",
+            "按单谱 Rating 排序 · 箭头为分数 / Rating / 定数同步差值",
         )
         self.best20(im, best_y)
         theme.section(
