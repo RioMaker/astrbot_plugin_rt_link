@@ -23,6 +23,8 @@ from astrbot.api.star import Context, Star, StarTools, register
 # 本地直接运行/测试 main.py 时（__package__ 为空），回退到同目录绝对导入。
 if __package__:
     from . import query_gateway
+    from .query_agent import AgentSettings, QueryAgent, unavailable
+    from .query_result_image import prune_query_results, render_query_result
     from .api_client import KinokoClient
     from .sakura_client import SakuraClient
     from .source_service import MultiSourceService
@@ -35,6 +37,8 @@ if __package__:
     from .storage import ScoreDatabase, load_charts, load_dan_courses
 else:
     import query_gateway
+    from query_agent import AgentSettings, QueryAgent, unavailable
+    from query_result_image import prune_query_results, render_query_result
     from api_client import KinokoClient
     from sakura_client import SakuraClient
     from source_service import MultiSourceService
@@ -49,7 +53,7 @@ else:
 PLUGIN_NAME = "rt_link"
 PLUGIN_AUTHOR = "Rio"
 PLUGIN_DESC = "支持菌菌与 Sakura 独立绑定、成绩存储与太鼓实力评估"
-PLUGIN_VERSION = "v0.19.0"
+PLUGIN_VERSION = "v0.20.0"
 
 COMMAND_NAME = "rtlink"
 BINDINGS_KEY = "bindings"
@@ -75,9 +79,10 @@ class KvBindingsStore(BindingsStore):
 
 @register(PLUGIN_NAME, PLUGIN_AUTHOR, PLUGIN_DESC, PLUGIN_VERSION)
 class RTLinkPlugin(Star):
-    def __init__(self, context: Context):
+    def __init__(self, context: Context, config: dict | None = None):
         super().__init__(context)
-        self.cfg = self.context.get_config() or {}
+        # AstrBot injects this plugin's schema config; retain the local mock fallback.
+        self.cfg = config if config is not None else (self.context.get_config() or {})
         self.plugin_dir = Path(__file__).resolve().parent
 
         # 数据目录：优先 AstrBot 提供的持久化目录，本地测试回退到插件目录下 data/。
@@ -574,7 +579,7 @@ class RTLinkPlugin(Star):
         return level if level in RATED_LEVELS else (None if level == 0 else level)
 
     # ------------------------------------------------------------------
-    # 注册六个入口；组合查询优先 query_rtlink，旧方法作为内部查询能力保留。
+    # 主AI只使用临时查询Agent；原始批量查询及旧方法保留为内部函数。
     # ------------------------------------------------------------------
     async def _run_ai_tool(self, event, key, producer, max_chars=2500):
         """Per-message budget and deduplication, isolated from ordinary commands."""
@@ -601,6 +606,124 @@ class RTLinkPlugin(Star):
 
     @filter.llm_tool(name="query_rtlink")
     async def query_rtlink(
+        self,
+        event: AstrMessageEvent,
+        question: str,
+    ) -> str:
+        """查询太鼓达人/RTLink成绩、实力、练习推荐、谱面、历史、段位和条件统计时调用。
+
+        将本次目标及必要的曲名、年份、区域、难度、筛选条件一次写清，通常只需调用一次。
+        插件使用当前会话同一模型的独立临时查询Agent，只返回最终结论与简短概述。
+        图片模式下插件直接发送最终结果图片，主AI只需简短转述，不要复述执行过程或重复发图。
+        不要转发主AI思考、人格、聊天历史或其他用户的私密资料。玩家查询只针对当前发言者绑定账号。
+
+        Args:
+            question(string): 太鼓达人查询目标及必要条件，例如“六天在哪些年份和区域的段位出现过？”
+        """
+        if (
+            not isinstance(question, str)
+            or not question.strip()
+            or len(question) > 4000
+        ):
+            return query_gateway.dumps({"summary": "请提供1–4000字的明确查询目标。"})
+        try:
+            settings = AgentSettings.from_config(getattr(self, "cfg", {}))
+        except ValueError:
+            return query_gateway.dumps(
+                {"summary": "查询子Agent配置无效，请管理员检查插件配置。"}
+            )
+
+        async def work():
+            try:
+                report = await asyncio.wait_for(
+                    self._run_query_agent(event, question.strip(), settings),
+                    settings.timeout,
+                )
+            except (asyncio.TimeoutError, TimeoutError):  # noqa: UP041 -- Python 3.10 compatibility
+                report = unavailable(
+                    "本次查询超时，暂未形成完整结论，请稍后重试或缩小目标。"
+                )
+            except Exception as error:  # noqa: BLE001 -- final-only error, no provider payload
+                logger.warning(f"rt_link 查询子Agent失败：{type(error).__name__}")
+                report = unavailable(
+                    "本次查询暂时不可用，未能形成可靠结论；请管理员检查当前会话模型及服务状态。"
+                )
+            return await self._deliver_query_report(event, report, settings)
+
+        return await self._run_ai_tool(
+            event,
+            ("query_rtlink", question.strip()),
+            work,
+            max_chars=12000,
+        )
+
+    async def _run_query_agent(self, event, question, settings):
+        # Same destination as the main AI; never accept an alternate provider ID.
+        provider_id = await self.context.get_current_chat_provider_id(
+            umo=event.unified_msg_origin
+        )
+
+        async def generate(system, prompt, max_tokens):
+            response = await self.context.llm_generate(
+                chat_provider_id=provider_id,
+                system_prompt=system,
+                prompt=prompt,
+                contexts=[],
+                tools=None,
+                image_urls=[],
+                max_tokens=max_tokens,
+            )
+            return response.completion_text
+
+        async with self.service.readonly_session(event.get_sender_id()) as backend:
+            token = query_gateway.ANALYSIS_SCOPE.set({})
+            try:
+
+                async def execute(queries):
+                    return await backend.get_readonly_queries_text(
+                        event.get_sender_id(),
+                        queries,
+                        self.dan_courses,
+                    )
+
+                return await QueryAgent(settings).run(
+                    question, generate, execute, backend.provider_label
+                )
+            finally:
+                query_gateway.ANALYSIS_SCOPE.reset(token)
+
+    async def _deliver_query_report(self, event, report, settings):
+        if settings.output_mode == "text":
+            return query_gateway.dumps(report)
+        try:
+            folder = self.data_dir / "query_results"
+            folder.mkdir(parents=True, exist_ok=True)
+            owner = hashlib.sha256(str(event.get_sender_id()).encode()).hexdigest()[:16]
+            path = folder / f"query-{owner}-{uuid.uuid4().hex}.png"
+            await asyncio.to_thread(
+                render_query_result, report, path, settings.template
+            )
+            await event.send(event.image_result(str(path)))
+            try:
+                await asyncio.to_thread(prune_query_results, folder, owner, path)
+            except OSError:
+                logger.warning("rt_link：旧查询结果图片清理失败。")
+            if settings.output_mode == "both":
+                return query_gateway.dumps({**report, "delivery": "image_sent"})
+            return query_gateway.dumps(
+                {
+                    "summary": report["summary"],
+                    "delivery": "image_sent",
+                    "message": "最终查询结果图片已发送，请仅简短转述结论。",
+                }
+            )
+        except Exception as error:  # noqa: BLE001 -- unsupported-platform text fallback
+            logger.warning(f"rt_link 查询结果图片发送失败：{type(error).__name__}")
+            return query_gateway.dumps(
+                {**report, "delivery": "image_failed_text_fallback"}
+            )
+
+    async def _query_rtlink_batch(
         self,
         event: AstrMessageEvent,
         queries: list[dict],
@@ -681,7 +804,6 @@ class RTLinkPlugin(Star):
             max_chars=query_gateway.MAX_OUTPUT_CHARS,
         )
 
-    @filter.llm_tool(name="get_player_overview")
     async def get_player_overview(self, event: AstrMessageEvent) -> str:
         """一次获取当前玩家的 Rating、能力、主要弱项与成绩证据。推荐歌曲直接用 recommend_practice，无需先调用本工具。"""
         return await self._run_ai_tool(
@@ -689,7 +811,6 @@ class RTLinkPlugin(Star):
             lambda: self.service.get_ai_overview_text(event.get_sender_id()),
         )
 
-    @filter.llm_tool(name="recommend_practice")
     async def recommend_practice(
         self, event: AstrMessageEvent, goal: str = "general", level: str = "",
         target_rank: str = "", scope: str = "",
@@ -707,7 +828,6 @@ class RTLinkPlugin(Star):
             lambda: self.service.recommend_practice_text(event.get_sender_id(), goal, level, target_rank, scope),
         )
 
-    @filter.llm_tool(name="query_song_brief")
     async def query_song_brief(self, event: AstrMessageEvent, song_name: str, level: str = "") -> str:
         """一次查询单首歌的成绩和公共谱面配置摘要。支持未玩曲；不提供逐小节或原始特征翻页。
 
@@ -732,7 +852,6 @@ class RTLinkPlugin(Star):
             event.get_sender_id(), song_name, parse_difficulty(level) if level else None
         )
 
-    @filter.llm_tool(name="query_dan_course")
     async def query_dan_course(
         self,
         event: AstrMessageEvent,
@@ -773,7 +892,6 @@ class RTLinkPlugin(Star):
             event, ("query_dan_course", year, region, rank, song_name, song_no), query,
         )
 
-    @filter.llm_tool(name="evaluate_player_dan")
     async def evaluate_player_dan(
         self,
         event: AstrMessageEvent,
@@ -829,7 +947,7 @@ class RTLinkPlugin(Star):
         return await self.service.get_difficulty_stats_text(event.get_sender_id(), self._level_arg(level))
 
     async def get_rank_distribution(self, event: AstrMessageEvent, level: int = 0) -> str:
-        """查询当前 QQ 用户评价等级的分布（评价越高代表段位越高），含各档代表曲目。
+        """查询当前 QQ 用户单曲评价等级的分布（不等同于段位道场等级），含各档代表曲目。
 
         Args:
             level(int): 4=鬼，5=里鬼；0 或省略=鬼/里合计。

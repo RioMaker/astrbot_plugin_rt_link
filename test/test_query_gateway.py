@@ -78,7 +78,7 @@ def test_stats_and_multi_song_comparison_use_one_analysis_and_one_tool_call():
             query("recommend_practice", goal="accuracy"),
             query("get_source_status"),
         ]
-        result = json.loads(await plugin.query_rtlink(ev, requests))
+        result = json.loads(await plugin._query_rtlink_batch(ev, requests))
         assert len(result["results"]) == len(requests)
         assert all(row["status"] == "completed" for row in result["results"]), result
         assert loads == ["qq"]
@@ -91,7 +91,7 @@ def test_stats_and_multi_song_comparison_use_one_analysis_and_one_tool_call():
         assert "歌曲3" in result["results"][10]["data"]
         assert gateway.ANALYSIS_SCOPE.get() is None
         # Another batch has a fresh scope; it can reuse normal service TTL caching.
-        await plugin.query_rtlink(ev, [query("get_accuracy_summary", level="里")])
+        await plugin._query_rtlink_batch(ev, [query("get_accuracy_summary", level="里")])
         assert loads == ["qq", "qq"]
         assert "预算已用完" in await plugin.get_player_overview(ev)
 
@@ -146,7 +146,7 @@ def test_public_dan_and_detailed_chart_queries_work_without_binding(
     plugin = make_plugin(service)
     result = json.loads(
         asyncio.run(
-            plugin.query_rtlink(
+            plugin._query_rtlink_batch(
                 event(),
                 [
                     query("query_dan_course", song_no=765),
@@ -297,7 +297,7 @@ def test_bad_item_does_not_abort_batch_or_execute_unrequested_work(bad):
 def test_invalid_envelope_does_not_consume_tool_budget(bad):
     service, loads = make_service()
     ev = event()
-    result = json.loads(asyncio.run(make_plugin(service).query_rtlink(ev, bad)))
+    result = json.loads(asyncio.run(make_plugin(service)._query_rtlink_batch(ev, bad)))
     assert result["status"] == "invalid_argument"
     assert not hasattr(ev, "_rtlink_ai_state") and not loads
 
@@ -471,7 +471,7 @@ def test_large_results_export_full_data_and_preserve_each_query_in_preview(
             sent.extend(components)
 
         ev.send = send
-        text = await plugin.query_rtlink(
+        text = await plugin._query_rtlink_batch(
             ev,
             [
                 query("get_player_rating"),

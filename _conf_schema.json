@@ -47,6 +47,38 @@
     "default": "",
     "hint": "留空使用插件内置数据包。填写时改用 HTTPS 镜像下载，文件字节须与内置包完全一致。"
   },
+  "query_agent_context_tokens": {
+    "description": "临时查询子Agent上下文上限（tokens）",
+    "type": "int",
+    "default": 200000,
+    "hint": "默认0.2M=200000。按UTF-8字节保守估算输入token，并预留输出和协议开销；超限时压缩查询材料，仍超限则停止。提供商隐藏提示不在本地估算内。"
+  },
+  "query_agent_max_rounds": {
+    "description": "临时查询子Agent最大模型轮数",
+    "type": "int",
+    "default": 4,
+    "hint": "2–12，包含查询规划和最终总结；默认4。最后一轮只允许给出结论。"
+  },
+  "query_agent_timeout": {
+    "description": "临时查询子Agent总超时（秒）",
+    "type": "int",
+    "default": 180,
+    "hint": "10–600，包含等候当前用户查询锁、模型规划和只读查询。模型固定为当前会话已经使用的模型通道。"
+  },
+  "query_agent_output_mode": {
+    "description": "AI查询最终结果返回格式",
+    "type": "string",
+    "default": "image",
+    "options": ["image", "text", "both"],
+    "hint": "image：发送最终结果图，主AI只收到简短概述；text：主AI收到概述和最终结论；both：两者都提供。图片发送失败会降级为最终结论文字。"
+  },
+  "query_agent_image_template": {
+    "description": "AI查询结果图片模板",
+    "type": "string",
+    "default": "paper_v1",
+    "options": ["paper_v1"],
+    "hint": "临时纸色卡片模板：标题、结论、数据项、来源及必要说明，不展示查询过程。"
+  },
   "chart_library_quota_mb": {
     "description": "公共 TJA 分析库独立配额（MiB）",
     "type": "int",

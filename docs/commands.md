@@ -42,20 +42,37 @@
 
 ## LLM 工具（模型可自动调用）
 
-| 工具名 | 作用 | 参数 |
+v0.20.0 只向主 AI 注册一个入口，其他查询函数均在临时子 Agent 内使用。要求 AstrBot ≥4.5.7（使用官方 `llm_generate` 和当前会话模型接口）。
+
+| 工具名 | 功能 | 参数 |
 | --- | --- | --- |
-| `query_rtlink` | 首选统一只读查询，一次组合玩家统计、多曲对比、检索、历史、谱面和段位等最多 24 项 | `queries`（对象数组）、`export`（可选布尔值） |
-| `get_player_overview` | 玩家 Rating、能力摘要、主要弱项及少量成绩证据 | 无 |
-| `recommend_practice` | 一次给出必要玩家背景及 5 首练习曲、依据和目标 | `goal`、`level`、`target_rank`、`scope` |
-| `query_song_brief` | 单首歌曲的鬼/里成绩、定数、音符和主要配置摘要；未绑定也可看公共资料 | `song_name`（必填）、`level`（可选） |
-| `query_dan_course` | 按曲名、别名或 ID 反查各届段位，或查询课题曲与合格条件；无需绑定 | `song_name`、`song_no`、`year`、`region`、`rank`（均可选） |
-| `evaluate_player_dan` | 用玩家三首课题曲的最佳记录核对可计算的合格条件 | `year`、`rank`、`region` |
+| `query_rtlink` | 独立上下文查询太鼓达人成绩、能力、历史、谱面及段位，只回传最终结果 | `question`（1–4000字的目标及必要条件） |
 
-仅注册以上六个入口。原有命令保留，其余旧查询名通过 `query_rtlink` 使用；推荐可直接调用 `recommend_practice`，无需先查概览或逐曲补查。每条消息最多执行两次不同查询，整个批次计一次，重复查询提示复用材料；新消息重新计数。原五个入口每次最多返回 2500 字符。统一入口最多返回 32000 字符，大结果自动发送完整 JSON 附件并为各项保留摘要；`export=true` 可主动导出。预算只限制本插件的查询工作，不限制其他插件或整个 Agent 的模型轮次。
+例如主 AI 调用 `query_rtlink(question="六天出现在哪些年份和区域的段位？")`，或提交“比较夏祭和六天的成绩、配置，并判断我在2025国服十段课题曲上的短板”。无需主 AI 构造函数列表或先查概览。
 
-### 统一只读查询清单
+临时子 Agent 固定使用当前会话已经使用的同一模型通道，不支持另选提供商。通过 AstrBot `llm_generate` 建立受限查询循环，每次传入空历史、专用系统说明和当前目标/资料，不继承群聊历史、人设、图片或其他工具。JSON动作协议只允许只读查询或最终结论，程序在内部执行函数，不把规划、原始返回、修正过程、推理或调用链交给主 AI，也不将这些内容写入会话历史。
 
-`queries` 是原生对象数组，每项为 `{"tool":"下表名称","args":{参数}}`，`args` 可省略。共接入 20 个已有只读查询及 2 个状态查询；同类查询可重复出现以对比多首歌、多个难度、年份或分页范围。批内相同参数的查询复用首项结果，返回 `same_as` 指向其一基索引。
+每条消息最多触发两次不同的临时查询，通常一次即可；批内的多项查询、补查和最终总结只计一次主入口预算。子 Agent 全程锁定当前用户的数据源和绑定，跨批复用一次分析结果；其他用户查询保持独立。查询采用原有缓存/同步规则，必要时仍会更新缓存或历史快照。“只读”指不允许绑定、切换来源、改别名及其他业务写入操作。
+
+### 插件配置
+
+| 配置 | 默认 | 作用 |
+| --- | --- | --- |
+| `query_agent_context_tokens` | `200000` | 0.2M tokens上下文上限，可设8192–2000000 |
+| `query_agent_max_rounds` | `4` | 2–12轮，包含规划和最终总结，最后一轮只允许最终结论 |
+| `query_agent_timeout` | `180` | 10–600秒总超时，包括排队、模型请求和查询 |
+| `query_agent_output_mode` | `image` | `image`发最终图片并给主AI短概述；`text`返回最终文字；`both`兼有 |
+| `query_agent_image_template` | `paper_v1` | 临时纸色卡片模板，当前仅此模板 |
+
+每次模型请求前，按UTF-8字节保守估算输入token上界，计入领域说明、目标、查询材料、2048单位协议预留和最多4096输出tokens；无法放入上限的材料会缩减并在最终结果说明，仍超限则停止。这不是精确分词统计或多轮计费总量；提供商隐藏前缀不在本地估算内。配置太小时，可能连必要的领域说明都无法容纳，插件会直接返回未完成状态而不发起模型请求。
+
+子 Agent 自带难度1–5、表/里与分支、良/可/不可、全连/全良、单曲评价与段位的区别、区域/年度口径、记录缺失、TJA适用范围等前置知识。必须先查询再给结论，无依据、无绑定、资料缺失、截断或连续演奏无法验证时应明确说明。
+
+图片仅含最终标题、结论、数据项、来源和必要说明；`image`模式下主AI只收到最多160字概述和发送状态。图片发送失败时回退到最终文字。最终PNG位于插件数据目录`query_results/`，每个用户保留最近5张，不保存子Agent上下文。旧的`queries/export`参数不再属于主AI入口，也不自动发送原始JSON附件。
+
+### 子 Agent 内部只读函数清单
+
+下面全部20个已有只读查询和2个状态查询供子 Agent 使用，方法名不单独向主AI注册。每个内部批次最多24项，可以多曲、多难度、多年度或多偏移组合；相同参数在批内复用。`completed`只表示方法执行成功，子Agent仍必须读返回内容中的错误、缺数据提示或谱面status。
 
 | 子查询名 | 内容 | 参数 |
 | --- | --- | --- |
@@ -82,50 +99,23 @@
 | `get_library_status` | 公共谱面库和安装状态 | 无 |
 | `get_source_status` | 当前数据源、绑定状态和服务器 | 无 |
 
-以上子查询在统一入口内均开启；原来关闭的独立工具名不额外注册。`set_song_alias` 和 `generate_rating_image` 不属于只读查询，未接入统一入口。
 
-玩家查询固定使用批次开始时的来源，并复用一次分析结果（可能按原 TTL 规则同步并更新缓存）。子查询的 `completed` 表示方法已执行，仍须阅读 `data` 中的错误、缺数据提示或谱面 `status`；`invalid_argument`、`error` 项不影响其余项。结果中 `complete` 仅表示返回文本是否保留了本次方法返回的全部材料，不表示账户或全库资料齐全。失去绑定不会阻止公共段位/谱面查询。不能指定别的 QQ、凭据、文件路径或写入方法。
+`set_song_alias`与`generate_rating_image`不在子Agent白名单中；用户仍可通过原手动命令申请别名或生成报告。检索limit最多200，详细谱面limit最多20；分页、单曲最佳记录及原有推荐条数限制仍适用，最终结论不能声称覆盖未查询的结果。
 
-谱面 `detail` 支持 `summary`、`segments`、`features`，`route` 支持 N/E/M/single。`segments` 可指定小节范围，`limit` 上限 20；检索 `limit` 上限 200。附件保留本次 `limit/offset` 范围，不会自动抓取剩余分页；若 `nextOffset` 非空，可在第二次调用中补查。附件保存在插件数据目录 `query_exports/`；部分消息平台可能不支持文件发送，失败时会返回 `attachment.status=failed`，不能声称附件已送达。
-
-例如同时查询玩家分布、精度、两首歌和歌曲所属段位，只需一次调用：
+内部协议示例（主AI无需构造）：
 
 ```json
 {
+  "action": "query",
   "queries": [
     {"tool": "get_rank_distribution"},
     {"tool": "get_accuracy_summary", "args": {"level": "鬼"}},
-    {"tool": "get_song_full", "args": {"song_name": "夏祭"}},
-    {"tool": "query_song_brief", "args": {"song_name": "六天"}},
     {"tool": "query_dan_course", "args": {"song_name": "六天"}}
   ]
 }
 ```
 
-查询零不可的指定定数区间歌曲，同时取得近期成绩和指定小节：
-
-```json
-{
-  "queries": [
-    {"tool": "search_scores", "args": {"ng_max": 0, "constant_min": 10.5, "constant_max": 10.7, "sort": "accuracy", "limit": 50}},
-    {"tool": "get_recent_scores", "args": {"days": 7}},
-    {"tool": "get_chart_analysis", "args": {"song_name": "夏祭", "level": "鬼", "detail": "segments", "start_measure": 50, "end_measure": 70, "limit": 20}},
-    {"tool": "get_chart_analysis", "args": {"song_name": "夏祭", "level": "鬼", "detail": "segments", "start_measure": 50, "end_measure": 70, "offset": 20, "limit": 20}}
-  ],
-  "export": true
-}
-```
-
-询问「六天属于哪个段位」时，调用 `query_dan_course(song_name="六天")` 即可，结果按年份和区域列出段位及曲序；可附加 `year`、`region` 缩小范围。判断玩家过段能力使用 `evaluate_player_dan`。
-
-`recommend_practice` 参数：
-
-- `goal`：`general`（默认综合练习）、`weakness`（补节奏弱项）、`accuracy`（精度）、`full_combo`（全连）、`score_rank`（提升评价）、`explore`（探索未玩曲）。
-- `level`：鬼/4 或里/5；省略看鬼/里。其他难度或无效值明确报错，不悄悄放宽。
-- `target_rank`：仅 `score_rank` 支持；白粹、铜粹、银粹、金雅、粉雅、紫雅、极或 2–8。省略取所选难度常见评价的上一档，已经是极时仍取极。
-- `scope`：`played`、`unplayed`、`all`；省略默认 `played`，`explore` 默认 `unplayed`。精度、全连、升评价仅支持 `played`；`explore` 仅支持 `unplayed`。
-
-候选固定最多 5 首不同歌曲，同一首鬼/里只保留排序更靠前的一个难度，无条数和翻页参数。依据不足时返回较少候选并说明。未玩曲需匹配公共配置并附已玩参考，已玩但未评级的曲目不会误报为未玩；不推测精度或过关概率。评价推荐保留实测/估算门槛、连打资料不足及不可行路线提示。单曲摘要不提供原始特征或逐小节查询；同名歌曲无法唯一定位时先由用户明确 ID。
+`recommend_practice`内部参数：`goal`为general/weakness/accuracy/full_combo/score_rank/explore；`level`为鬼/4或里/5；仅score_rank可用`target_rank`，explore用unplayed，精度/全连/升评价用played。最多推荐5首，不足时说明，不编造候选。原始谱面指标不能直接换算成个人精度或过关概率。
 
 ---
 
@@ -151,9 +141,9 @@
 
 ---
 
-## 检索子查询 `search_scores` 参数表（通过 `query_rtlink` 使用）
+## 子 Agent 检索函数 `search_scores` 参数表
 
-以下保留内部服务的开发参考；模型不能调用这个入口。所有条件都是「且」的关系，全部可省略、可自由组合。
+以下作为子 Agent 内部函数的开发参考；主 AI 不直接调用。所有条件都是「且」的关系，全部可省略、可自由组合。
 
 ### 匹配
 

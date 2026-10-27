@@ -272,7 +272,8 @@ def item_arguments(item, parse_level, parse_rank):
 
 async def run_queries(service, qq, queries, catalog, parse_level, parse_rank):
     """Run sequentially under the router's user lock, sharing even failed syncs."""
-    scope = {}
+    existing = ANALYSIS_SCOPE.get()
+    scope = {} if existing is None else existing
     token = ANALYSIS_SCOPE.set(scope)
     results, seen = [], {}
     try:
