@@ -47,9 +47,12 @@
 | `get_player_overview` | 玩家 Rating、能力摘要、主要弱项及少量成绩证据 | 无 |
 | `recommend_practice` | 一次给出必要玩家背景及 5 首练习曲、依据和目标 | `goal`、`level`、`target_rank`、`scope` |
 | `query_song_brief` | 单首歌曲的鬼/里成绩、定数、音符和主要配置摘要；未绑定也可看公共资料 | `song_name`（必填）、`level`（可选） |
+| `query_dan_course` | 按曲名、别名或 ID 反查各届段位，或查询课题曲与合格条件；无需绑定 | `song_name`、`song_no`、`year`、`region`、`rank`（均可选） |
 | `evaluate_player_dan` | 用玩家三首课题曲的最佳记录核对可计算的合格条件 | `year`、`rank`、`region` |
 
-仅注册以上四个入口。原有命令保留，旧工具名不再注册；推荐直接调用 `recommend_practice`，无需先查概览或逐曲补查。每条消息最多执行两次不同查询，重复查询提示复用材料；新消息重新计数。每次最多返回 2500 字符，不支持翻页。预算只限制本插件的查询工作，不限制其他插件或整个 Agent 的模型轮次。
+仅注册以上五个入口。原有命令保留，其余旧工具名不再注册；推荐直接调用 `recommend_practice`，无需先查概览或逐曲补查。每条消息最多执行两次不同查询，重复查询提示复用材料；新消息重新计数。每次最多返回 2500 字符，不支持翻页。预算只限制本插件的查询工作，不限制其他插件或整个 Agent 的模型轮次。
+
+询问「六天属于哪个段位」时，调用 `query_dan_course(song_name="六天")` 即可，结果按年份和区域列出段位及曲序；可附加 `year`、`region` 缩小范围。判断玩家过段能力使用 `evaluate_player_dan`。
 
 `recommend_practice` 参数：
 

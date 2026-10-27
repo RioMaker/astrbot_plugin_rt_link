@@ -79,17 +79,55 @@ def test_cn_2026_open_scope_and_source_limit_are_visible():
         assert "没有找到" in text
 
 
-def test_public_catalog_helper_is_preserved_without_ai_registration():
+def test_public_catalog_tool_is_registered_and_uses_public_catalog():
     plugin = object.__new__(main.RTLinkPlugin)
     plugin.dan_courses = _catalog()
-    assert not hasattr(main.RTLinkPlugin.query_dan_course, "_llm_tool_name")
+    assert main.RTLinkPlugin.query_dan_course._llm_tool_name == "query_dan_course"
+    event = mock.AstrMessageEvent("10001", private=True, is_admin=False, message_str="")
     result = asyncio.run(
         main.RTLinkPlugin.query_dan_course(
-            plugin, None, year=2023, region="jp", rank="玄人"
+            plugin, event, year=2023, region="jp", rank="玄人"
         )
     )
     assert "2023 日版/国际版 玄人" in result
     assert "单曲历史成绩只能作为段位能力参考" in result
+
+
+@pytest.mark.parametrize("filters", [
+    {"song_name": "六天"},
+    {"song_name": "第六天魔王"},
+    {"song_name": "第六天魔王", "region": "cn"},
+    {"song_no": 765},
+])
+def test_public_dan_tool_reverse_lookup_needs_no_player_binding(filters):
+    plugin = object.__new__(main.RTLinkPlugin)
+    plugin.dan_courses = _catalog()
+    plugin.aliases = _aliases()
+    # No player service is installed: public queries must use only static data.
+    event = mock.AstrMessageEvent("10001", private=True, is_admin=False, message_str="")
+    result = asyncio.run(plugin.query_dan_course(event, **filters))
+    assert "2024 中国大陆版 达人 第3曲" in result
+    assert "ID 765" in result
+    if filters.get("region") == "cn":
+        assert "日版/国际版" not in result
+    else:
+        assert "2024 日版/国际版 达人 第3曲" in result
+
+
+def test_public_dan_tool_respects_shared_budget_and_deduplication():
+    async def run():
+        plugin = object.__new__(main.RTLinkPlugin)
+        plugin.dan_courses = _catalog()
+        plugin.aliases = _aliases()
+        event = mock.AstrMessageEvent("10001", private=True, is_admin=False, message_str="")
+        assert "达人 第3曲" in await plugin.query_dan_course(event, song_name="六天")
+        assert "复用已有结果" in await plugin.query_dan_course(event, song_name="六天")
+        assert "2025 中国大陆版 十段" in await plugin.query_dan_course(
+            event, year=2025, region="cn", rank="十段"
+        )
+        assert "预算已用完" in await plugin.evaluate_player_dan(event, 2025, "十段", "cn")
+
+    asyncio.run(run())
 
 
 def test_invalid_region_returns_actionable_message():

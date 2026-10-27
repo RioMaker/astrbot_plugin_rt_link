@@ -571,7 +571,7 @@ class RTLinkPlugin(Star):
         return level if level in RATED_LEVELS else (None if level == 0 else level)
 
     # ------------------------------------------------------------------
-    # 仅以下四个任务入口注册给模型；命令和旧的内部查询方法继续保留。
+    # 仅以下五个任务入口注册给模型；命令和旧的内部查询方法继续保留。
     # ------------------------------------------------------------------
     async def _run_ai_tool(self, event, key, producer):
         """Per-message budget and deduplication, isolated from ordinary commands."""
@@ -635,7 +635,7 @@ class RTLinkPlugin(Star):
             lambda: self.service.get_song_brief_text(event.get_sender_id(), song_name, level),
         )
 
-    # 以下兼容方法不注册为 AI 工具，避免零散查询形成多轮工具链。
+    # 旧的单曲查分方法仅供内部兼容；AI 使用 query_song_brief。
     async def query_taiko_score(self, event: AstrMessageEvent, song_name: str, level: str = "") -> str:
         """查询当前 QQ 用户绑定账号中，指定歌曲的成绩与 Rating。支持别名与「鬼夏祭」这类难度前缀组合名。
 
@@ -647,6 +647,7 @@ class RTLinkPlugin(Star):
             event.get_sender_id(), song_name, parse_difficulty(level) if level else None
         )
 
+    @filter.llm_tool(name="query_dan_course")
     async def query_dan_course(
         self,
         event: AstrMessageEvent,
@@ -658,7 +659,8 @@ class RTLinkPlugin(Star):
     ) -> str:
         """查询太鼓达人街机版段位道场课题曲、普通/金合格条件、开放时间与来源。
 
-        用户询问某年段位内容、国服与日版差异、某首歌出现在哪届段位，或需要用段位曲目辅助判断水平时调用。
+        用户询问「这首歌属于哪个段位」、某年段位内容或国服与日版差异时调用，无需绑定账号。
+        按歌曲反查时只需 song_name 或 song_no，年份、区域和段位可省略，返回各届出现记录。
         若用户询问自己的过段能力，必须改用 evaluate_player_dan，不能只凭本工具的公开门槛进行判断。
         单曲成绩只能作为段位能力参考，不能据此断言玩家已通过段位。
 
@@ -671,14 +673,19 @@ class RTLinkPlugin(Star):
                 也可以写成「鬼 天竺2000」这样带难度前缀
             song_no(int): 按 RTLink 曲目 ID 反查段位，0 表示不用 ID 筛选
         """
-        return query_dan_courses_text(
-            self.dan_courses,
-            year=year,
-            region=region,
-            rank=rank,
-            song_name=song_name,
-            song_no=song_no,
-            alias_data=getattr(self, "aliases", None),
+        async def query():
+            return query_dan_courses_text(
+                self.dan_courses,
+                year=year,
+                region=region,
+                rank=rank,
+                song_name=song_name,
+                song_no=song_no,
+                alias_data=getattr(self, "aliases", None),
+            )
+
+        return await self._run_ai_tool(
+            event, ("query_dan_course", year, region, rank, song_name, song_no), query,
         )
 
     @filter.llm_tool(name="evaluate_player_dan")
