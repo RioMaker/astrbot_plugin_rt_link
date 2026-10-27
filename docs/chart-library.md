@@ -46,7 +46,9 @@ chart_library/
 
 同名谱面不会互相覆盖。原文件含重复的 Oni/Edit 区块时以 `courseOccurrence` 区分，并标记 `duplicate-course-block`。普通/玄人/达人分歧存于同一份分析的不同路线中；缺失路线发生回退时保留警告。当前只分析单人鬼/里，其他难度和双人谱的原始文件仍随 TJA 包保存。
 
-## 内部完整分析接口（不向 AI 注册）
+## 完整分析接口（通过统一 AI 查询入口访问）
+
+v0.19.0 起可通过 `query_rtlink` 的子查询 `get_chart_analysis` 获取完整分析；该方法名不单独注册。多个歌曲、难度或小节范围可放在同一个 `queries` 数组中，计一次调用预算。
 
 `get_chart_analysis`：
 

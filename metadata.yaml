@@ -1,5 +1,5 @@
 name: rt_link
 desc: 支持菌菌与 Sakura 独立绑定、成绩存储与 AI v2 Rating 实力评估
-version: v0.18.3
+version: v0.19.0
 author: Rio
 repo: https://github.com/RioMaker/astrbot_plugin_rt_link

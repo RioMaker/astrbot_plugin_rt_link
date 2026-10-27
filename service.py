@@ -18,6 +18,7 @@ from pathlib import Path
 # 包加载（AstrBot）时用相对导入；本地直接运行 service.py 时回退到绝对导入。
 if __package__:
     from . import ai_coach
+    from . import query_gateway
     from . import improve_text as improve_text_mod
     from . import rating as rating_mod
     from . import score_query as score_query_mod
@@ -37,6 +38,7 @@ if __package__:
     from .storage import ScoreDatabase, load_charts
 else:
     import ai_coach
+    import query_gateway
     import improve_text as improve_text_mod
     import rating as rating_mod
     import score_query as score_query_mod
@@ -741,7 +743,27 @@ class ScoreService:
             alias_data=self.aliases,
         )
 
+    async def get_readonly_queries_text(self, qq, queries, catalog) -> dict:
+        """组合只读查询；路由层在整个批次持有当前用户锁。"""
+        return await query_gateway.run_queries(
+            self,
+            qq,
+            queries,
+            catalog,
+            parse_difficulty,
+            score_rank_mod.parse_score_rank,
+        )
+
     async def _get_analysis(self, qq) -> tuple[dict | None, str]:
+        scope = query_gateway.ANALYSIS_SCOPE.get()
+        if scope is None:
+            return await self._load_analysis(qq)
+        key = (id(self), str(qq))
+        if key not in scope:
+            scope[key] = await self._load_analysis(qq)
+        return scope[key]
+
+    async def _load_analysis(self, qq) -> tuple[dict | None, str]:
         if not qq:
             return None, "无法识别你的 QQ 号。"
         if not await self._binding(qq):
@@ -1398,12 +1420,30 @@ class ScoreService:
         analysis, error = await self._get_analysis(qq)
         if error:
             return None, error
+        unrated = {
+            (row.get("id"), row.get("level")): row
+            for row in analysis.get("unrated") or []
+        }
+        rated_keys = {
+            (row.get("id"), row.get("level")) for row in analysis.get("records") or []
+        }
+        for row in analysis.get("profileScoreRows") or []:
+            key = (row.get("id"), row.get("level"))
+            if key not in rated_keys:
+                unrated.setdefault(
+                    key,
+                    {
+                        "id": key[0],
+                        "level": key[1],
+                        "reason": "有同步成绩，但当前无可用评级",
+                    },
+                )
         result = score_query_mod.select(
             self._records(analysis),
             self.charts,
             self.score_rank,
             alias_index=await self._alias_index(),
-            unrated=analysis.get("unrated") or [],
+            unrated=list(unrated.values()),
             rolls_data=self.rolls,
             **filters,
         )
@@ -1589,7 +1629,7 @@ class ScoreService:
         cutoff = time.time() - int(days or 1) * 86400
         recent = [r for r in records if self._updated_ts(r) >= cutoff]
         if not recent:
-            recent = records
+            return f"最近 {int(days or 1)} 天没有更新的最佳成绩。"
         recent = sorted(recent, key=self._updated_ts, reverse=True)[:10]
         return self._format_song_rows(recent)
 

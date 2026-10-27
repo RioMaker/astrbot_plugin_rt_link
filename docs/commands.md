@@ -44,13 +44,77 @@
 
 | 工具名 | 作用 | 参数 |
 | --- | --- | --- |
+| `query_rtlink` | 首选统一只读查询，一次组合玩家统计、多曲对比、检索、历史、谱面和段位等最多 24 项 | `queries`（对象数组）、`export`（可选布尔值） |
 | `get_player_overview` | 玩家 Rating、能力摘要、主要弱项及少量成绩证据 | 无 |
 | `recommend_practice` | 一次给出必要玩家背景及 5 首练习曲、依据和目标 | `goal`、`level`、`target_rank`、`scope` |
 | `query_song_brief` | 单首歌曲的鬼/里成绩、定数、音符和主要配置摘要；未绑定也可看公共资料 | `song_name`（必填）、`level`（可选） |
 | `query_dan_course` | 按曲名、别名或 ID 反查各届段位，或查询课题曲与合格条件；无需绑定 | `song_name`、`song_no`、`year`、`region`、`rank`（均可选） |
 | `evaluate_player_dan` | 用玩家三首课题曲的最佳记录核对可计算的合格条件 | `year`、`rank`、`region` |
 
-仅注册以上五个入口。原有命令保留，其余旧工具名不再注册；推荐直接调用 `recommend_practice`，无需先查概览或逐曲补查。每条消息最多执行两次不同查询，重复查询提示复用材料；新消息重新计数。每次最多返回 2500 字符，不支持翻页。预算只限制本插件的查询工作，不限制其他插件或整个 Agent 的模型轮次。
+仅注册以上六个入口。原有命令保留，其余旧查询名通过 `query_rtlink` 使用；推荐可直接调用 `recommend_practice`，无需先查概览或逐曲补查。每条消息最多执行两次不同查询，整个批次计一次，重复查询提示复用材料；新消息重新计数。原五个入口每次最多返回 2500 字符。统一入口最多返回 32000 字符，大结果自动发送完整 JSON 附件并为各项保留摘要；`export=true` 可主动导出。预算只限制本插件的查询工作，不限制其他插件或整个 Agent 的模型轮次。
+
+### 统一只读查询清单
+
+`queries` 是原生对象数组，每项为 `{"tool":"下表名称","args":{参数}}`，`args` 可省略。共接入 20 个已有只读查询及 2 个状态查询；同类查询可重复出现以对比多首歌、多个难度、年份或分页范围。批内相同参数的查询复用首项结果，返回 `same_as` 指向其一基索引。
+
+| 子查询名 | 内容 | 参数 |
+| --- | --- | --- |
+| `get_player_overview` | 玩家概览、主要弱项和证据 | 无 |
+| `get_player_rating` | Rating、七维能力、覆盖谱面 | 无 |
+| `get_player_profile` | 强弱项、全连/全良与七维能力 | 无 |
+| `get_rhythm_weakness` | 常见节奏弱项及冷门配置观察 | 无 |
+| `get_difficulty_stats` | 谱面数、全连率、均值与最高定数 | `level` 可选 |
+| `get_rank_distribution` | 评价档数量与代表曲 | `level` 可选 |
+| `get_genre_strength` | 曲风分区统计 | 无 |
+| `get_accuracy_summary` | 平均精度、区间、最好/最差曲目 | `level` 可选 |
+| `query_taiko_score` | 单曲成绩与 Rating | `song_name` 必填，`level` 可选 |
+| `query_song_brief` | 单曲成绩和公共谱面摘要 | `song_name` 必填，`level` 可选 |
+| `get_song_full` | 单曲鬼/里完整能力 | `song_name` 必填 |
+| `search_scores` | 组合筛选、排序、门槛和补分路线 | 见下文自定义检索参数；`level` 支持 `4,5` |
+| `get_recent_scores` | 最近更新的最佳成绩（非逐局游玩流水），最多 10 项 | `days` 可选，1–3650，默认 1 |
+| `get_growth_trend` | 已存单曲历史成绩变化 | `song_name` 可选，默认 Rating 最高曲目 |
+| `get_improvement_candidates` | 接近全连/全良的候选 | `level` 可选 |
+| `find_rank_improvements` | 分区升评价候选与完整补分路线 | `target_rank`、`level` 可选 |
+| `recommend_practice` | 5 首练习推荐及背景/依据 | `goal`、`level`、`target_rank`、`scope` 可选 |
+| `get_chart_analysis` | TJA 整曲、指定小节或特征 | `song_name` 必填；`level`、`route`、`detail`、`start_measure`、`end_measure`、`limit`、`offset` 可选 |
+| `query_dan_course` | 段位曲目、条件、歌曲反查 | `year`、`region`、`rank`、`song_name`、`song_no` 可选 |
+| `evaluate_player_dan` | 用课题最佳成绩核对段位条件 | `year`、`rank` 必填，`region` 可选 |
+| `get_library_status` | 公共谱面库和安装状态 | 无 |
+| `get_source_status` | 当前数据源、绑定状态和服务器 | 无 |
+
+以上子查询在统一入口内均开启；原来关闭的独立工具名不额外注册。`set_song_alias` 和 `generate_rating_image` 不属于只读查询，未接入统一入口。
+
+玩家查询固定使用批次开始时的来源，并复用一次分析结果（可能按原 TTL 规则同步并更新缓存）。子查询的 `completed` 表示方法已执行，仍须阅读 `data` 中的错误、缺数据提示或谱面 `status`；`invalid_argument`、`error` 项不影响其余项。结果中 `complete` 仅表示返回文本是否保留了本次方法返回的全部材料，不表示账户或全库资料齐全。失去绑定不会阻止公共段位/谱面查询。不能指定别的 QQ、凭据、文件路径或写入方法。
+
+谱面 `detail` 支持 `summary`、`segments`、`features`，`route` 支持 N/E/M/single。`segments` 可指定小节范围，`limit` 上限 20；检索 `limit` 上限 200。附件保留本次 `limit/offset` 范围，不会自动抓取剩余分页；若 `nextOffset` 非空，可在第二次调用中补查。附件保存在插件数据目录 `query_exports/`；部分消息平台可能不支持文件发送，失败时会返回 `attachment.status=failed`，不能声称附件已送达。
+
+例如同时查询玩家分布、精度、两首歌和歌曲所属段位，只需一次调用：
+
+```json
+{
+  "queries": [
+    {"tool": "get_rank_distribution"},
+    {"tool": "get_accuracy_summary", "args": {"level": "鬼"}},
+    {"tool": "get_song_full", "args": {"song_name": "夏祭"}},
+    {"tool": "query_song_brief", "args": {"song_name": "六天"}},
+    {"tool": "query_dan_course", "args": {"song_name": "六天"}}
+  ]
+}
+```
+
+查询零不可的指定定数区间歌曲，同时取得近期成绩和指定小节：
+
+```json
+{
+  "queries": [
+    {"tool": "search_scores", "args": {"ng_max": 0, "constant_min": 10.5, "constant_max": 10.7, "sort": "accuracy", "limit": 50}},
+    {"tool": "get_recent_scores", "args": {"days": 7}},
+    {"tool": "get_chart_analysis", "args": {"song_name": "夏祭", "level": "鬼", "detail": "segments", "start_measure": 50, "end_measure": 70, "limit": 20}},
+    {"tool": "get_chart_analysis", "args": {"song_name": "夏祭", "level": "鬼", "detail": "segments", "start_measure": 50, "end_measure": 70, "offset": 20, "limit": 20}}
+  ],
+  "export": true
+}
+```
 
 询问「六天属于哪个段位」时，调用 `query_dan_course(song_name="六天")` 即可，结果按年份和区域列出段位及曲序；可附加 `year`、`region` 缩小范围。判断玩家过段能力使用 `evaluate_player_dan`。
 
@@ -87,7 +151,7 @@
 
 ---
 
-## 内部兼容检索 `search_scores` 参数表（不向 AI 注册）
+## 检索子查询 `search_scores` 参数表（通过 `query_rtlink` 使用）
 
 以下保留内部服务的开发参考；模型不能调用这个入口。所有条件都是「且」的关系，全部可省略、可自由组合。
 

@@ -162,10 +162,10 @@ def test_response_stays_bounded_and_keeps_five_candidates_with_long_titles():
         assert coach.LIMITATION in text
 
 
-def test_exactly_five_tools_are_registered():
+def test_exactly_six_tools_are_registered():
     tools = {getattr(method, "_llm_tool_name") for method in vars(main.RTLinkPlugin).values()
              if hasattr(method, "_llm_tool_name")}
-    assert tools == {"get_player_overview", "recommend_practice", "query_song_brief", "query_dan_course", "evaluate_player_dan"}
+    assert tools == {"query_rtlink", "get_player_overview", "recommend_practice", "query_song_brief", "query_dan_course", "evaluate_player_dan"}
 
 
 def test_request_budget_deduplicates_concurrent_calls_and_resets_per_message():

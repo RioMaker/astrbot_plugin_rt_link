@@ -12,6 +12,7 @@ import asyncio
 import hashlib
 import re
 import time
+import uuid
 from pathlib import Path
 
 from astrbot.api import logger
@@ -21,6 +22,7 @@ from astrbot.api.star import Context, Star, StarTools, register
 # AstrBot 以包形式加载插件（如 data.plugins.<name>.main），此时需用相对导入；
 # 本地直接运行/测试 main.py 时（__package__ 为空），回退到同目录绝对导入。
 if __package__:
+    from . import query_gateway
     from .api_client import KinokoClient
     from .sakura_client import SakuraClient
     from .source_service import MultiSourceService
@@ -32,6 +34,7 @@ if __package__:
     from .song_alias import empty_aliases, load_aliases
     from .storage import ScoreDatabase, load_charts, load_dan_courses
 else:
+    import query_gateway
     from api_client import KinokoClient
     from sakura_client import SakuraClient
     from source_service import MultiSourceService
@@ -46,7 +49,7 @@ else:
 PLUGIN_NAME = "rt_link"
 PLUGIN_AUTHOR = "Rio"
 PLUGIN_DESC = "支持菌菌与 Sakura 独立绑定、成绩存储与太鼓实力评估"
-PLUGIN_VERSION = "v0.18.2"
+PLUGIN_VERSION = "v0.19.0"
 
 COMMAND_NAME = "rtlink"
 BINDINGS_KEY = "bindings"
@@ -571,9 +574,9 @@ class RTLinkPlugin(Star):
         return level if level in RATED_LEVELS else (None if level == 0 else level)
 
     # ------------------------------------------------------------------
-    # 仅以下五个任务入口注册给模型；命令和旧的内部查询方法继续保留。
+    # 注册六个入口；组合查询优先 query_rtlink，旧方法作为内部查询能力保留。
     # ------------------------------------------------------------------
-    async def _run_ai_tool(self, event, key, producer):
+    async def _run_ai_tool(self, event, key, producer, max_chars=2500):
         """Per-message budget and deduplication, isolated from ordinary commands."""
         state = getattr(event, "_rtlink_ai_state", None)
         if state is None:
@@ -590,11 +593,93 @@ class RTLinkPlugin(Star):
             state["seen"].add(key)
             # All normal coach results are bounded structurally. For legacy dan
             # or error text, retain both the beginning and the final limitations.
-            if len(result) > 2500:
+            if len(result) > max_chars:
                 result = result[:1600] + "\n部分材料已省略，勿推断未显示项目。\n" + result[-800:]
             logger.info(f"rt_link AI：tool={key[0]} calls={state['calls']} chars={len(result)} "
                         f"elapsed={time.perf_counter() - started:.3f}s")
             return result
+
+    @filter.llm_tool(name="query_rtlink")
+    async def query_rtlink(
+        self,
+        event: AstrMessageEvent,
+        queries: list[dict],
+        export: bool = False,
+    ) -> str:
+        """首选的统一只读查询入口：一次组合多项查询、多首歌曲或比较，通常一次取全，第二次仅补充或消歧。
+
+        queries 中每项格式为 {"tool":"工具名","args":{参数}}，最多24项，省略 args 表示默认参数。
+        玩家统计：get_player_overview/get_player_rating/get_player_profile/get_rhythm_weakness/get_genre_strength 无参数；
+        get_difficulty_stats/get_rank_distribution/get_accuracy_summary/get_improvement_candidates 可选 level。
+        歌曲：query_taiko_score/query_song_brief 需 song_name，可选 level；get_song_full 需 song_name。
+        历史：get_recent_scores 可选 days；get_growth_trend 可选 song_name。
+        条件检索 search_scores：可选 query,match_mode(contains/exact/regex/all/any),match_fields(any/title/titleJa/genre/alias),
+        scope(played/unrated/unplayed/all),level(鬼/里或4,5),genre,song_no,constant_min/max,rating_min/max,accuracy_min/max,
+        score_min/max,notes_min/max,rank_min/max,ok_min/max,ng_min/max,combo(full/no-fc/dondaful/no-miss/miss),
+        target_rank,reached(yes/no),gap_max,sort(rating/score/accuracy/constant/notes/gap/rank/updated/title/id),order(asc/desc),
+        detail(brief/full),limit(1–200),offset。上限-1表示不限，ok_max/ng_max/gap_max=0是有效条件。
+        谱面 get_chart_analysis：需 song_name；可选 level,route(N/E/M/single),detail(summary/segments/features),
+        start_measure,end_measure,limit(1–20),offset。按小节范围直接查，避免逐页试探。
+        段位 query_dan_course：可选 year,region,rank,song_name,song_no；evaluate_player_dan 需 year,rank，可选 region。
+        推荐 recommend_practice：可选 goal(general/weakness/accuracy/full_combo/score_rank/explore),level,target_rank,scope；
+        find_rank_improvements 可选 target_rank,level。状态 get_library_status/get_source_status 无参数。
+        多曲对比在一个数组内放多项同类查询；无需先获取概览。公开段位/谱面无需绑定，玩家查询固定当前来源。
+        无账号绑定、切换来源、别名写入或发图操作。批次计一次查询预算；大结果自动发送完整JSON附件并返回各项摘要。
+        返回 completed 表示子查询已执行，须读取 data 中的缺数据提示/status，不能据此断言数据齐全。
+
+        Args:
+            queries(array[object]): 查询列表，例如 [{"tool":"get_rank_distribution"},{"tool":"get_accuracy_summary","args":{"level":"鬼"}}]
+            export(boolean): 是否同时发送完整结果JSON附件，默认false；文本过长时自动发送。检索/谱面附件保留本次limit/offset范围
+        """
+        try:
+            queries = query_gateway.validate_queries(queries)
+            if not isinstance(export, bool):
+                raise ValueError("export 必须是布尔值。")  # noqa: TRY004 -- consistent validation response
+        except ValueError as error:
+            return query_gateway.dumps(
+                {"status": "invalid_argument", "message": str(error)}
+            )
+
+        async def query():
+            batch = await self.service.get_readonly_queries_text(
+                event.get_sender_id(),
+                queries,
+                self.dan_courses,
+            )
+            attachment = None
+            if (
+                export
+                or len(query_gateway.dumps(batch)) > query_gateway.MAX_OUTPUT_CHARS
+            ):
+                try:
+                    from astrbot.api.message_components import File
+
+                    folder = self.data_dir / "query_exports"
+                    folder.mkdir(parents=True, exist_ok=True)
+                    filename = f"rtlink-query-{uuid.uuid4().hex}.json"
+                    path = folder / filename
+                    await asyncio.to_thread(
+                        path.write_text, query_gateway.dumps(batch), encoding="utf-8"
+                    )
+                    await event.send(
+                        event.chain_result([File(file=str(path), name=filename)])
+                    )
+                    attachment = {"status": "sent", "filename": filename}
+                except Exception as error:  # noqa: BLE001 -- transport failure must not lose query results
+                    logger.warning(f"rt_link 查询附件发送失败：{type(error).__name__}")
+                    attachment = {
+                        "status": "failed",
+                        "message": "完整结果附件未送达；请依据已显示材料回答。",
+                    }
+                batch = {**batch, "attachment": attachment}
+            return query_gateway.render_result(batch, attachment)
+
+        return await self._run_ai_tool(
+            event,
+            ("query_rtlink", query_gateway.dumps(queries), export),
+            query,
+            max_chars=query_gateway.MAX_OUTPUT_CHARS,
+        )
 
     @filter.llm_tool(name="get_player_overview")
     async def get_player_overview(self, event: AstrMessageEvent) -> str:

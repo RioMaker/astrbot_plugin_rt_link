@@ -18,6 +18,7 @@ class MultiSourceService:
         "get_profile_text", "get_rank_distribution_text", "get_rank_improvement_text",
         "get_rating_text", "get_recent_scores_text", "get_rhythm_weakness_text", "get_song_full_text",
         "get_ai_overview_text", "recommend_practice_text", "get_song_brief_text",
+        "get_readonly_queries_text",
     })
     SHARED_METHODS = frozenset({
         "generate_help_image", "list_pending_aliases_text", "approve_aliases_text",

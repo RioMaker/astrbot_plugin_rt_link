@@ -294,6 +294,39 @@ def test_normalization_preserves_zero_unknown_fields_and_identity(charts):
         normalize_sakura(data, "wrong")
 
 
+def test_composite_queries_use_real_source_cache_and_keep_data_isolated(tmp_path, charts):
+    async def run():
+        router, old_client, new_client = setup_services(tmp_path, charts)
+        try:
+            song_id = payload(charts)["data"]["songs"][0]["song_no"]
+            requests = [
+                {"tool": "get_player_rating"},
+                {"tool": "query_song_brief", "args": {"song_name": str(song_id)}},
+                {"tool": "get_rank_distribution"},
+                {"tool": "get_accuracy_summary"},
+                {"tool": "search_scores", "args": {"song_no": song_id}},
+            ]
+            result = await router.get_readonly_queries_text("qq", requests, {})
+            assert result["source"] == "菌菌"
+            assert all(row["status"] == "completed" for row in result["results"])
+            assert "900000" in result["results"][1]["data"]
+            calls = old_client.calls
+            assert calls > 0 and new_client.calls == 0
+            await router.get_readonly_queries_text("qq", requests, {})
+            assert old_client.calls == calls
+            assert (await router.bind_sakura("qq", "x" * 48))[0]
+            result = await router.get_readonly_queries_text("qq", requests, {})
+            assert result["source"] == "Sakura"
+            assert "1000000" in result["results"][1]["data"]
+            assert "900000" not in result["results"][1]["data"]
+            assert old_client.calls == calls
+        finally:
+            for service in router.services.values():
+                service.db.close()
+
+    asyncio.run(run())
+
+
 def test_shared_aliases_work_for_sakura_only_binding(tmp_path, charts):
     async def run():
         router, _, _ = setup_services(tmp_path, charts)
