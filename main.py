@@ -25,6 +25,7 @@ if __package__:
     from . import query_gateway
     from .query_agent import AgentSettings, QueryAgent, unavailable
     from .query_result_image import prune_query_results, render_query_result
+    from .query_tools import CustomToolStore
     from .api_client import KinokoClient
     from .sakura_client import SakuraClient
     from .source_service import MultiSourceService
@@ -39,6 +40,7 @@ else:
     import query_gateway
     from query_agent import AgentSettings, QueryAgent, unavailable
     from query_result_image import prune_query_results, render_query_result
+    from query_tools import CustomToolStore
     from api_client import KinokoClient
     from sakura_client import SakuraClient
     from source_service import MultiSourceService
@@ -53,7 +55,7 @@ else:
 PLUGIN_NAME = "rt_link"
 PLUGIN_AUTHOR = "Rio"
 PLUGIN_DESC = "支持菌菌与 Sakura 独立绑定、成绩存储与太鼓实力评估"
-PLUGIN_VERSION = "v0.20.0"
+PLUGIN_VERSION = "v0.21.0"
 
 COMMAND_NAME = "rtlink"
 BINDINGS_KEY = "bindings"
@@ -83,6 +85,7 @@ class RTLinkPlugin(Star):
         super().__init__(context)
         # AstrBot injects this plugin's schema config; retain the local mock fallback.
         self.cfg = config if config is not None else (self.context.get_config() or {})
+        self._query_tool_store = CustomToolStore(self.cfg)
         self.plugin_dir = Path(__file__).resolve().parent
 
         # 数据目录：优先 AstrBot 提供的持久化目录，本地测试回退到插件目录下 data/。
@@ -218,6 +221,7 @@ class RTLinkPlugin(Star):
         )
 
     async def terminate(self):
+        self._query_tool_store.close()
         await self.chart_installer.close()
         try:
             self.db.close()
@@ -658,6 +662,11 @@ class RTLinkPlugin(Star):
         )
 
     async def _run_query_agent(self, event, question, settings):
+        # Share the registry lock across users and the save budget across both
+        # parent calls on one message. Config is the persistent catalogue.
+        if not hasattr(self, "_query_tool_store"):
+            self._query_tool_store = CustomToolStore(self.cfg)
+        tool_budget = event._rtlink_ai_state.setdefault("custom_tools", {"changes": 0})
         # Same destination as the main AI; never accept an alternate provider ID.
         provider_id = await self.context.get_current_chat_provider_id(
             umo=event.unified_msg_origin
@@ -687,7 +696,12 @@ class RTLinkPlugin(Star):
                     )
 
                 return await QueryAgent(settings).run(
-                    question, generate, execute, backend.provider_label
+                    question,
+                    generate,
+                    execute,
+                    backend.provider_label,
+                    tool_store=self._query_tool_store,
+                    tool_budget=tool_budget,
                 )
             finally:
                 query_gateway.ANALYSIS_SCOPE.reset(token)

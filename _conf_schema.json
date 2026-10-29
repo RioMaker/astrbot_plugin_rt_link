@@ -79,6 +79,43 @@
     "options": ["paper_v1"],
     "hint": "临时纸色卡片模板：标题、结论、数据项、来源及必要说明，不展示查询过程。"
   },
+  "query_agent_tools_enabled": {
+    "description": "允许查询子Agent创建和优化工具",
+    "type": "bool",
+    "default": true,
+    "hint": "优先使用现有工具；仅保存有复用价值的参数化查询组合。关闭后已有工具仍可查询，基础函数始终不可修改。"
+  },
+  "query_agent_tools_per_session": {
+    "description": "每条消息最多保存自定义工具数",
+    "type": "int",
+    "default": 3,
+    "hint": "1–3；同一条用户消息的两次查询共享额度，新建、优化、合并均计数。无需创建时允许0个。"
+  },
+  "query_agent_tools_total": {
+    "description": "自定义工具总量上限",
+    "type": "int",
+    "default": 20,
+    "hint": "1–100，含停用及待修正条目。满额停止新增，不自动删除；轮数紧张时可无损合并。降低上限后超出的工具停止提供，可在下面清理。"
+  },
+  "query_agent_custom_tools": {
+    "description": "AI创建的查询工具",
+    "type": "template_list",
+    "default": [],
+    "hint": "可展开查看名称、描述、注释和查询模板，修改说明或删除整条后保存并重载插件。创建后刷新配置页再编辑，避免旧页面覆盖新工具。所有工具共用基础只读白名单，不能执行代码。",
+    "templates": {
+      "query_tool": {
+        "name": "组合查询工具",
+        "display_item": "name",
+        "items": {
+          "name": {"description": "工具名称", "type": "string", "default": "", "hint": "custom_开头的小写字母、数字和下划线，不得使用基础函数名。"},
+          "description": {"description": "用途描述（可修改）", "type": "text", "default": ""},
+          "note": {"description": "适用范围和注释（可修改）", "type": "text", "default": ""},
+          "enabled": {"description": "启用此工具", "type": "bool", "default": true},
+          "definition": {"description": "参数与组合查询定义", "type": "text", "default": "{}", "editor_mode": true, "editor_language": "json", "hint": "parameters和queries组成的受限JSON；仅引用固定基础函数。无效定义不会执行，可删除或修正。不要保存玩家资料或查询结果。"}
+        }
+      }
+    }
+  },
   "chart_library_quota_mb": {
     "description": "公共 TJA 分析库独立配额（MiB）",
     "type": "int",
