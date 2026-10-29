@@ -193,13 +193,19 @@ def _format_course(catalog: dict, course: dict, alias_data: dict | None = None) 
 
 
 def _match_song(song: dict, title_key: str, song_ids: set, alias_data: dict | None,
-                level: int | None) -> bool:
+                level: int | None, strict_ids: bool = False,
+                allow_unmapped_title: bool = False) -> bool:
     """判断段位课题曲是否命中查询：难度前缀 → ID 直配 → 段位曲名 → 该曲任一别名。"""
     if level is not None and song.get("level") != level:
         return False
     candidates = set(song.get("song_no_candidates") or [])
     if song_ids and candidates & song_ids:
         return True
+    # An explicit ID or exact alias identifies the song. A shorter alias of a
+    # different song must not override it (北埼玉 must not match 埼玉2000).
+    if strict_ids:
+        return (allow_unmapped_title and not candidates
+                and title_key == _norm(song.get("title")))
     if not title_key:
         return False
     if title_key in _norm(song.get("title")):
@@ -223,8 +229,8 @@ def query_dan_courses_text(
 ) -> str:
     """按条件查询段位课程，返回适合模型直接引用的紧凑文本。
 
-    song_name / song_no 支持国服曲名、日文曲名、罗马字与常用别名（见 `song_alias`），
-    也可以写成「鬼 天竺2000」这样带难度前缀的形式。
+    song_name 支持国服曲名、日文曲名、罗马字、常用别名和纯数字曲目 ID，
+    也可以写成「鬼 天竺2000」这样带难度前缀的形式；显式 song_no 优先。
     """
     courses = catalog.get("courses", [])
     if not courses:
@@ -236,11 +242,19 @@ def query_dan_courses_text(
 
     level_filter, clean_name = split_level(song_name)
     title_key = _norm(clean_name)
+    if not song_no and re.fullmatch(r"[0-9]+", clean_name):
+        song_no = int(clean_name)
     song_ids: set = set()
+    strict_ids = bool(song_no)
+    allow_unmapped_title = False
     if song_no:
         song_ids.add(int(song_no))
     elif title_key:
-        for hit in song_alias_mod.resolve(alias_data, clean_name, limit=12):
+        hits = song_alias_mod.resolve(alias_data, clean_name, level=level_filter, limit=12)
+        exact_hits = [hit for hit in hits if hit.get("quality") == "exact"]
+        strict_ids = bool(exact_hits)
+        allow_unmapped_title = bool(exact_hits)
+        for hit in exact_hits or hits:
             song_ids.add(int(hit["song_no"]))
 
     filters_used = bool(year or region or rank or title_key or song_no)
@@ -271,7 +285,8 @@ def query_dan_courses_text(
         song_matches = []
         for song in course["songs"]:
             if (title_key or song_no) and not _match_song(
-                song, title_key, song_ids, alias_data, level_filter
+                song, title_key, song_ids, alias_data, level_filter, strict_ids,
+                allow_unmapped_title
             ):
                 continue
             song_matches.append(song)

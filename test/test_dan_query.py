@@ -155,6 +155,82 @@ def test_alias_lookup_finds_dan_appearances():
     assert "第六天魔王" in result and "ID 765" in result
 
 
+@pytest.mark.parametrize("query,ids", [
+    ("北埼玉", "252, 338"),
+    ("鬼 北埼玉", "252, 338"),
+    ("北埼玉2000", "338"),
+    ("きたさいたま2000", "338"),
+])
+def test_exact_song_identity_does_not_match_shorter_alias_of_another_song(query, ids):
+    result = query_dan_courses_text(_catalog(), song_name=query, alias_data=_aliases())
+    assert "没有找到符合条件的段位资料" in result
+    assert f"其中 {ids} 号曲目在当前段位资料里没有出现记录" in result
+    assert "ID 354" not in result and "二级 第3曲" not in result
+
+
+def test_explicit_song_id_takes_priority_over_conflicting_name():
+    result = query_dan_courses_text(
+        _catalog(), song_no=338, song_name="さいたま2000", alias_data=_aliases()
+    )
+    assert "338 号曲目在当前段位资料里没有出现记录" in result
+    assert "ID 354" not in result
+
+
+def test_partial_song_name_lookup_still_works_with_or_without_aliases():
+    catalog = _catalog()
+    with_aliases = query_dan_courses_text(catalog, song_name="夏祭", alias_data=_aliases())
+    assert "2026 中国大陆版 初段 第1曲" in with_aliases and "ID 303" in with_aliases
+    without_aliases = query_dan_courses_text(catalog, song_name="第六天")
+    assert "2024 中国大陆版 达人 第3曲" in without_aliases and "ID 765" in without_aliases
+
+
+@pytest.mark.parametrize("query", ["765", "里 765", "７６５"])
+def test_numeric_song_name_uses_song_id_instead_of_matching_title_digits(query):
+    result = query_dan_courses_text(_catalog(), song_name=query, alias_data=_aliases())
+    assert "2024 中国大陆版 达人 第3曲" in result and "ID 765" in result
+    assert "ID 369" not in result
+
+
+def test_numeric_song_name_keeps_difficulty_filter_and_explicit_id_priority():
+    catalog, aliases = _catalog(), _aliases()
+    wrong_level = query_dan_courses_text(catalog, song_name="鬼 765", alias_data=aliases)
+    assert "没有找到符合条件的段位资料" in wrong_level
+    assert "已按 鬼 难度筛选" in wrong_level
+    conflicting = query_dan_courses_text(
+        catalog, song_name="765", song_no=338, alias_data=aliases
+    )
+    assert "338 号曲目在当前段位资料里没有出现记录" in conflicting
+    assert "ID 765" not in conflicting
+
+
+def test_song_title_containing_digits_is_still_resolved_as_a_name():
+    result = query_dan_courses_text(
+        _catalog(), song_name="Jingle Bells No. 765", alias_data=_aliases()
+    )
+    assert "369 号曲目在当前段位资料里没有出现记录" in result
+    assert "ID 765" not in result
+
+
+@pytest.mark.parametrize("explicit_id", [False, True])
+def test_exact_title_fallback_for_unmapped_course_does_not_override_explicit_id(explicit_id):
+    catalog = _catalog()
+    # This is a supported resource state when a course song has no catalog mapping.
+    for course in catalog["courses"]:
+        for song in course["songs"]:
+            if 765 in song["song_no_candidates"]:
+                song.update(song_no_candidates=[], song_no=None,
+                            mapping_status="not_in_chart_resource")
+    result = query_dan_courses_text(
+        catalog, song_name="第六天魔王", song_no=765 if explicit_id else 0,
+        alias_data=_aliases()
+    )
+    if explicit_id:
+        assert "没有找到符合条件的段位资料" in result
+    else:
+        assert "2024 中国大陆版 达人 第3曲" in result
+        assert "当前曲库无此曲" in result
+
+
 def test_romaji_and_jp_names_match_the_same_song():
     catalog, aliases = _catalog(), _aliases()
     for query in ("天狗囃子", "天狗配乐", "Tengu Bayashi"):
