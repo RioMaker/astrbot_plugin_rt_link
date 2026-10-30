@@ -42,18 +42,20 @@
 
 ## LLM 工具（模型可自动调用）
 
+v0.22.0 的五个玩家查询入口（除公共 `query_dan_course` 外）均支持 `target="caller" | "bot"`：默认查询当前发言者；`bot` 查询管理页设置的可可子独立账号。用户说「我的」用 `caller`，说「你的/可可子的」用 `bot`；比较双方分两次调用。不能传入任意用户 ID。操作与返回对象说明见 [账号管理](account-management.md)。
+
 v0.21.2 撤回 v0.20–v0.21.1 的临时子 Agent 和自定义工具，恢复主 AI 直接查询。查询结果直接返回主 AI，不再额外调用模型或自动生成总结图片。旧 `query_agent_*` 配置不再使用；更新后重载插件，若当前聊天仍沿用旧 `question` 参数，请刷新工具列表或开启新会话。
 
 `query_dan_course` 只读公共课题目录，不能用它判断个人成绩是否同步。查询个人判定应使用 `query_song_brief` / `query_taiko_score`，评估课题曲条件使用 `evaluate_player_dan`。当前未接入实际段位参战次数和逐次过段历史，三首单曲最佳记录也不能代替这些记录。
 
 | 工具名 | 作用 | 参数 |
 | --- | --- | --- |
-| `query_rtlink` | 首选统一只读查询，一次组合玩家统计、多曲对比、检索、历史、谱面和段位等最多 24 项 | `queries`（对象数组）、`export`（可选布尔值） |
-| `get_player_overview` | 玩家 Rating、能力摘要、主要弱项及少量成绩证据 | 无 |
-| `recommend_practice` | 一次给出必要玩家背景及 5 首练习曲、依据和目标 | `goal`、`level`、`target_rank`、`scope` |
-| `query_song_brief` | 单首歌曲的鬼/里成绩、定数、音符和主要配置摘要；未绑定也可看公共资料 | `song_name`（必填）、`level`（可选） |
+| `query_rtlink` | 首选统一只读查询，一次组合玩家统计、多曲对比、检索、历史、谱面和段位等最多 24 项 | `queries`（对象数组）、`export`（可选布尔值）、`target` |
+| `get_player_overview` | 玩家 Rating、能力摘要、主要弱项及少量成绩证据 | `target` |
+| `recommend_practice` | 一次给出必要玩家背景及 5 首练习曲、依据和目标 | `goal`、`level`、`target_rank`、`scope`、`target` |
+| `query_song_brief` | 单首歌曲的鬼/里成绩、定数、音符和主要配置摘要；发言者未绑定也可看公共资料 | `song_name`（必填）、`level`（可选）、`target` |
 | `query_dan_course` | 按曲名、别名或 ID 反查各届段位，或查询课题曲与合格条件；无需绑定 | `song_name`、`song_no`、`year`、`region`、`rank`（均可选） |
-| `evaluate_player_dan` | 用玩家三首课题曲的最佳记录核对可计算的合格条件 | `year`、`rank`、`region` |
+| `evaluate_player_dan` | 用玩家三首课题曲的最佳记录核对可计算的合格条件 | `year`、`rank`、`region`、`target` |
 
 仅注册以上六个入口。原有命令保留，其余旧查询名通过 `query_rtlink` 使用；推荐可直接调用 `recommend_practice`，无需先查概览或逐曲补查。每条消息最多执行两次不同查询，整个批次计一次，重复查询提示复用材料；新消息重新计数。原五个入口每次最多返回 2500 字符。统一入口最多返回 32000 字符，大结果自动发送完整 JSON 附件并为各项保留摘要；`export=true` 可主动导出。预算只限制本插件的查询工作，不限制其他插件或整个 Agent 的模型轮次。
 

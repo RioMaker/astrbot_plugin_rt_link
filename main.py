@@ -16,40 +16,56 @@ import uuid
 from pathlib import Path
 
 from astrbot.api import logger
-from astrbot.api.event import filter, AstrMessageEvent
+from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, StarTools, register
 
 # AstrBot 以包形式加载插件（如 data.plugins.<name>.main），此时需用相对导入；
 # 本地直接运行/测试 main.py 时（__package__ 为空），回退到同目录绝对导入。
 if __package__:
     from . import query_gateway
+    from .account_admin import register_admin_api
+    from .account_identity import BOT_NAME, BOT_UNBOUND, query_owner
     from .api_client import KinokoClient
-    from .sakura_client import SakuraClient
-    from .source_service import MultiSourceService
     from .chart_library import ChartLibrary
     from .chart_library_installer import ChartLibraryInstaller
     from .dan_query import match_rank, match_region, query_dan_courses_text
-    from .score_rank import empty_rolls, empty_score_rank, load_rolls, load_score_rank, parse_score_rank
+    from .sakura_client import SakuraClient
+    from .score_rank import (
+        empty_rolls,
+        empty_score_rank,
+        load_rolls,
+        load_score_rank,
+        parse_score_rank,
+    )
     from .service import BindingsStore, ScoreService, parse_difficulty
     from .song_alias import empty_aliases, load_aliases
+    from .source_service import MultiSourceService
     from .storage import ScoreDatabase, load_charts, load_dan_courses
 else:
     import query_gateway
+    from account_admin import register_admin_api
+    from account_identity import BOT_NAME, BOT_UNBOUND, query_owner
     from api_client import KinokoClient
-    from sakura_client import SakuraClient
-    from source_service import MultiSourceService
     from chart_library import ChartLibrary
     from chart_library_installer import ChartLibraryInstaller
     from dan_query import match_rank, match_region, query_dan_courses_text
-    from score_rank import empty_rolls, empty_score_rank, load_rolls, load_score_rank, parse_score_rank
+    from sakura_client import SakuraClient
+    from score_rank import (
+        empty_rolls,
+        empty_score_rank,
+        load_rolls,
+        load_score_rank,
+        parse_score_rank,
+    )
     from service import BindingsStore, ScoreService, parse_difficulty
     from song_alias import empty_aliases, load_aliases
+    from source_service import MultiSourceService
     from storage import ScoreDatabase, load_charts, load_dan_courses
 
 PLUGIN_NAME = "rt_link"
 PLUGIN_AUTHOR = "Rio"
-PLUGIN_DESC = "支持菌菌与 Sakura 独立绑定、成绩存储与太鼓实力评估"
-PLUGIN_VERSION = "v0.21.2"
+PLUGIN_DESC = "支持菌菌与 Sakura 独立绑定、AI 自有成绩与用户管理"
+PLUGIN_VERSION = "v0.22.0"
 
 COMMAND_NAME = "rtlink"
 BINDINGS_KEY = "bindings"
@@ -204,7 +220,9 @@ class RTLinkPlugin(Star):
         self.service = MultiSourceService(
             {"kinoko": kinoko_service, "sakura": sakura_service},
             KvBindingsStore(self, "active_sources"),
+            KvBindingsStore(self, "known_accounts"),
         )
+        self.admin_api = register_admin_api(self)
 
     def _make_client(self, apikey: str) -> KinokoClient:
         return KinokoClient(
@@ -214,6 +232,8 @@ class RTLinkPlugin(Star):
         )
 
     async def terminate(self):
+        if getattr(self, "admin_api", None):
+            self.admin_api.close()
         await self.chart_installer.close()
         try:
             self.db.close()
@@ -577,6 +597,24 @@ class RTLinkPlugin(Star):
     # ------------------------------------------------------------------
     # 注册六个入口；组合查询优先 query_rtlink，旧方法作为内部查询能力保留。
     # ------------------------------------------------------------------
+    async def _run_player_tool(self, event, key, producer, target):
+        try:
+            owner = query_owner(event, target)
+        except ValueError as error:
+            return str(error)
+
+        async def query():
+            if target == "bot" and not await self.service.has_current_binding(owner):
+                return BOT_UNBOUND
+            result = await producer(owner)
+            return (
+                f"查询对象：{BOT_NAME}（AI 自己）\n{result}"
+                if target == "bot"
+                else result
+            )
+
+        return await self._run_ai_tool(event, (*key, target), query)
+
     async def _run_ai_tool(self, event, key, producer, max_chars=2500):
         """Per-message budget and deduplication, isolated from ordinary commands."""
         state = getattr(event, "_rtlink_ai_state", None)
@@ -606,8 +644,13 @@ class RTLinkPlugin(Star):
         event: AstrMessageEvent,
         queries: list[dict] | None = None,
         export: bool = False,
+        target: str = "caller",
     ) -> str:
-        """直接读取当前发言者的太鼓达人/RTLink玩家数据，返回成绩、统计及查询依据供主AI回答；不调用子Agent。
+        """读取发言者或可可子自己的太鼓达人/RTLink成绩、统计及查询依据；不调用子Agent。
+
+        target=caller（默认）查询当前发言者：用户说「我的成绩」时使用；
+        target=bot 查询 AI 可可子自己的独立账号：用户说「你的成绩」「可可子的 Rating」时使用。
+        比较双方时分别查询 caller 和 bot，绝不将发言者的成绩当作 AI 自己的成绩。
 
         一次组合多项查询、多首歌曲或比较，通常一次取全，第二次仅补充或消歧。
 
@@ -635,8 +678,10 @@ class RTLinkPlugin(Star):
         Args:
             queries(array[object]): 查询列表，例如 [{"tool":"get_rank_distribution"},{"tool":"get_accuracy_summary","args":{"level":"鬼"}}]
             export(boolean): 是否同时发送完整结果JSON附件，默认false；文本过长时自动发送。检索/谱面附件保留本次limit/offset范围
+            target(string): caller 当前发言者（默认），bot 可可子自己；不能传入其他用户 ID
         """
         try:
+            owner = query_owner(event, target)
             queries = query_gateway.validate_queries(queries)
             if not isinstance(export, bool):
                 raise ValueError("export 必须是布尔值。")  # noqa: TRY004 -- consistent validation response
@@ -650,11 +695,26 @@ class RTLinkPlugin(Star):
             )
 
         async def query():
+            if target == "bot" and not await self.service.has_current_binding(owner):
+                return query_gateway.dumps(
+                    {
+                        "status": "not_bound",
+                        "subject": {"target": "bot", "name": BOT_NAME},
+                        "message": BOT_UNBOUND,
+                    }
+                )
             batch = await self.service.get_readonly_queries_text(
-                event.get_sender_id(),
+                owner,
                 queries,
                 self.dan_courses,
             )
+            batch = {
+                **batch,
+                "subject": {
+                    "target": target,
+                    "name": BOT_NAME if target == "bot" else "当前发言者",
+                },
+            }
             attachment = None
             if (
                 export
@@ -685,23 +745,36 @@ class RTLinkPlugin(Star):
 
         return await self._run_ai_tool(
             event,
-            ("query_rtlink", query_gateway.dumps(queries), export),
+            ("query_rtlink", query_gateway.dumps(queries), export, target),
             query,
             max_chars=query_gateway.MAX_OUTPUT_CHARS,
         )
 
     @filter.llm_tool(name="get_player_overview")
-    async def get_player_overview(self, event: AstrMessageEvent) -> str:
-        """一次获取当前玩家的 Rating、能力、主要弱项与成绩证据。推荐歌曲直接用 recommend_practice，无需先调用本工具。"""
-        return await self._run_ai_tool(
-            event, ("get_player_overview",),
-            lambda: self.service.get_ai_overview_text(event.get_sender_id()),
+    async def get_player_overview(
+        self, event: AstrMessageEvent, target: str = "caller"
+    ) -> str:
+        """一次获取玩家的 Rating、能力、弱项与成绩证据；推荐歌曲直接用 recommend_practice。
+
+        Args:
+            target(string): caller 当前发言者（默认，「我的成绩」）；bot 可可子自己（「你的成绩」）
+        """
+        return await self._run_player_tool(
+            event,
+            ("get_player_overview",),
+            lambda owner: self.service.get_ai_overview_text(owner),
+            target,
         )
 
     @filter.llm_tool(name="recommend_practice")
     async def recommend_practice(
-        self, event: AstrMessageEvent, goal: str = "general", level: str = "",
-        target_rank: str = "", scope: str = "",
+        self,
+        event: AstrMessageEvent,
+        goal: str = "general",
+        level: str = "",
+        target_rank: str = "",
+        scope: str = "",
+        target: str = "caller",
     ) -> str:
         """一次返回玩家背景及 5 首练习曲、成绩/配置依据和目标；不足 5 首会说明。拿到结果即可回答，不必逐曲补查。
 
@@ -710,23 +783,37 @@ class RTLinkPlugin(Star):
             level(string): 4/鬼或5/里；省略看鬼/里
             target_rank(string): 仅 score_rank 使用，白粹/铜粹/银粹/金雅/粉雅/紫雅/极；省略自动取常见评价上一档
             scope(string): played 已玩、unplayed 未玩、all；省略默认已玩，explore 默认未玩；精度/全连/升评价仅支持已玩
+            target(string): caller 当前发言者（默认）；bot 可可子自己的练习建议
         """
-        return await self._run_ai_tool(
-            event, ("recommend_practice", goal, level, target_rank, scope),
-            lambda: self.service.recommend_practice_text(event.get_sender_id(), goal, level, target_rank, scope),
+        return await self._run_player_tool(
+            event,
+            ("recommend_practice", goal, level, target_rank, scope),
+            lambda owner: self.service.recommend_practice_text(
+                owner, goal, level, target_rank, scope
+            ),
+            target,
         )
 
     @filter.llm_tool(name="query_song_brief")
-    async def query_song_brief(self, event: AstrMessageEvent, song_name: str, level: str = "") -> str:
+    async def query_song_brief(
+        self,
+        event: AstrMessageEvent,
+        song_name: str,
+        level: str = "",
+        target: str = "caller",
+    ) -> str:
         """一次查询单首歌的成绩和公共谱面配置摘要。支持未玩曲；不提供逐小节或原始特征翻页。
 
         Args:
             song_name(string): 单首歌的名称、别名或歌曲 ID，支持鬼夏祭这类前缀
             level(string): 4/鬼或5/里；省略返回该曲鬼/里资料
+            target(string): caller 当前发言者（默认）；bot 可可子自己的成绩
         """
-        return await self._run_ai_tool(
-            event, ("query_song_brief", song_name, level),
-            lambda: self.service.get_song_brief_text(event.get_sender_id(), song_name, level),
+        return await self._run_player_tool(
+            event,
+            ("query_song_brief", song_name, level),
+            lambda owner: self.service.get_song_brief_text(owner, song_name, level),
+            target,
         )
 
     # 旧的单曲查分方法仅供内部兼容；AI 使用 query_song_brief。
@@ -790,6 +877,7 @@ class RTLinkPlugin(Star):
         year: int,
         rank: str,
         region: str = "",
+        target: str = "caller",
     ) -> str:
         """按玩家三首课题曲的实际良/可/不可/连打数据，核对指定段位的可计算合格条件。
 
@@ -800,12 +888,15 @@ class RTLinkPlugin(Star):
             year(int): 段位年份，可选 2022、2023、2024、2025、2026
             rank(string): 段位，如 五级、初段、十段、玄人、达人
             region(string): 区域，可选 cn/国服/中国大陆 或 jp/日版/国际版；省略时按玩家绑定服务器选择
+            target(string): caller 当前发言者（默认）；bot 可可子自己的段位能力参考
         """
-        return await self._run_ai_tool(
-            event, ("evaluate_player_dan", year, rank, region),
-            lambda: self.service.get_player_dan_capability_text(
-                event.get_sender_id(), self.dan_courses, year, region, rank
+        return await self._run_player_tool(
+            event,
+            ("evaluate_player_dan", year, rank, region),
+            lambda owner: self.service.get_player_dan_capability_text(
+                owner, self.dan_courses, year, region, rank
             ),
+            target,
         )
 
     async def get_player_rating(self, event: AstrMessageEvent) -> str:

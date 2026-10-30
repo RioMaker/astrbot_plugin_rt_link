@@ -3,31 +3,56 @@
 import asyncio
 from collections import defaultdict
 
-
 SOURCE_NAMES = {"kinoko": "菌菌", "sakura": "Sakura"}
 
 
 class MultiSourceService:
     # 只有明确声明的玩家操作可以被自动分发，公共谱面/别名走共享服务。
-    PLAYER_METHODS = frozenset({
-        "request_alias", "score_sync_reminder_text", "force_update", "generate_profile_image",
-        "generate_report_image", "generate_configuration_image", "generate_weakness_image",
-        "generate_rank_improve_image", "query_score_text", "query_scores_text",
-        "get_accuracy_summary_text", "get_difficulty_stats_text", "get_genre_strength_text",
-        "get_growth_trend_text", "get_improvement_candidates_text", "get_player_dan_capability_text",
-        "get_profile_text", "get_rank_distribution_text", "get_rank_improvement_text",
-        "get_rating_text", "get_recent_scores_text", "get_rhythm_weakness_text", "get_song_full_text",
-        "get_ai_overview_text", "recommend_practice_text", "get_song_brief_text",
-        "get_readonly_queries_text",
-    })
-    SHARED_METHODS = frozenset({
-        "generate_help_image", "list_pending_aliases_text", "approve_aliases_text",
-        "chart_library_status_text", "get_chart_analysis_text",
-    })
+    PLAYER_METHODS = frozenset(
+        {
+            "request_alias",
+            "score_sync_reminder_text",
+            "force_update",
+            "generate_profile_image",
+            "generate_report_image",
+            "generate_configuration_image",
+            "generate_weakness_image",
+            "generate_rank_improve_image",
+            "query_score_text",
+            "query_scores_text",
+            "get_accuracy_summary_text",
+            "get_difficulty_stats_text",
+            "get_genre_strength_text",
+            "get_growth_trend_text",
+            "get_improvement_candidates_text",
+            "get_player_dan_capability_text",
+            "get_profile_text",
+            "get_rank_distribution_text",
+            "get_rank_improvement_text",
+            "get_rating_text",
+            "get_recent_scores_text",
+            "get_rhythm_weakness_text",
+            "get_song_full_text",
+            "get_ai_overview_text",
+            "recommend_practice_text",
+            "get_song_brief_text",
+            "get_readonly_queries_text",
+        }
+    )
+    SHARED_METHODS = frozenset(
+        {
+            "generate_help_image",
+            "list_pending_aliases_text",
+            "approve_aliases_text",
+            "chart_library_status_text",
+            "get_chart_analysis_text",
+        }
+    )
 
-    def __init__(self, services, selection_store):
+    def __init__(self, services, selection_store, known_store=None):
         self.services = dict(services)
         self.selection_store = selection_store
+        self.known_store = known_store
         self._users = defaultdict(asyncio.Lock)
         self._bindings_lock = asyncio.Lock()
 
@@ -40,6 +65,22 @@ class MultiSourceService:
         selections[qq] = source
         await self.selection_store.save(selections)
 
+    async def _remember(self, qq, source):
+        """Retain only public identity, including users unbound before first sync."""
+        if self.known_store is None:
+            return
+        binding = await self.services[source]._binding(qq)
+        if binding:
+            known = await self.known_store.load()
+            known.setdefault(qq, {})[source] = {
+                "player_id": str(binding.get("player_id") or ""),
+                "server": str(binding.get("server") or ""),
+            }
+            await self.known_store.save(known)
+
+    async def has_current_binding(self, qq):
+        return bool(await self.services[await self.current_source(qq)]._binding(qq))
+
     async def source_text(self, qq, source=""):
         async with self._users[qq]:
             if source:
@@ -47,22 +88,31 @@ class MultiSourceService:
                 if source not in self.services:
                     return "未知数据源。可用：kinoko（菌菌）、sakura（Sakura）。"
                 if not await self.services[source]._binding(qq):
-                    return f"{SOURCE_NAMES[source]} 尚未绑定，请先在私聊中绑定该数据源。"
+                    return (
+                        f"{SOURCE_NAMES[source]} 尚未绑定，请先在私聊中绑定该数据源。"
+                    )
                 async with self._bindings_lock:
                     await self._select(qq, source)
             selected = await self.current_source(qq)
             lines = [f"当前数据源：{SOURCE_NAMES[selected]}（{selected}）"]
             for key, service in self.services.items():
                 binding = await service._binding(qq)
-                status = f"玩家 {binding['player_id']} / {binding['server']}" if binding else "未绑定"
+                status = (
+                    f"玩家 {binding['player_id']} / {binding['server']}"
+                    if binding
+                    else "未绑定"
+                )
                 lines.append(f"{key}：{status}")
-            lines.append("切换：/rtlink source kinoko 或 /rtlink source sakura；各源成绩与历史独立保存。")
+            lines.append(
+                "切换：/rtlink source kinoko 或 /rtlink source sakura；各源成绩与历史独立保存。"
+            )
             return "\n".join(lines)
 
     async def bind(self, qq, apikey, player_id, server=""):
         async with self._users[qq], self._bindings_lock:
             result = await self.services["kinoko"].bind(qq, apikey, player_id, server)
             if result[0]:
+                await self._remember(qq, "kinoko")
                 await self._select(qq, "kinoko")
             return result
 
@@ -70,14 +120,37 @@ class MultiSourceService:
         async with self._users[qq], self._bindings_lock:
             result = await self.services["sakura"].bind_sakura(qq, token)
             if result[0]:
+                await self._remember(qq, "sakura")
                 await self._select(qq, "sakura")
             return result
 
     async def unbind(self, qq):
         async with self._users[qq], self._bindings_lock:
             source = await self.current_source(qq)
+            await self._remember(qq, source)
             ok, text = await self.services[source].unbind(qq)
-            return ok, f"[{SOURCE_NAMES[source]}] {text} 该来源的历史保留；其他来源绑定不变。"
+            return (
+                ok,
+                f"[{SOURCE_NAMES[source]}] {text} 该来源的历史保留；其他来源绑定不变。",
+            )
+
+    async def manage_source(self, qq, source, action):
+        """Dashboard operations share the same user lock as commands and AI reads."""
+        if source not in self.services or action not in {"sync", "select", "unbind"}:
+            return False, "未知来源或操作。"
+        async with self._users[qq]:
+            service = self.services[source]
+            if not await service._binding(qq):
+                return False, "该来源尚未绑定。"
+            if action == "sync":
+                return await service.force_update(qq)
+            async with self._bindings_lock:
+                if action == "select":
+                    await self._select(qq, source)
+                    return True, f"当前来源已切换为 {SOURCE_NAMES[source]}。"
+                await self._remember(qq, source)
+                ok, _ = await service.unbind(qq)
+                return ok, f"已解绑 {SOURCE_NAMES[source]}，历史成绩保留。"
 
     async def _all(self, method):
         sections = []

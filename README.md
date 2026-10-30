@@ -2,6 +2,16 @@
 
 将 NapCat 对话中的 QQ 号绑定到「菌菌控制台」的 apikey，据此查询太鼓达人指定曲目的成绩，并以 **AI v2 Rating**（Taiko Signal Rhythm v2）评估玩家实力，结合 AI 识别的节奏型画像给出「该练什么 + 参考曲目」建议。
 
+## v0.22.0 可可子账号与用户管理页
+
+更新并重载插件后，在 **AstrBot WebUI → 插件 → rt_link → 用户与可可子账号管理** 打开页面。使用 AstrBot 的 [Plugin Pages / 可视化视图](https://docs.astrbot.app/dev/star/guides/plugin-pages.html) 和登录态 Bridge；需要宿主支持 `register_web_api`、`astrbot.api.web` 及插件页面。
+
+- **可可子账号**：分别管理菌菌 API Key（含玩家 ID / 服务器）和 SakuraBot Token，支持验证保存、同步、切换当前来源及解绑。可可子使用独立身份保存绑定、成绩、Rating 和历史，不依赖当前发言者的账号。
+- **绑定用户**：按用户汇总全部现有绑定和可恢复的历史用户，展示绑定来源、最后同步日期（北京时间）与当前来源最近一次计算的 Rating。支持搜索、分页、来源/状态筛选，以及各来源的换绑、同步和解绑。
+- **AI 查询**：`query_rtlink` 及四个玩家快捷工具新增 `target="caller" | "bot"`。默认查发言者；问「可可子你的成绩」时查 `bot`，结果明确标注对象；比较双方分别调用两次。Token 仅在管理页保存，不进入模型参数或查询结果。
+
+页面读取本地记录，不自动批量拉取远端成绩。未同步、已解绑、账号不匹配或旧版评级缓存会明确显示待同步/未绑定，不混用另一个来源的 Rating。完整操作与数据保留规则见 [账号管理说明](docs/account-management.md)。
+
 ## v0.18.0 评分规则
 
 单谱 Rating 以该谱固定 AI 定数为上限，只有全良精度能达到定数。精度到 Rating 沿用按难度变化的非线性曲线，经过全良归一化与难度单调修正；没有重新训练或修改谱面定数。综合 Rating 量表上限同步改为 11.6，七维与配置评分重新计算。旧模型与新模型的 Rating 不直接判定涨跌，首次同步重建基线，最高分比较和历史原始成绩保留。OurTaiko-v1 参考算法保持原值。详见 [R2 评分规则与迁移](docs/rating-r2-constant-cap.md)。

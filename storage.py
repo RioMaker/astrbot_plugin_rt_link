@@ -452,6 +452,27 @@ class ScoreDatabase:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def list_known_owners(self) -> list[str]:
+        """Include legacy users whose credentials have already been removed."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT player_id AS owner FROM scores "
+                "UNION SELECT owner_id FROM score_syncs "
+                "UNION SELECT owner_id FROM rating_snapshots "
+                "UNION SELECT player_id FROM rating_cache"
+            ).fetchall()
+        return [str(row["owner"]) for row in rows if row["owner"]]
+
+    def get_latest_score_sync(self, owner, player_id=None, server=None) -> dict | None:
+        sql = "SELECT * FROM score_syncs WHERE owner_id=?"
+        args = [str(owner)]
+        if player_id is not None:
+            sql += " AND game_player_id=? AND server=?"
+            args.extend([str(player_id), str(server)])
+        with self._lock:
+            row = self._conn.execute(sql + " ORDER BY id DESC LIMIT 1", args).fetchone()
+        return dict(row) if row else None
+
     # -- 聚合缓存 ----------------------------------------------------------
     def put_rating_cache(self, player_id: str, payload: dict) -> None:
         with self._lock:

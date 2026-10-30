@@ -428,7 +428,8 @@ class ScoreService:
                 server=server,
             )
         except KinokoAPIError as e:
-            return False, f"绑定失败：无法用该 apikey 查询玩家 {player_id}（{e}）"
+            detail = str(e).replace(apikey, "[redacted]")
+            return False, f"绑定失败：无法用该 apikey 查询玩家 {player_id}（{detail}）"
 
         bindings = await self.store.load()
         bindings[qq] = {"apikey": apikey, "player_id": player_id, "server": server}
@@ -544,7 +545,7 @@ class ScoreService:
         errors, stored, previous_scores = {}, {}, {}
         for source_name, payload in fetched.items():
             if isinstance(payload, BaseException):
-                errors[source_name] = str(payload)
+                errors[source_name] = str(payload).replace(apikey, "[redacted]")
                 continue
             try:
                 previous = (
