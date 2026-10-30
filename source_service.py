@@ -2,7 +2,6 @@
 
 import asyncio
 from collections import defaultdict
-from contextlib import asynccontextmanager
 
 
 SOURCE_NAMES = {"kinoko": "菌菌", "sakura": "Sakura"}
@@ -35,12 +34,6 @@ class MultiSourceService:
     async def current_source(self, qq):
         selected = (await self.selection_store.load()).get(qq, "kinoko")
         return selected if selected in self.services else "kinoko"
-
-    @asynccontextmanager
-    async def readonly_session(self, qq):
-        """Pin the current user's backend/binding throughout a child query."""
-        async with self._users[qq]:
-            yield self.services[await self.current_source(qq)]
 
     async def _select(self, qq, source):
         selections = await self.selection_store.load()

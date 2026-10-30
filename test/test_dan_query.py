@@ -79,10 +79,10 @@ def test_cn_2026_open_scope_and_source_limit_are_visible():
         assert "没有找到" in text
 
 
-def test_public_catalog_helper_is_internal_and_uses_public_catalog():
+def test_public_catalog_tool_is_registered_and_uses_public_catalog():
     plugin = object.__new__(main.RTLinkPlugin)
     plugin.dan_courses = _catalog()
-    assert not hasattr(main.RTLinkPlugin.query_dan_course, "_llm_tool_name")
+    assert main.RTLinkPlugin.query_dan_course._llm_tool_name == "query_dan_course"
     event = mock.AstrMessageEvent("10001", private=True, is_admin=False, message_str="")
     result = asyncio.run(
         main.RTLinkPlugin.query_dan_course(
@@ -350,8 +350,8 @@ async def _collect(agen):
     return [item async for item in agen]
 
 
-def test_player_dan_helper_is_available_to_internal_query_agent():
-    assert not hasattr(main.RTLinkPlugin.evaluate_player_dan, "_llm_tool_name")
+def test_player_dan_llm_tool_is_registered():
+    assert main.RTLinkPlugin.evaluate_player_dan._llm_tool_name == "evaluate_player_dan"
 
     class FakeDanService:
         async def get_player_dan_capability_text(self, qq, catalog, year, region, rank):

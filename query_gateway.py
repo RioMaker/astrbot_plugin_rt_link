@@ -19,6 +19,7 @@ MAX_INPUT_CHARS = 16000
 MAX_OUTPUT_CHARS = 32000
 LIMITATIONS = [
     "玩家数据来自当前数据源的一次分析快照；可能按现有缓存规则同步成绩。",
+    "公共段位目录没有个人成绩，不能据此判断玩家同步失败；个人判定需查询玩家成绩或段位能力参考。",
     "单曲最佳记录不能证明实际过段、魂槽或连续演奏；公共谱面不能定位玩家失误或预测过关概率。",
     "检索和谱面结果遵循请求的 limit/offset；摘要、推荐及旧查询自身的条数限制仍适用。",
 ]
@@ -272,8 +273,7 @@ def item_arguments(item, parse_level, parse_rank):
 
 async def run_queries(service, qq, queries, catalog, parse_level, parse_rank):
     """Run sequentially under the router's user lock, sharing even failed syncs."""
-    existing = ANALYSIS_SCOPE.get()
-    scope = {} if existing is None else existing
+    scope = {}
     token = ANALYSIS_SCOPE.set(scope)
     results, seen = [], {}
     try:

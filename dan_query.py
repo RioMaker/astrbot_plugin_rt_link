@@ -120,7 +120,11 @@ def _condition_text(condition: dict) -> str:
 
 
 def _header(catalog: dict) -> str:
-    return f"段位道场资料版本：{catalog.get('data_version', 'unknown')}"
+    return (
+        f"段位道场资料版本：{catalog.get('data_version', 'unknown')}\n"
+        "资料范围：公共课题曲与合格条件；本次未查询个人成绩，不能据此判断玩家成绩未同步。"
+        "个人良/可/不可请查询单曲成绩或段位能力参考；实际参战次数和过段历史不在此目录中。"
+    )
 
 
 def _song_labels(song: dict, alias_data: dict | None) -> tuple[str, str, int | None]:
@@ -490,7 +494,10 @@ def evaluate_player_dan_text(
 
     complete = all(row is not None for row in selected)
     if not complete:
-        conclusion = "成绩不完整，暂时无法评估可计算条件。请先 /rtlink update 同步全部难度成绩。"
+        conclusion = (
+            "成绩不完整，当前来源缺少部分课题曲记录，暂时无法评估全部可计算条件。"
+            "可用 /rtlink update 刷新；记录缺失本身不能证明未同步或未游玩。"
+        )
     elif missing_evaluable_data:
         conclusion = "部分良/可/不可或连打字段缺失，暂时无法完整评估可计算条件。"
     elif normal_results and not all(normal_results):
