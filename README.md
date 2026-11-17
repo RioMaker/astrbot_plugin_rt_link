@@ -1,6 +1,6 @@
 # astrbot_plugin_rt_link
 
-<p><img src="logo.png" alt="RT Link 红蓝双鼓链环标志" width="128" height="128"></p>
+<p><img src="logo.png" alt="RT Link 太鼓达人双鼓角色标志" width="128" height="128"></p>
 
 将 NapCat 对话中的 QQ 号绑定到「菌菌控制台」的 apikey，据此查询太鼓达人指定曲目的成绩，并以 **AI v2 Rating**（Taiko Signal Rhythm v2）评估玩家实力，结合 AI 识别的节奏型画像给出「该练什么 + 参考曲目」建议。
 
