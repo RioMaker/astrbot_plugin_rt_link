@@ -4,6 +4,7 @@ import asyncio
 import json
 import math
 import re
+from datetime import datetime, timezone
 from functools import wraps
 
 if __package__:
@@ -20,6 +21,26 @@ class AdminError(ValueError):
     def __init__(self, message, status=400):
         super().__init__(message)
         self.status = status
+
+
+def _last_sync_at(*timestamps):
+    latest = None
+    value = None
+    for timestamp in timestamps:
+        if not isinstance(timestamp, str):
+            continue
+        try:
+            parsed = datetime.fromisoformat(
+                timestamp[:-1] + "+00:00" if timestamp.endswith("Z") else timestamp
+            )
+        except ValueError:
+            continue
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)  # noqa: UP017 -- Python 3.10
+            timestamp = parsed.isoformat()
+        if latest is None or parsed > latest:
+            latest, value = parsed, timestamp
+    return value
 
 
 class AccountAdmin:
@@ -62,13 +83,16 @@ class AccountAdmin:
                 binding = await service._binding(owner)
                 saved = known.get(owner, {}).get(source) or {}
                 identity = binding or saved
+                server = identity.get("server") or (
+                    service.default_server if binding else ""
+                )
                 latest, cache = None, None
                 if service.db is not None:
                     latest = await asyncio.to_thread(
                         service.db.get_latest_score_sync,
                         owner,
                         identity.get("player_id") if identity else None,
-                        identity.get("server") if identity else None,
+                        server,
                     )
                     if binding:
                         cache = await asyncio.to_thread(
@@ -77,28 +101,41 @@ class AccountAdmin:
                 if not identity and latest:
                     identity = {
                         "player_id": latest.get("game_player_id"),
-                        "server": latest.get("server"),
                     }
-                meta = (cache or {}).get("meta") or {}
-                matches = bool(binding and cache) and (
+                    server = latest.get("server") or ""
+                cache = cache if isinstance(cache, dict) else {}
+                meta = cache.get("meta")
+                matches = bool(binding and isinstance(meta, dict)) and (
                     str(meta.get("playerId") or "")
                     == str(binding.get("player_id") or "")
-                    and str(meta.get("server") or "")
-                    == str(binding.get("server") or service.default_server)
+                    and str(meta.get("server") or "") == str(server)
                 )
                 current = matches and (
                     cache.get("ratingAlgorithmVersion") == RATING_ALGORITHM_VERSION
                     and cache.get("_cacheSchema") == RATING_CACHE_SCHEMA
                 )
-                rating = (cache.get("summary") or {}).get("rating") if current else None
+                summary = cache.get("summary")
+                rating = (
+                    summary.get("rating")
+                    if current and isinstance(summary, dict)
+                    else None
+                )
                 if (
                     isinstance(rating, bool)
                     or not isinstance(rating, (float, int))
                     or not math.isfinite(rating)
                 ):
                     rating = None
-                synced_at = latest.get("fetched_at") if latest else None
-                rating_at = cache.get("profileSyncedAt") if matches else None
+                synced_at = _last_sync_at(latest.get("fetched_at")) if latest else None
+                rating_at = (
+                    _last_sync_at(cache.get("profileSyncedAt")) if matches else None
+                )
+                rating_state = "unbound"
+                if binding:
+                    if current and cache.get("ratingUnavailable") is True:
+                        rating, rating_state = None, "no_ratable_scores"
+                    else:
+                        rating_state = "available" if rating is not None else "needs_sync"
                 sources.append(
                     {
                         "source": source,
@@ -108,13 +145,11 @@ class AccountAdmin:
                             binding or saved or owner in history[source]
                         ),
                         "player_id": str(identity.get("player_id") or ""),
-                        "server": str(identity.get("server") or ""),
+                        "server": str(server),
                         "last_sync_at": synced_at or rating_at,
                         "rating_at": rating_at if rating is not None else None,
                         "rating": round(rating, 2) if rating is not None else None,
-                        "rating_state": "unbound"
-                        if not binding
-                        else ("available" if rating is not None else "needs_sync"),
+                        "rating_state": rating_state,
                         "score_count": latest.get("current_count") if latest else None,
                     }
                 )
@@ -126,7 +161,7 @@ class AccountAdmin:
                 "is_bot": owner == BOT_OWNER_ID,
                 "current_source": selected,
                 "bound_sources": [row["source"] for row in sources if row["bound"]],
-                "last_sync_at": max(dates, default=None),
+                "last_sync_at": _last_sync_at(*dates),
                 "rating": active["rating"],
                 "rating_at": active["rating_at"],
                 "rating_state": active["rating_state"],
@@ -156,6 +191,13 @@ class AccountAdmin:
             for owner in owners
             if any(owner in values for values in bindings.values())
         }
+        historical = {}
+        if search:
+            for key, service in self.router.services.items():
+                if service.db is not None:
+                    historical[key] = await asyncio.to_thread(
+                        service.db.list_latest_score_sync_identities
+                    )
         filtered = []
         for owner in sorted(owners):
             if source and owner not in bindings[source]:
@@ -166,7 +208,12 @@ class AccountAdmin:
                 continue
             public_ids = [owner]
             for key, values in bindings.items():
-                identity = values.get(owner) or known.get(owner, {}).get(key) or {}
+                identity = (
+                    values.get(owner)
+                    or known.get(owner, {}).get(key)
+                    or historical.get(key, {}).get(owner)
+                    or {}
+                )
                 public_ids.append(str(identity.get("player_id") or ""))
             if search and not any(search in value.lower() for value in public_ids):
                 continue
@@ -229,21 +276,23 @@ class AccountAdmin:
             if not ok:
                 # Provider failures can contain request URLs/credentials; never echo them.
                 raise AdminError(
-                    "绑定验证失败，请检查 Token、玩家信息及来源服务状态；原绑定未变更。",
+                    "绑定验证失败，请检查凭据、玩家信息和来源服务状态。",
                     422,
                 )
             message = (
                 "绑定已保存并设为当前来源。点击「同步成绩」获取最新成绩与 Rating。"
             )
         else:
-            ok, _ = await self.router.manage_source(owner, source, action)
+            ok, detail = await self.router.manage_source(owner, source, action)
             if not ok:
                 raise AdminError(
-                    "操作未完成，请检查该来源是否已绑定、凭据是否有效或暂时无可评级成绩。",
+                    "同步失败，请检查该来源的绑定和服务状态。"
+                    if action == "sync"
+                    else "操作未完成，请检查该来源是否已绑定。",
                     422,
                 )
             message = {
-                "sync": "同步完成，成绩与 Rating 已更新。",
+                "sync": detail,
                 "select": "当前来源已切换。",
                 "unbind": "该来源已解绑，历史成绩保留。",
             }[action]

@@ -238,6 +238,71 @@ def test_failed_bind_sync_and_identity_change_do_not_overwrite(tmp_path, charts)
     asyncio.run(run())
 
 
+@pytest.mark.parametrize("source", ["kinoko", "sakura"])
+def test_sync_saves_unrated_scores_and_invalidates_old_rating(tmp_path, charts, source):
+    async def run():
+        router, kinoko, sakura = setup_services(tmp_path, charts)
+        client = sakura if source == "sakura" else kinoko
+        service = router.services[source]
+        try:
+            if source == "sakura":
+                assert (await router.bind_sakura("qq", "x" * 48))[0]
+            assert (await router.force_update("qq"))[0]
+            snapshots = service.db.get_rating_snapshots("qq")
+            assert snapshots and service.db.get_rating_cache("qq")["summary"]
+
+            client.data["data"]["songs"][0]["level"] = 2
+            ok, message = await router.force_update("qq")
+            assert ok and "没有可生成 Rating 的成绩" in message
+            assert {row["level"] for row in service.db.get_scores("qq")} == {2}
+            cache = service.db.get_rating_cache("qq")
+            assert cache["ratingUnavailable"] and "summary" not in cache
+            assert service.db.get_rating_snapshots("qq") == snapshots
+
+            calls = client.calls
+            assert "没有可生成 Rating 的成绩" in await router.get_rating_text("qq")
+            assert client.calls == calls
+            assert await router.generate_profile_image("qq", refresh=True) == (False, message)
+            assert client.calls - calls == (2 if source == "kinoko" else 1)
+            if source == "kinoko":
+                # A valid Hiroba response can still supply the rating when Kinoko has no rated charts.
+                unrated = normalize_sakura(copy.deepcopy(client.data))
+                client.kinoko = lambda *args: unrated
+                client.data["data"]["songs"][0]["level"] = 4
+                assert (await router.force_update("qq"))[0]
+                assert service.db.get_rating_cache("qq")["profileSource"] == "hiroba"
+        finally:
+            for service in router.services.values():
+                service.db.close()
+
+    asyncio.run(run())
+
+
+def test_kinoko_payload_for_other_player_cannot_replace_synced_scores(tmp_path, charts):
+    async def run():
+        router, client, _ = setup_services(tmp_path, charts)
+        db = router.services["kinoko"].db
+        try:
+            assert (await router.force_update("qq"))[0]
+            batches = db.get_score_syncs("qq")
+            rows = db.get_scores("qq")
+            client.data["taikoId"] = "other"
+            client.data["data"]["profile"]["userid"] = "other"
+            ok, message = await router.force_update("qq")
+            assert not ok and "玩家 ID 或服务器不一致" in message
+            binding = await router.services["kinoko"]._binding("qq")
+            ok, message = await router.bind("qq", "tk_replacement", binding["player_id"], "cn")
+            assert not ok and "玩家 ID 或服务器不一致" in message
+            assert await router.services["kinoko"]._binding("qq") == binding
+            assert db.get_score_syncs("qq") == batches
+            assert db.get_scores("qq") == rows
+        finally:
+            for service in router.services.values():
+                service.db.close()
+
+    asyncio.run(run())
+
+
 def test_switch_waits_for_inflight_operation(tmp_path, charts):
     async def run():
         router, _, _ = setup_services(tmp_path, charts)

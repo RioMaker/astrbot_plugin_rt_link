@@ -389,7 +389,11 @@ def test_service_get_rank_improvement_uses_cached_analysis(tmp_path):
 
     import improve_image
     from service import (
-        RATING_CACHE_SCHEMA, SCORE_STORAGE_SCHEMA, MemoryBindingsStore, ScoreService,
+        RATING_ALGORITHM_VERSION,
+        RATING_CACHE_SCHEMA,
+        SCORE_STORAGE_SCHEMA,
+        MemoryBindingsStore,
+        ScoreService,
     )
     from storage import ScoreDatabase
 
@@ -408,6 +412,7 @@ def test_service_get_rank_improvement_uses_cached_analysis(tmp_path):
         await service.store.save({qq: {"apikey": "tk_x", "player_id": player, "server": "cn"}})
         db.put_rating_cache(qq, {
             "_cacheSchema": RATING_CACHE_SCHEMA,
+            "ratingAlgorithmVersion": RATING_ALGORITHM_VERSION,
             "_ts": _time.time(),
             "meta": {"playerId": player, "server": "cn"},
             "records": [{

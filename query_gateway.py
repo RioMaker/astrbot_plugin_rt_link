@@ -4,12 +4,19 @@ from __future__ import annotations
 
 import json
 import math
+import sys
 from contextvars import ContextVar
 
 if __package__:
     from .dan_query import query_dan_courses_text
+    from .score_query import (
+        COMBO_MODES, MATCH_FIELDS, MATCH_MODES, SCOPES, SORT_ALIASES, normalize_text,
+    )
 else:
     from dan_query import query_dan_courses_text
+    from score_query import (
+        COMBO_MODES, MATCH_FIELDS, MATCH_MODES, SCOPES, SORT_ALIASES, normalize_text,
+    )
 
 ANALYSIS_SCOPE: ContextVar[dict | None] = ContextVar(
     "rtlink_query_analysis", default=None
@@ -148,6 +155,15 @@ NUMBER_ARGS = {
     "accuracy_min",
     "accuracy_max",
 }
+SEARCH_OPTIONS = {
+    "scope": SCOPES,
+    "match_mode": MATCH_MODES,
+    "match_fields": MATCH_FIELDS,
+    "combo": COMBO_MODES,
+    "reached": ("", "yes", "no", "all"),
+    "order": ("asc", "desc"),
+    "detail": ("brief", "full"),
+}
 LEVEL_STATS = {
     "get_difficulty_stats",
     "get_rank_distribution",
@@ -203,10 +219,13 @@ def item_arguments(item, parse_level, parse_rank):
         if key in INTEGER_ARGS:
             if isinstance(value, bool) or not isinstance(value, int):
                 raise ValueError(f"{key} 必须是整数。")
+            if abs(value) > sys.float_info.max:
+                raise ValueError(f"{key} 超出可处理范围。")
         elif key in NUMBER_ARGS:
             if (
                 isinstance(value, bool)
                 or not isinstance(value, (int, float))
+                or abs(value) > sys.float_info.max
                 or not math.isfinite(value)
             ):
                 raise ValueError(f"{key} 必须是有限数字。")
@@ -236,10 +255,13 @@ def item_arguments(item, parse_level, parse_rank):
             raise ValueError("target_rank 无法识别。")
         if tool == "find_rank_improvements":
             args["target_rank"] = rank
+    elif tool == "find_rank_improvements":
+        args.pop("target_rank", None)
     if "level" in args:
         value = args["level"]
         if tool == "search_scores":
-            tokens = value.replace("，", ",").replace("/", ",").split(",")
+            value = normalize_text(value).strip()
+            tokens = [] if value == "0" else value.replace("/", ",").split(",")
             levels = [parse_level(token.strip()) for token in tokens if token.strip()]
             if any(level not in (4, 5) for level in levels):
                 raise ValueError("检索难度仅支持鬼/里（4/5），多个用逗号分隔。")
@@ -256,18 +278,19 @@ def item_arguments(item, parse_level, parse_rank):
         else:
             args["level"] = ""
     if tool == "search_scores":
-        enums = {
-            "scope": {"played", "unrated", "unplayed", "all"},
-            "match_mode": {"contains", "exact", "regex", "all", "any"},
-            "match_fields": {"any", "title", "titleJa", "genre", "alias"},
-            "combo": {"", "full", "no-fc", "dondaful", "no-miss", "miss"},
-            "reached": {"", "yes", "no"},
-            "order": {"asc", "desc"},
-            "detail": {"brief", "full"},
-        }
-        for key, values in enums.items():
+        for key, values in SEARCH_OPTIONS.items():
             if key in args and args[key] not in values:
-                raise ValueError(f"{key} 可用：{'、'.join(sorted(values))}")
+                choices = "、".join(value or "空字符串" for value in values)
+                raise ValueError(f"{key} 可用：{choices}。")
+        sort = normalize_text(args.get("sort")).strip()
+        if sort and sort not in SORT_ALIASES:
+            raise ValueError(f"sort 无法识别：{args['sort']}。")
+        if not args.get("target_rank") and (
+            args.get("reached") in ("yes", "no")
+            or args.get("gap_max", -1) >= 0
+            or SORT_ALIASES.get(sort) == "gap"
+        ):
+            raise ValueError("按达成状态或分数缺口检索时，请指定 target_rank。")
     return tool, args
 
 

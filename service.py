@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import time
+import unicodedata
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -24,6 +25,7 @@ if __package__:
     from . import score_query as score_query_mod
     from . import score_rank as score_rank_mod
     from . import song_alias as song_alias_mod
+    from .account_identity import unbound_message
     from .api_client import KinokoClient, KinokoAPIError
     from .sakura_client import normalize_sakura
     from .dan_query import evaluate_player_dan_text
@@ -44,6 +46,7 @@ else:
     import score_query as score_query_mod
     import score_rank as score_rank_mod
     import song_alias as song_alias_mod
+    from account_identity import unbound_message
     from api_client import KinokoClient, KinokoAPIError
     from sakura_client import normalize_sakura
     from dan_query import evaluate_player_dan_text
@@ -71,6 +74,7 @@ RATING_CACHE_SCHEMA = 8
 RATING_HISTORY_SCHEMA = 2
 RATING_ALGORITHM_VERSION = rating_mod.RATING_ALGORITHM_VERSION
 SCORE_STORAGE_SCHEMA = 2
+NO_RATED_SCORES_MESSAGE = "当前没有可生成 Rating 的成绩。"
 
 
 def _catalog_identity() -> tuple[str, int | None]:
@@ -422,14 +426,20 @@ class ScoreService:
             return False, "apikey 应以 tk_ 开头，请检查后重试。"
         server = server or self.default_server
         try:
-            await asyncio.to_thread(
+            payload = await asyncio.to_thread(
                 self._client(apikey).hiroba_recent,
                 player_id=player_id,
                 server=server,
             )
+            meta = rating_mod.normalize_scores(payload, rated_only=False)["meta"]
+            self._verify_score_identity(meta, str(player_id), server)
         except KinokoAPIError as e:
             detail = str(e).replace(apikey, "[redacted]")
             return False, f"绑定失败：无法用该 apikey 查询玩家 {player_id}（{detail}）"
+        except rating_mod.RatingError as error:
+            return False, f"绑定失败：{error}"
+        except (AttributeError, TypeError, ValueError):
+            return False, "绑定失败：返回的成绩格式无效。"
 
         bindings = await self.store.load()
         bindings[qq] = {"apikey": apikey, "player_id": player_id, "server": server}
@@ -482,11 +492,7 @@ class ScoreService:
     @staticmethod
     def _sync_required_message(detail: str = "") -> str:
         prefix = (detail.strip() + "\n") if detail else ""
-        return prefix + (
-            "检测到插件更新后的全难度成绩数据尚未同步。请重新发送 /rtlink 自动同步，"
-            "或发送 /rtlink update 手动强制同步；/rtlink score <曲名>、"
-            "/rtlink rating、/rtlink profile、/rtlink weakness 也会按需自动同步。"
-        )
+        return prefix + "全难度成绩数据尚未同步。发送 /rtlink 生成个人画像，或发送 /rtlink update 手动同步成绩。"
 
     async def _score_storage_ready(self, qq, binding: dict | None = None) -> bool:
         if self.db is None:
@@ -516,7 +522,7 @@ class ScoreService:
     async def _sync(self, qq) -> tuple[bool, str, dict | None]:
         b = await self._binding(qq)
         if not b:
-            return False, "当前数据源尚未绑定。请私聊发送 /rtlink bind <apikey> <player_id> [server] 或 /rtlink bind sakura <token>", None
+            return False, unbound_message(qq), None
         apikey = b["apikey"]
         player_id = str(b.get("player_id") or "")
         server = b.get("server") or self.default_server
@@ -563,20 +569,37 @@ class ScoreService:
                     self._store_payload, qq, source_name, payload, player_id, server
                 )
                 stored[source_name] = payload
+            except rating_mod.RatingError as error:
+                errors[source_name] = str(error).replace(apikey, "[redacted]")
             except Exception:
                 errors[source_name] = "成绩解析或存储失败"
         if not stored:
             detail = "；".join(f"{k}: {v}" for k, v in errors.items()) or "未知错误"
             return False, f"查询失败：{detail}", None
-        source, payload_for_rating = next(iter(stored.items()))
-
         try:
-            result = await asyncio.to_thread(rating_mod.analyze, payload_for_rating, self.charts)
+            for source, payload_for_rating in stored.items():
+                result = await asyncio.to_thread(rating_mod.analyze, payload_for_rating, self.charts)
+                if result["records"]:
+                    break
         except rating_mod.RatingError as e:
             return False, f"评级计算失败：{e}", None
 
         if not result["records"]:
-            return False, "该账号暂无鬼/里（魔王/里魔王）谱面成绩，无法评级。请先在太鼓中游玩鬼级谱面。", None
+            if self.db is not None:
+                await asyncio.to_thread(self.db.put_rating_cache, qq, {
+                    "_cacheSchema": RATING_CACHE_SCHEMA,
+                    "_ts": time.time(),
+                    "ratingAlgorithmVersion": RATING_ALGORITHM_VERSION,
+                    "ratingUnavailable": True,
+                    "meta": {"playerId": player_id, "server": server},
+                    "profileSyncedAt": datetime.now(timezone.utc).isoformat(),
+                    "profileConfigurations": {
+                        "resourceHash": self.configuration_catalog.get("hash"),
+                        "algorithmVersion": CONFIGURATION_ALGORITHM,
+                    },
+                })
+                await asyncio.to_thread(self.db.set_sync_state, qq, source, True)
+            return True, f"同步完成。{NO_RATED_SCORES_MESSAGE}", None
 
         if self.provider == "sakura":
             # Sakura 不返回曲名，先补全共享的分析记录，供能力证据与推荐一并引用。
@@ -671,6 +694,16 @@ class ScoreService:
             self._logger.warning(warning)
         return True, "", slim
 
+    @staticmethod
+    def _verify_score_identity(meta, expected_player, expected_server):
+        game_player_id = meta.get("playerId")
+        server = meta.get("server")
+        if (
+            (expected_player and game_player_id and game_player_id != expected_player)
+            or (expected_server and server and server != expected_server)
+        ):
+            raise rating_mod.RatingError("返回的成绩账号与指定的玩家 ID 或服务器不一致。")
+
     def _store_payload(
         self, player_id: str, source: str, payload: dict,
         expected_game_player_id: str | None = None, expected_server: str | None = None,
@@ -696,25 +729,31 @@ class ScoreService:
                 "update_datetime": r.get("updatedAt"),
                 "raw": r.get("raw") or {},
             })
+        meta = normalized["meta"]
+        self._verify_score_identity(meta, expected_game_player_id, expected_server)
+        if not rows and normalized["diagnostics"]:
+            raise rating_mod.RatingError("返回的成绩记录均无法解析。")
         if self.db is None:
             return len(rows)
-        game_player_id = normalized["meta"].get("playerId") or expected_game_player_id
-        server = normalized["meta"].get("server") or expected_server
-        count = self.db.replace_scores(
+        game_player_id = meta.get("playerId") or expected_game_player_id
+        server = meta.get("server") or expected_server
+        metadata = {
+            f"score_storage_schema:{player_id}": {
+                "schema": SCORE_STORAGE_SCHEMA,
+                "playerId": str(game_player_id or ""),
+                "server": str(server or ""),
+            }
+        }
+        if source == "sakura":
+            metadata[f"source_payload:{player_id}"] = payload["sakura_userdata"]
+        return self.db.replace_scores(
             player_id,
             source,
             rows,
             game_player_id=game_player_id or None,
             server=server or None,
+            sync_metadata=metadata,
         )
-        self.db.kv_set(f"score_storage_schema:{player_id}", {
-            "schema": SCORE_STORAGE_SCHEMA,
-            "playerId": str(game_player_id or ""),
-            "server": str(server or ""),
-        })
-        if source == "sakura":
-            self.db.kv_set(f"source_payload:{player_id}", payload["sakura_userdata"])
-        return count
 
     async def get_player_dan_capability_text(
         self, qq, catalog: dict, year: int, region: str, rank: str
@@ -722,7 +761,7 @@ class ScoreService:
         """同步后将玩家最佳单曲记录与指定段位的可计算条件对照。"""
         binding = await self._binding(qq)
         if not binding:
-            return "当前数据源尚未绑定。请私聊发送 /rtlink bind <apikey> <player_id> [server] 或 /rtlink bind sakura <token>"
+            return unbound_message(qq)
         if self.db is None:
             return "本地成绩存储未启用，无法评估段位课题曲。"
 
@@ -764,30 +803,47 @@ class ScoreService:
             scope[key] = await self._load_analysis(qq)
         return scope[key]
 
-    async def _load_analysis(self, qq) -> tuple[dict | None, str]:
+    async def _load_analysis(self, qq, *, refresh=False) -> tuple[dict | None, str]:
         if not qq:
             return None, "无法识别你的 QQ 号。"
-        if not await self._binding(qq):
-            return None, "当前数据源尚未绑定。请私聊发送 /rtlink bind <apikey> <player_id> [server] 或 /rtlink bind sakura <token>"
-        if self.db is not None:
+        binding = await self._binding(qq)
+        if not binding:
+            return None, unbound_message(qq)
+        if self.db is not None and not refresh:
             cache = await asyncio.to_thread(self.db.get_rating_cache, qq)
-            storage_ready = await self._score_storage_ready(qq)
-            if (
-                cache
-                and cache.get("_cacheSchema") == RATING_CACHE_SCHEMA
-                and (cache.get('profileConfigurations') or {}).get('resourceHash') == self.configuration_catalog.get('hash')
-                and (not self.configuration_catalog.get('available') or (cache.get('profileConfigurations') or {}).get('algorithmVersion') == CONFIGURATION_ALGORITHM)
-                and storage_ready
-                and time.time() - float(cache.get("_ts") or 0) < self.sync_ttl
-            ):
+            if cache and self._rating_cache_matches(cache, binding) and await self._score_storage_ready(qq, binding):
+                if cache.get("ratingUnavailable"):
+                    return None, NO_RATED_SCORES_MESSAGE
                 cache["meta"] = {**cache.get("meta", {}), "provider": self.provider_label}
                 return cache, ""
         ok, msg, slim = await self._sync(qq)
         if not ok:
-            if self.db is not None and not await self._score_storage_ready(qq):
+            if self.db is not None and not await self._score_storage_ready(qq, binding):
                 msg = self._sync_required_message(msg)
             return None, msg
+        if slim is None:
+            return None, msg if refresh else NO_RATED_SCORES_MESSAGE
         return slim, ""
+
+    def _rating_cache_matches(self, cache, binding):
+        meta = cache.get("meta")
+        configurations = cache.get("profileConfigurations") or {}
+        cached_at = cache.get("_ts")
+        return (
+            cache.get("_cacheSchema") == RATING_CACHE_SCHEMA
+            and cache.get("ratingAlgorithmVersion") == RATING_ALGORITHM_VERSION
+            and isinstance(meta, dict)
+            and meta.get("playerId") == str(binding.get("player_id") or "")
+            and meta.get("server") == (binding.get("server") or self.default_server)
+            and isinstance(configurations, dict)
+            and configurations.get("resourceHash") == self.configuration_catalog.get("hash")
+            and (
+                not self.configuration_catalog.get("available")
+                or configurations.get("algorithmVersion") == CONFIGURATION_ALGORITHM
+            )
+            and isinstance(cached_at, (int, float))
+            and time.time() - cached_at < self.sync_ttl
+        )
 
     async def _record_rating_snapshot(self, qq, analysis: dict, trigger: str) -> bool:
         if self.db is None:
@@ -808,17 +864,20 @@ class ScoreService:
             return False
 
     async def force_update(self, qq) -> tuple[bool, str]:
-        """跳过缓存，从菌菌重新拉取成绩、计算 Rating 并记录快照。"""
+        """跳过缓存同步当前来源的成绩，有可评级成绩时更新 Rating。"""
         ok, message, analysis = await self._sync(qq)
-        if not ok or analysis is None:
-            if self.db is not None and not await self._score_storage_ready(qq):
+        if not ok:
+            binding = await self._binding(qq)
+            if self.db is not None and binding and not await self._score_storage_ready(qq, binding):
                 message = self._sync_required_message(message)
             return False, message
+        if analysis is None:
+            return True, message
         recorded = analysis.get('_historySaved', False)
         rating = float((analysis.get("summary") or {}).get("rating") or 0)
         chart_count = len(analysis.get("records") or [])
-        suffix = "历史已保存（相同成绩不会重复记点）。" if recorded else "成绩已更新，但历史快照未保存，请检查日志。"
-        return True, f"更新完成：已从{self.provider_label}拉取 {chart_count} 张有效成绩，综合 Rating {rating:.2f}；{suffix}"
+        suffix = "历史已保存（相同成绩不会重复记点）。" if recorded else "历史快照未保存，请检查日志。"
+        return True, f"同步完成。{self.provider_label}有 {chart_count} 张可评级成绩，综合 Rating {rating:.2f}。{suffix}"
 
     def _records(self, analysis: dict) -> list:
         return [{**row, "title": song_alias_mod.display_name(
@@ -950,8 +1009,11 @@ class ScoreService:
         """按精准 ID、曲名或别名解析歌曲；返回 (song, 提示)。song 为 None 时提示非空。"""
         idx = self._song_index()
         text = (target or "").strip()
-        if text.isdigit():
-            song_no = int(text)
+        id_text = unicodedata.normalize("NFKC", text)
+        if id_text.isdecimal():
+            if len(id_text) > 20:
+                return None, "曲目 ID 超出支持范围。"
+            song_no = int(id_text)
             info = idx.get(song_no)
             if info is None:
                 return None, f"歌曲 ID {song_no} 不在谱面库中。"
@@ -997,15 +1059,21 @@ class ScoreService:
         q = (query or "").strip()
         if not q:
             return []
+        id_text = unicodedata.normalize("NFKC", q)
+        if id_text.isdecimal():
+            if len(id_text) > 20:
+                return []
+            song_no = int(id_text)
+            return [r for r in records if r.get("id") == song_no]
+        alias_map = await self._get_alias_map()
+        approved_song_no = alias_map.get(q.lower())
+        if approved_song_no is not None:
+            return [r for r in records if r.get("id") == int(approved_song_no)]
         normalized = song_alias_mod.normalize(q)
         matched_ids = set()
         for song_no, names in (self.aliases.get("song_index") or {}).items():
             if any(song_alias_mod.normalize(name) == normalized for name in names):
                 matched_ids.add(int(song_no))
-        alias_map = await self._get_alias_map()
-        song_no = alias_map.get(q.lower())
-        if song_no is not None:
-            matched_ids.add(int(song_no))
         if matched_ids:
             return [r for r in records if r.get("id") in matched_ids]
         hits = song_alias_mod.resolve(self.aliases, q, limit=12)
@@ -1021,27 +1089,49 @@ class ScoreService:
             return err
         prefix_level, clean = parse_song_query(song_name)
         lvl = level if level is not None else prefix_level
+        if lvl is not None and lvl not in (4, 5):
+            return f"{difficulty_label(lvl)} 不在评级范围内（本系统仅评估鬼/里）。"
+
         records = self._records(analysis)
-        matched = await self._resolve_query_to_records(records, clean)
+        scores = {(row["id"], row["level"]): row for row in records}
+        for row in analysis.get("profileScoreRows") or ():
+            if row["level"] in (4, 5):
+                scores.setdefault((row["id"], row["level"]), dict(row))
+        for row in analysis.get("unrated") or ():
+            key = row["id"], row["level"]
+            if key[1] not in (4, 5):
+                continue
+            score = scores.setdefault(key, {"id": key[0], "level": key[1]})
+            if score.get("rating") is None:
+                score["unratedReason"] = row.get("reason")
+        matched = await self._resolve_query_to_records(list(scores.values()), clean)
         if lvl is not None:
-            if lvl not in (4, 5):
-                return f"{difficulty_label(lvl)} 不在评级范围内（本系统仅评估鬼/里）。"
             matched = [r for r in matched if r.get("level") == lvl]
         if not matched:
-            return self._no_score_message(clean or song_name, lvl, records)
+            return self._no_score_message(clean or song_name, lvl)
+        for row in matched:
+            if not row.get("title"):
+                row.update(self._song_summary(row["id"]))
         return self._format_song_rows(matched)
 
-    def _no_score_message(self, query: str, level, records: list) -> str:
+    def _no_score_message(self, query: str, level) -> str:
         """没查到成绩时区分「没这首歌」和「有这首歌但你还没打」。"""
-        hits = [hit for hit in song_alias_mod.resolve(self.aliases, query, limit=5)
-                if level is None or hit["level"] == level]
-        if hits:
+        id_text = unicodedata.normalize("NFKC", query.strip())
+        if id_text.isdecimal():
+            requested = int(id_text) if len(id_text) <= 20 else None
+            song_ids = [requested] if requested in self._song_index() else []
+        else:
+            song_ids = [
+                hit["song_no"]
+                for hit in song_alias_mod.resolve(self.aliases, query, level=level, limit=3)
+            ]
+        if song_ids:
             names = "、".join(
-                f"《{self._song_summary(hit['song_no'])['title']}》(ID {hit['song_no']})" for hit in hits[:3]
+                f"《{self._song_summary(song_no)['title']}》(ID {song_no})" for song_no in song_ids
             )
             return (
-                f"{names} 暂无你的成绩记录（同步的鬼/里成绩里没有这张谱）。"
-                "可用 /rtlink update 重新同步，或换一首已打过的曲目。"
+                f"{names} 当前同步数据暂无该难度的成绩。"
+                "发送 /rtlink update 可重新同步。"
             )
         hint = "，试试更精确的曲名或别名" if not query else ""
         return f"未找到与「{query}」匹配的曲目{hint}。可用 /rtlink alias 提交常用别名。"
@@ -1070,6 +1160,15 @@ class ScoreService:
                 head += f"（{title_ja}）"
             lines.append(head)
             for r in recs:
+                if r.get("rating") is None:
+                    lines.append(
+                        f"  {difficulty_label(r.get('level'))}：已游玩，未参与评级"
+                        f"｜评价 {_rank_text(r.get('bestScoreRank'))}"
+                        f"｜最高分 {r.get('highScore') if r.get('highScore') is not None else '—'}"
+                    )
+                    if r.get("unratedReason"):
+                        lines.append(f"      {r['unratedReason']}")
+                    continue
                 lines.append(
                     "  {}：Rating {}｜精度 {:.1f}%｜定数 {}｜评价 {}｜最高分 {}｜全连 {}｜咚大福 {}".format(
                         difficulty_label(r.get("level")),
@@ -1134,10 +1233,13 @@ class ScoreService:
         return True, path
 
     async def _generate_analysis_image(
-        self, qq, prefix, renderer, label
+        self, qq, prefix, renderer, label, *, refresh=False
     ) -> tuple[bool, str]:
         """使用新文件名渲染分析图片，避免 AstrBot/QQ 复用旧图缓存。"""
-        analysis, err = await self._get_analysis(qq)
+        if refresh:
+            analysis, err = await self._load_analysis(qq, refresh=True)
+        else:
+            analysis, err = await self._get_analysis(qq)
         if err:
             return False, err
         if prefix == 'progress' and self.db is not None and (analysis.get('profileConfigurations') or {}).get('available'):
@@ -1185,11 +1287,9 @@ class ScoreService:
 
     async def generate_profile_image(self, qq, *, refresh=False) -> tuple[bool, str]:
         """生成玩家 profile 图片；可先强制同步，失败时不输出旧画像。"""
-        if refresh:
-            ok, message = await self.force_update(qq)
-            if not ok:
-                return False, message
-        return await self._generate_analysis_image(qq, "profile", render_profile_image, "玩家画像")
+        return await self._generate_analysis_image(
+            qq, "profile", render_profile_image, "玩家画像", refresh=refresh
+        )
 
     async def generate_configuration_image(self, qq) -> tuple[bool, str]:
         return await self._generate_analysis_image(qq, 'progress', render_configuration_image, '配置评分')
@@ -1647,22 +1747,27 @@ class ScoreService:
         if not targets:
             return "暂无成绩记录。"
         target = targets[0]
+        meta = analysis.get("meta") or {}
+        identity = {
+            "game_player_id": str(meta.get("playerId") or ""),
+            "server": str(meta.get("server") or ""),
+        }
         # 成长趋势优先用 kinoko 全历史；无 kinoko 时回退 hiroba 最新快照。
         history = await asyncio.to_thread(
-            self.db.get_player_history, qq, target["id"], target["level"], "sakura" if self.provider == "sakura" else "kinoko"
+            self.db.get_player_history, qq, target["id"], target["level"],
+            "sakura" if self.provider == "sakura" else "kinoko", **identity,
         )
-        if not history:
+        if not history and self.provider == "kinoko":
             history = await asyncio.to_thread(
-                self.db.get_player_history, qq, target["id"], target["level"], "hiroba"
+                self.db.get_player_history, qq, target["id"], target["level"], "hiroba", **identity,
             )
         if len(history) < 2:
             return f"《{target['title']}》只有 {len(history)} 条历史记录，不足以判断趋势。"
         lines = [f"《{target['title']}》成长趋势（共 {len(history)} 条）："]
         for h in history:
-            raw = json.loads(h.get("raw_json") or "{}")
-            total = (raw.get("good_cnt") or 0) + (raw.get("ok_cnt") or 0) + (raw.get("ng_cnt") or 0)
-            acc = (raw.get("good_cnt") or 0) + (raw.get("ok_cnt") or 0) * 0.5
-            acc_pct = acc / total * 100 if total else 0
+            good, ok, ng = (int(h.get(field) or 0) for field in ("good_cnt", "ok_cnt", "ng_cnt"))
+            total = good + ok + ng
+            acc_pct = (good + 0.5 * ok) / total * 100 if total else 0
             lines.append(
                 f"  {h.get('update_datetime') or h.get('highscore_datetime') or h.get('fetched_at')}："
                 f"分 {h.get('high_score')}｜精度 {acc_pct:.1f}%｜评价 {_rank_text(h.get('best_score_rank'))}"
@@ -1847,7 +1952,7 @@ class ScoreService:
         if not qq:
             return "无法识别你的 QQ 号。"
         if not await self._binding(qq):
-            return "当前数据源尚未绑定。请私聊发送 /rtlink bind <apikey> <player_id> [server] 或 /rtlink bind sakura <token>"
+            return unbound_message(qq)
         if self.db is None:
             return "本地存储未启用，无法设置别名。"
         target = (target or "").strip()
@@ -1892,16 +1997,19 @@ class ScoreService:
         arg = (args or "").strip()
         if not arg:
             return "用法：/rtlink aliasapprove all  或  /rtlink aliasapprove <编号> [编号...]"
-        if arg.lower() == "all":
+        if unicodedata.normalize("NFKC", arg).casefold() == "all":
             pending = await asyncio.to_thread(self.db.list_pending_aliases)
             ids = [a["id"] for a in pending]
         else:
             ids = []
             for tok in arg.split():
-                if tok.isdigit():
-                    ids.append(int(tok))
-                else:
-                    return f"「{tok}」不是有效的审批编号。"
+                try:
+                    number = int(tok) if tok.isdecimal() else 0
+                except ValueError:
+                    number = 0
+                if not 1 <= number < 2**63:
+                    return "审批编号无效，请填写待审批列表中的正整数编号。"
+                ids.append(number)
         if not ids:
             return "没有可审批的编号。"
         approved = await asyncio.to_thread(self.db.approve_aliases, ids)

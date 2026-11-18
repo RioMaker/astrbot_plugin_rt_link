@@ -25,6 +25,7 @@ from storage import ScoreDatabase, load_dan_courses
 
 def make_service():
     analysis, charts = material()
+    analysis["meta"]["playerId"] = "game1"
     for row in analysis["records"]:
         row["updatedAt"] = "2099-01-01 00:00:00"
         row["genre"] = "J-POP"
@@ -104,9 +105,9 @@ def test_composite_search_preserves_zero_filters_scope_and_rank_routes():
         result = await service.get_readonly_queries_text(
             "qq",
             [
-                query("search_scores", ng_max=0),
+                query("search_scores", ng_max=0, level=0),
                 query(
-                    "search_scores", ng_min=1, level="4,5", sort="accuracy", order="asc"
+                    "search_scores", ng_min=1, level="４／５", sort="精度", order="asc"
                 ),
                 query("search_scores", scope="unplayed", song_no=9),
                 query("search_scores", scope="unrated", song_no=10),
@@ -128,8 +129,31 @@ def test_composite_search_preserves_zero_filters_scope_and_rank_routes():
     asyncio.run(run())
 
 
+def test_song_score_matches_numeric_ids_and_reports_unrated_scores():
+    async def run():
+        service, _ = make_service()
+        analysis, _ = await service._load_analysis("qq")
+        analysis["profileScoreRows"][0]["highScore"] = 543210
+        rows = await service.get_readonly_queries_text(
+            "qq",
+            [
+                query("query_taiko_score", song_name="鬼 １"),
+                query("query_taiko_score", song_name="9"),
+                query("query_taiko_score", song_name="10"),
+            ],
+            {},
+        )
+        rated, recorded, mismatched = (row["data"] for row in rows["results"])
+        assert "歌曲1" in rated and "歌曲10" not in rated and "790000" in rated
+        assert "歌曲9" in recorded and "未参与评级" in recorded and "543210" in recorded
+        assert "歌曲10" in mismatched and "谱面版本不匹配" in mismatched
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("target", ["caller", "bot"])
 def test_public_dan_and_detailed_chart_queries_work_without_binding(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, target
 ):
     library_root, *_ = build_fixture(tmp_path, monkeypatch)
     service = ScoreService(
@@ -161,7 +185,9 @@ def test_public_dan_and_detailed_chart_queries_work_without_binding(
                     ),
                     query("get_chart_analysis", song_name="Sample", detail="features"),
                     query("get_library_status"),
+                    query("get_source_status"),
                 ],
+                target=target,
             )
         )
     )
@@ -171,6 +197,8 @@ def test_public_dan_and_detailed_chart_queries_work_without_binding(
     assert [row["measure"] for row in chart["segments"]] == [2, 3]
     assert chart["nextOffset"] is None and chart["limitations"]
     assert result["results"][2]["data"]["features"] == {"test_feature": 2}
+    assert result["results"][4]["data"]["bound"] is False
+    assert result["subject"]["target"] == target
     assert result["snapshot"] is None
 
 
@@ -202,6 +230,8 @@ def test_growth_and_dan_capability_are_available_in_same_batch(tmp_path):
                             "raw": {"good_cnt": 960 + i, "ok_cnt": 30, "ng_cnt": 5},
                         }
                     ],
+                    game_player_id="game1",
+                    server="cn",
                 )
             course = plugin.dan_courses["by_key"][(2023, "cn", "五级")]
             db.replace_scores(
@@ -262,6 +292,11 @@ def test_growth_and_dan_capability_are_available_in_same_batch(tmp_path):
         query("search_scores", limit=201),
         query("search_scores", level="typo"),
         query("search_scores", scope="typo"),
+        query("search_scores", sort="bad_sort"),
+        query("search_scores", reached="no"),
+        query("search_scores", gap_max=0),
+        query("search_scores", constant_min=10**400),
+        query("search_scores", song_no=10**400),
         query("find_rank_improvements", target_rank="typo"),
         query("get_chart_analysis", song_name="X", limit=21),
         query("evaluate_player_dan", year=0, rank="十段"),

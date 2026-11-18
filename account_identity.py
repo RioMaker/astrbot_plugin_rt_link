@@ -15,4 +15,12 @@ def query_owner(event, target):
     return owner
 
 
-BOT_UNBOUND = "可可子的当前数据源尚未绑定。请管理员在 AstrBot 插件管理页的「可可子账号」中设置 Token 和当前来源。"
+BOT_UNBOUND = "可可子的当前数据源尚未绑定。请管理员在 AstrBot 插件管理页的「可可子账号」中保存凭据并选择当前来源。"
+PLAYER_UNBOUND = (
+    "当前数据源尚未绑定。请在私聊发送 /rtlink bind <apikey> <player_id> [server] "
+    "或 /rtlink bind sakura <token>。"
+)
+
+
+def unbound_message(owner):
+    return BOT_UNBOUND if owner == BOT_OWNER_ID else PLAYER_UNBOUND

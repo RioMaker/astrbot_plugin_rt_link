@@ -1,24 +1,24 @@
 {
   "base_url": {
-    "description": "菌菌控制台公开 API Base URL",
+    "description": "菌菌 API 基础地址",
     "type": "text",
     "hint": "默认 https://kinoko.zorua.cn/api/v1",
     "default": "https://kinoko.zorua.cn/api/v1"
   },
   "default_server": {
-    "description": "默认服务器（查询时未显式指定则使用）",
+    "description": "菌菌默认服务器（绑定时省略 server 使用）",
     "type": "text",
     "hint": "cn / jp / custom",
     "default": "cn"
   },
   "request_timeout": {
-    "description": "请求超时（秒）",
+    "description": "成绩接口请求超时（秒）",
     "type": "int",
     "hint": "建议 10~60",
     "default": 30
   },
   "sync_ttl": {
-    "description": "成绩同步缓存有效期（秒），过期后重新拉取当前数据源 API",
+    "description": "成绩缓存有效期（秒），过期后的玩家查询会尝试同步当前来源",
     "type": "int",
     "hint": "建议 300~3600",
     "default": 300

@@ -216,6 +216,39 @@ def test_missing_queries_returns_migration_hint_without_spending_budget():
     assert not hasattr(ev, "_rtlink_ai_state")
 
 
+def test_unbound_bot_keeps_public_song_and_dan_results(tmp_path, charts):
+    async def run():
+        router, kinoko, sakura = setup_services(tmp_path, charts)
+        try:
+            star = plugin(router, tmp_path)
+            song_id = str(kinoko.data["data"]["songs"][0]["song_no"])
+            batch = json.loads(
+                await star.query_rtlink(
+                    event(),
+                    [
+                        {"tool": "get_player_rating"},
+                        {"tool": "query_song_brief", "args": {"song_name": song_id}},
+                        {"tool": "query_dan_course", "args": {"song_no": 765}},
+                    ],
+                    target="bot",
+                )
+            )
+            player, song, dan = batch["results"]
+            assert batch["subject"]["target"] == "bot" and batch["snapshot"] is None
+            assert "可可子的当前数据源尚未绑定" in player["data"]
+            assert "插件内置公共谱面库" in song["data"]
+            assert "可可子的当前数据源尚未绑定" in song["data"]
+            assert "达人" in dan["data"]
+            brief = await star.query_song_brief(event(), song_id, target="bot")
+            assert "插件内置公共谱面库" in brief
+            assert "可可子的当前数据源尚未绑定" in brief
+            assert kinoko.calls == sakura.calls == 0
+        finally:
+            close(router)
+
+    asyncio.run(run())
+
+
 def test_plugin_config_injection_and_legacy_bindings_survive_rollback(
     tmp_path, monkeypatch
 ):

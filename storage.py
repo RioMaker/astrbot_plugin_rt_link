@@ -318,9 +318,12 @@ class ScoreDatabase:
         fetched_at: str | None = None,
         game_player_id: str | None = None,
         server: str | None = None,
+        *,
+        sync_metadata: dict | None = None,
     ) -> int:
         """更新当前最佳成绩，并把每次同步及变化状态写入历史表。"""
         fetched_at = fetched_at or now_iso()
+        player_id = str(player_id)
         current = {}
         for row in rows:
             key = (row["id"], row["level"])
@@ -338,7 +341,7 @@ class ScoreDatabase:
                 "INSERT INTO score_syncs "
                 "(owner_id, game_player_id, server, source, fetched_at, received_count, current_count) "
                 "VALUES (?,?,?,?,?,?,?)",
-                (str(player_id), game_player_id, server, source, fetched_at, len(rows), len(current_rows)),
+                (player_id, game_player_id, server, source, fetched_at, len(rows), len(current_rows)),
             )
             sync_id = int(sync_cur.lastrowid)
             changed_count = 0
@@ -352,25 +355,35 @@ class ScoreDatabase:
                     )
                 }
                 state["raw"] = raw_json
-                state_hash = hashlib.sha256(
+                legacy_hash = hashlib.sha256(
                     json.dumps(state, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
                 ).hexdigest()
+                # 旧哈希只包含成绩内容。将游戏身份纳入哈希，避免换绑后相同成绩被旧账号吞掉。
+                identity_key = json.dumps((game_player_id, server, legacy_hash), separators=(",", ":"))
+                state_hash = hashlib.sha256(identity_key.encode("utf-8")).hexdigest()
                 history_cur = self._conn.execute(
                     """
-                    INSERT OR IGNORE INTO score_history
+                    INSERT INTO score_history
                     (sync_id, owner_id, game_player_id, server, song_no, level, source,
                      good_cnt, ok_cnt, ng_cnt, pound_cnt, combo_cnt, stage_cnt, clear_cnt,
                      full_combo_cnt, dondaful_cnt, high_score, best_score_rank,
                      highscore_datetime, update_datetime, raw_json, state_hash, fetched_at)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM score_history
+                        WHERE owner_id=? AND source=? AND song_no=? AND level=? AND state_hash=?
+                        AND game_player_id IS ? AND server IS ?
+                    )
+                    ON CONFLICT(owner_id, source, song_no, level, state_hash) DO NOTHING
                     """,
                     (
-                        sync_id, str(player_id), game_player_id, server, r["id"], r["level"], source,
+                        sync_id, player_id, game_player_id, server, r["id"], r["level"], source,
                         r.get("good_cnt"), r.get("ok_cnt"), r.get("ng_cnt"), r.get("pound_cnt"),
                         r.get("combo_cnt"), r.get("stage_cnt"), r.get("clear_cnt"),
                         r.get("full_combo_cnt"), r.get("dondaful_cnt"), r.get("high_score"),
                         r.get("best_score_rank"), r.get("highscore_datetime"),
                         r.get("update_datetime"), raw_json, state_hash, fetched_at,
+                        player_id, source, r["id"], r["level"], legacy_hash, game_player_id, server,
                     ),
                 )
                 changed_count += history_cur.rowcount
@@ -401,6 +414,8 @@ class ScoreDatabase:
             self._conn.execute(
                 "UPDATE score_syncs SET changed_count=? WHERE id=?", (changed_count, sync_id)
             )
+            for key, value in (sync_metadata or {}).items():
+                self._write_kv(key, value, fetched_at)
             return len(current_rows)
 
     def get_scores(self, player_id: str, source: str | None = None) -> list:
@@ -416,22 +431,31 @@ class ScoreDatabase:
                 )
             return [dict(r) for r in cur.fetchall()]
 
-    def get_player_history(self, player_id: str, song_no: int, level: int, source: str | None = None) -> list:
+    def get_player_history(
+        self,
+        player_id: str,
+        song_no: int,
+        level: int,
+        source: str | None = None,
+        *,
+        game_player_id: str | None = None,
+        server: str | None = None,
+    ) -> list:
         """指定谱面的历史记录（按时间升序），用于成长趋势。"""
+        sql = "SELECT * FROM score_history WHERE owner_id=? AND song_no=? AND level=?"
+        args = [str(player_id), song_no, level]
+        if source:
+            sql += " AND source=?"
+            args.append(source)
+        if game_player_id is not None:
+            sql += " AND game_player_id=?"
+            args.append(str(game_player_id))
+        if server is not None:
+            sql += " AND server=?"
+            args.append(server)
+        sql += " ORDER BY COALESCE(NULLIF(update_datetime, ''), NULLIF(highscore_datetime, ''), fetched_at), id"
         with self._lock:
-            if source:
-                cur = self._conn.execute(
-                    "SELECT * FROM score_history WHERE owner_id=? AND song_no=? AND level=? AND source=? "
-                    "ORDER BY COALESCE(update_datetime, highscore_datetime, fetched_at)",
-                    (player_id, song_no, level, source),
-                )
-            else:
-                cur = self._conn.execute(
-                    "SELECT * FROM score_history WHERE owner_id=? AND song_no=? AND level=? "
-                    "ORDER BY COALESCE(update_datetime, highscore_datetime, fetched_at)",
-                    (player_id, song_no, level),
-                )
-            return [dict(r) for r in cur.fetchall()]
+            return [dict(row) for row in self._conn.execute(sql, args)]
 
     def reset_current_player(self, player_id: str) -> None:
         """重新绑定时清除当前态与缓存，保留带游戏账号标识的历史记录。"""
@@ -473,6 +497,19 @@ class ScoreDatabase:
             row = self._conn.execute(sql + " ORDER BY id DESC LIMIT 1", args).fetchone()
         return dict(row) if row else None
 
+    def list_latest_score_sync_identities(self) -> dict[str, dict[str, str]]:
+        """读取每个所有者最后一批同步中留存的游戏身份。"""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT owner_id, game_player_id, server FROM score_syncs "
+                "WHERE id IN (SELECT MAX(id) FROM score_syncs GROUP BY owner_id) "
+                "AND game_player_id IS NOT NULL AND game_player_id != ''"
+            ).fetchall()
+        return {
+            row["owner_id"]: {"player_id": row["game_player_id"], "server": row["server"] or ""}
+            for row in rows
+        }
+
     # -- 聚合缓存 ----------------------------------------------------------
     def put_rating_cache(self, player_id: str, payload: dict) -> None:
         with self._lock:
@@ -493,7 +530,8 @@ class ScoreDatabase:
         if not row:
             return None
         try:
-            return json.loads(row["payload_json"])
+            value = json.loads(row["payload_json"])
+            return value if isinstance(value, dict) else None
         except (ValueError, TypeError):
             return None
 
@@ -617,14 +655,16 @@ class ScoreDatabase:
         except (ValueError, TypeError):
             return default
 
+    def _write_kv(self, key: str, value, updated_at: str) -> None:
+        self._conn.execute(
+            "INSERT INTO kv (key, value_json, updated_at) VALUES (?,?,?) "
+            "ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json, updated_at=excluded.updated_at",
+            (key, json.dumps(value, ensure_ascii=False), updated_at),
+        )
+
     def kv_set(self, key: str, value) -> None:
-        with self._lock:
-            self._conn.execute(
-                "INSERT INTO kv (key, value_json, updated_at) VALUES (?,?,?) "
-                "ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json, updated_at=excluded.updated_at",
-                (key, json.dumps(value, ensure_ascii=False), now_iso()),
-            )
-            self._conn.commit()
+        with self._lock, self._conn:
+            self._write_kv(key, value, now_iso())
 
     # -- 歌曲别名（两步确认 + 管理员审批） ---------------------------------
     def add_alias_request(self, song_no: int, alias: str, song_title: str, song_title_ja: str | None, created_by: str) -> int | None:

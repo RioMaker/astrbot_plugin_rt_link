@@ -19,7 +19,9 @@ import main  # noqa: E402
 class FakeService:
     def __init__(self):
         self.bind_calls = []
+        self.unbind_calls = []
         self.profile_calls = []
+        self.improve_calls = []
         self.sync_reminder = ""
 
     async def generate_report_image(self, qq):
@@ -41,6 +43,10 @@ class FakeService:
     async def generate_weakness_image(self, qq):
         return True, f"weakness-{qq}.png"
 
+    async def generate_rank_improve_image(self, qq, target, level):
+        self.improve_calls.append((qq, target, level))
+        return True, f"improve-{qq}.png"
+
     async def force_update(self, qq):
         return True, f"更新完成：{qq}"
 
@@ -49,6 +55,7 @@ class FakeService:
         return True, "绑定成功"
 
     async def unbind(self, qq):
+        self.unbind_calls.append(qq)
         return True, "已解绑"
 
     async def list_bindings(self):
@@ -80,6 +87,9 @@ class FakeService:
 
     async def approve_aliases_text(self, args):
         return f"已审批：{args}"
+
+    async def chart_library_status_text(self):
+        return "公共谱面分析库"
 
 
 def make_plugin():
@@ -123,7 +133,7 @@ async def run_dispatch_cases():
         message_str="rtlink bind tk_test 30053354 cn",
     )
     assert await invoke(plugin, group_bind, "bind") == [
-        "请在私聊中发送绑定命令，避免 apikey 泄露到群聊。"
+        "请在私聊中发送绑定指令，避免在群聊公开凭据。"
     ]
     assert plugin.service.bind_calls == []
 
@@ -182,6 +192,67 @@ async def run_dispatch_cases():
 
 def test_dispatch_replies_for_user_admin_private_and_group():
     asyncio.run(run_dispatch_cases())
+
+
+def test_dispatch_reads_the_argument_tail_once_and_keeps_song_text():
+    plugin = make_plugin()
+
+    async def replies(message, fallback=""):
+        event = mock.AstrMessageEvent("qq", private=False, is_admin=False, message_str=message)
+        return await invoke(plugin, event, fallback)
+
+    assert asyncio.run(replies("/RTLINK\tＳＣＯＲＥ　Ｆｌｙ  Ａｗａｙ")) == [
+        "查分成功：qq:Ｆｌｙ  Ａｗａｙ"
+    ]
+    assert asyncio.run(replies("/rtlink", "score score Fly Away")) == [
+        "查分成功：qq:score Fly Away"
+    ]
+    assert asyncio.run(replies('/rtlink alias "Fly Away" 日本 版')) == ["别名申请：Fly Away:日本 版"]
+    assert asyncio.run(replies("/rtlink alias 「Fly Away」 Ｆｌｙ")) == ["别名申请：Fly Away:Ｆｌｙ"]
+    assert asyncio.run(replies("/rtlink alias 夏祭り 新 夏祭")) == ["别名申请：夏祭り:新 夏祭"]
+    assert asyncio.run(replies('/rtlink alias "Fly Away 日本 版'))[0].startswith("用法：")
+    assert asyncio.run(replies("/rtlink unbind sakura")) == ["用法：/rtlink unbind"]
+    assert plugin.service.unbind_calls == []
+
+
+def test_improve_accepts_known_aliases_and_stops_on_invalid_parameters():
+    plugin = make_plugin()
+
+    async def replies(args):
+        event = mock.AstrMessageEvent("qq", private=False, is_admin=False, message_str=f"/rtlink {args}")
+        return await invoke(plugin, event)
+
+    for args in ("improve", "improve ４", "提升 ５　５", "紫雅 鬼", "improve 鬼 kiwami"):
+        assert asyncio.run(replies(args)) == ["improve-qq.png"]
+    assert plugin.service.improve_calls == [
+        ("qq", None, None), ("qq", 4, None), ("qq", 5, 5), ("qq", 7, 4), ("qq", 8, 4),
+    ]
+    plugin.service.improve_calls.clear()
+    for args in ("improve 紫雅 拼错", "improve 金雅 紫雅", "improve 金雅 松", "紫雅 鬼 鬼"):
+        assert asyncio.run(replies(args))[0].startswith("用法：/rtlink improve")
+    assert asyncio.run(replies("拼错 紫雅"))[0].startswith("未知子指令")
+    assert plugin.service.improve_calls == []
+
+
+def test_library_is_public_and_only_admin_can_retry():
+    plugin = make_plugin()
+    retries = []
+
+    class Installer:
+        def start(self, *, force):
+            retries.append(force)
+
+    plugin.chart_installer = Installer()
+
+    async def replies(text, admin=False):
+        event = mock.AstrMessageEvent("qq", private=True, is_admin=admin, message_str=text)
+        return await invoke(plugin, event)
+
+    assert asyncio.run(replies("/rtlink library")) == ["公共谱面分析库"]
+    assert asyncio.run(replies("/rtlink library retry"))[0].startswith("无权限")
+    assert retries == []
+    assert asyncio.run(replies("/rtlink library ＲＥＴＲＹ", admin=True)) == ["公共谱面分析库"]
+    assert retries == [True]
 
 
 def test_only_root_command_is_registered():

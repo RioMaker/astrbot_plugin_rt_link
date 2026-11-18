@@ -1,12 +1,21 @@
 # -*- coding: utf-8 -*-
 
-import sqlite3
 import asyncio
+import hashlib
+import json
+import sqlite3
 import time
 from pathlib import Path
 
+import pytest
+
 from rating import normalize_scores
-from service import MemoryBindingsStore, RATING_CACHE_SCHEMA, ScoreService
+from service import (
+    RATING_ALGORITHM_VERSION,
+    RATING_CACHE_SCHEMA,
+    MemoryBindingsStore,
+    ScoreService,
+)
 from storage import ScoreDatabase
 
 
@@ -147,7 +156,11 @@ def test_old_cache_is_bypassed_until_new_score_storage_is_ready(tmp_path: Path):
     })
     service = ScoreService(store, lambda _key: None, charts={}, score_db=db)
     db.put_rating_cache("qq1", {
-        "_cacheSchema": RATING_CACHE_SCHEMA, "_ts": time.time(), "records": [{}]
+        "_cacheSchema": RATING_CACHE_SCHEMA,
+        "_ts": time.time(),
+        "ratingAlgorithmVersion": RATING_ALGORITHM_VERSION,
+        "meta": {"playerId": "game1", "server": "cn"},
+        "records": [{}],
     })
     called = []
 
@@ -169,5 +182,79 @@ def test_old_cache_is_bypassed_until_new_score_storage_is_ready(tmp_path: Path):
         cached, message = asyncio.run(service._get_analysis("qq1"))
         assert cached is not None and message == ""
         assert called == []
+
+        for field, value in (("playerId", "other"), ("server", "jp")):
+            db.put_rating_cache("qq1", {**cached, "meta": {**cached["meta"], field: value}})
+            called.clear()
+            assert asyncio.run(service._get_analysis("qq1")) == (None, "网络不可用")
+            assert called == [True]
+    finally:
+        db.close()
+
+
+def test_history_deduplication_keeps_legacy_states_per_account_and_server(tmp_path):
+    db = ScoreDatabase(tmp_path / "history.db")
+    row = _row()
+    state = {key: value for key, value in row.items() if key not in ("id", "level", "raw")}
+    state["raw"] = json.dumps(row["raw"], sort_keys=True, separators=(",", ":"))
+    legacy_hash = hashlib.sha256(
+        json.dumps(state, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    try:
+        db.replace_scores("qq1", "kinoko", [row], game_player_id="old", server="cn")
+        with db._conn:
+            db._conn.execute("UPDATE score_history SET state_hash=?", (legacy_hash,))
+
+        for player, server, changes in (
+            ("old", "cn", 0), ("new", "cn", 1), ("new", "jp", 1), ("new", "cn", 0),
+        ):
+            db.replace_scores("qq1", "kinoko", [row], game_player_id=player, server=server)
+            assert db.get_score_syncs("qq1", 1)[0]["changed_count"] == changes
+            history = db.get_player_history("qq1", 10, 2, "kinoko", game_player_id=player, server=server)
+            assert len(history) == 1
+        assert len(db.get_player_history("qq1", 10, 2)) == 3
+    finally:
+        db.close()
+
+
+def test_growth_trend_uses_only_current_game_identity(tmp_path):
+    db = ScoreDatabase(tmp_path / "history.db")
+    bindings = MemoryBindingsStore({"qq1": {"apikey": "tk_test", "player_id": "new", "server": "cn"}})
+    service = ScoreService(bindings, lambda _key: None, charts={}, score_db=db)
+    try:
+        db.replace_scores("qq1", "kinoko", [_row(990000)], game_player_id="old", server="cn")
+        db.replace_scores("qq1", "kinoko", [_row(980000)], game_player_id="new", server="jp")
+        current = _row(940000, ok=0)
+        current["raw"]["good_cnt"] = "200"
+        db.replace_scores("qq1", "hiroba", [_row(900000), current], game_player_id="new", server="cn")
+        db.kv_set("score_storage_schema:qq1", {"schema": 2, "playerId": "new", "server": "cn"})
+        db.put_rating_cache("qq1", {
+            "_cacheSchema": RATING_CACHE_SCHEMA,
+            "_ts": time.time(),
+            "ratingAlgorithmVersion": RATING_ALGORITHM_VERSION,
+            "meta": {"playerId": "new", "server": "cn"},
+            "records": [{"id": 10, "level": 2, "title": "测试曲"}],
+        })
+        text = asyncio.run(service.get_growth_trend_text("qq1"))
+        assert "共 2 条" in text
+        assert "900000" in text and "940000" in text and "99.5%" in text
+        assert "980000" not in text and "990000" not in text
+    finally:
+        db.close()
+
+
+def test_sync_metadata_and_scores_roll_back_together(tmp_path):
+    db = ScoreDatabase(tmp_path / "scores.db")
+    try:
+        db.replace_scores("qq1", "sakura", [_row()], sync_metadata={"marker": 1})
+        with pytest.raises(TypeError):
+            db.replace_scores(
+                "qq1", "sakura", [_row(990000)],
+                sync_metadata={"marker": 2, "raw_payload": object()},
+            )
+        assert db.kv_get("marker") == 1
+        assert db.get_scores("qq1", "sakura")[0]["high_score"] == 900000
+        assert len(db.get_score_syncs("qq1")) == 1
+        assert len(db.get_player_history("qq1", 10, 2)) == 1
     finally:
         db.close()

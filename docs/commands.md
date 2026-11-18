@@ -1,8 +1,6 @@
-# rt_link 全部指令说明
+# RTLink 指令与 AI 查询
 
-> `/rtlink help` 只显示普通用户指令，**不显示管理员指令**。管理员指令全部列在本文档。
-
-**裸 `/rtlink`（不带子命令）先强制同步，再返回个人 Profile**。同步逻辑与 `/rtlink update` 相同，失败时返回错误提示；`/rtlink profile` 保留有效缓存读取行为。原详细实力报告保留在 `/rtlink rating`。
+QQ 指令以 `/rtlink` 开头。发送 `/rtlink help` 可查看带绑定截图的普通用户帮助。管理员操作、AI 工具和复杂检索参数也在本文列出。
 
 ---
 
@@ -10,21 +8,23 @@
 
 | 指令 | 说明 | 示例 |
 | --- | --- | --- |
-| `/rtlink bind <apikey> <player_id> [server]` | 绑定当前 QQ 到菌菌账号（**仅私聊**）。`server` 默认 `cn`，可选 `cn`/`jp`/`custom` | `/rtlink bind tk_xxx 30053354 cn` |
-| `/rtlink bind sakura <token>` | 绑定 Sakura（**仅私聊**），从接口核实玩家 ID，成功后选择 Sakura；保留菌菌绑定 | `/rtlink bind sakura <48位token>` |
+| `/rtlink` | 强制同步当前来源，成功后生成个人画像。缺少可评级的成绩时提示当前状态 | `/rtlink` |
+| `/rtlink bind <apikey> <player_id> [server]` | 在 QQ 私聊绑定菌菌并选为当前来源。`server` 可选 `cn` / `jp` / `custom`，省略时读取插件配置，默认 `cn` | `/rtlink bind tk_xxx 30053354 cn` |
+| `/rtlink bind sakura <token>` | 在 QQ 私聊绑定 Sakura 并选为当前来源。接口识别玩家 ID | `/rtlink bind sakura <48 位 Token>` |
 | `/rtlink source [kinoko\|sakura]` | 查看或切换当前来源，成绩、缓存和历史独立保存 | `/rtlink source sakura` |
 | `/rtlink unbind` | 解绑当前来源，保留历史与其他来源绑定 | `/rtlink unbind` |
-| `/rtlink score <曲名\|别名\|鬼夏祭>` | 查询指定曲目成绩；支持难度前缀组合名（`鬼夏祭`→鬼难度+夏祭）与别名（国服名/日文名/罗马字/常用简称） | `/rtlink score 鬼夏祭`、`/rtlink score 六天` |
+| `/rtlink score <曲名或ID>` | 查鬼和里魔王的单曲成绩，支持难度前缀、曲名别名和精确曲目 ID。已游玩但未参与评级时会注明原因或状态 | `/rtlink score 鬼夏祭`、`/rtlink score 1502` |
 | `/rtlink dan [年份] [区域] [段位] [曲名]` | 查段位道场课题曲、普通/金合格条件、开放时间与来源（覆盖 2022–2026 日版/国际版，以及国服 2023/2024/2025，以及 2026 五级～十段）。参数顺序不限，均可省略：只给曲名时反查该曲出现过的段位；只给年份+段位时列出完整三曲。曲名支持别名，也可写「鬼 天竺2000」限定难度 | `/rtlink dan 2026 十段`、`/rtlink dan 十段 国服`、`/rtlink dan 六天` |
 | `/rtlink 段位 …` | 上一条的中文写法 | `/rtlink 段位 2026 达人` |
 | `/rtlink rating` | 生成完整实力画像图片（Rating 环 + 七维能力 + 强弱项 + 表现证据 + 冷门配置观察） | `/rtlink rating` |
-| `/rtlink update` | 跳过缓存，立即从当前来源拉取成绩、计算 Rating 并追加历史快照 | `/rtlink update` |
-| `/rtlink profile` | Rating 环、互斥评价/皇冠、能力行星、配置概览、BEST 20 与最多 8 首提升建议 | `/rtlink profile` |
+| `/rtlink update` | 立即从当前来源同步成绩，有可评级成绩时计算 Rating，评分输入有变化时记录快照 | `/rtlink update` |
+| `/rtlink profile` | 查看个人画像，包括 Rating 环、评价和皇冠统计、配置概览、BEST 20 与最多 8 首提升建议。优先使用有效缓存 | `/rtlink profile` |
 | `/rtlink progress` | 全部 18 种配置 × 7 个 BPM 档的当前评分/理论满分、样本与同版本历史 | `/rtlink progress` |
 | `/rtlink weakness` | 生成节奏型弱项图片：核心弱项排行、冷门配置观察、练习路径与参考谱面 | `/rtlink weakness` |
-| `/rtlink improve [评价] [难度]` | 生成「提升评价」图片：按分区列出离目标评价最近的谱面，并给出判定路线（转几个「可」「不可」，是否必须全良）与连打路线（还差几打、总打数、秒速，是否打得出来；没有黄条的曲目直接标明）。评价与难度均可省略，评价默认取你最常拿到的评价的上一档 | `/rtlink improve 金雅`、`/rtlink improve 紫雅 鬼`、`/rtlink improve 5` |
+| `/rtlink improve [评价] [难度]` / `/rtlink 提升 …` | 按分区查看升评价的判定和连打路线。省略评价时尝试常见评价的上一档，省略难度时同时查看鬼和里魔王 | `/rtlink improve 金雅`、`/rtlink 提升 紫雅 鬼` |
 | `/rtlink <评价> [难度]` | 上一条的简写，可以省略 `improve`。参数顺序不限；纯数字按「先评价、后难度」解析（`/rtlink 5 5` = 评价金雅 + 里谱面） | `/rtlink 金雅`、`/rtlink 紫雅 鬼`、`/rtlink 极 里` |
-| `/rtlink alias <ID或曲名> <别名>` | 申请歌曲别名（返回歌曲信息确认，待管理员审核） | `/rtlink alias 夏祭り 夏祭` |
+| `/rtlink library` | 查看公共谱面分析库与安装状态 | `/rtlink library` |
+| `/rtlink alias <曲名或ID> <别名>` | 申请歌曲别名并提交审核。含空格的曲名可用引号包起来，别名允许空格 | `/rtlink alias 夏祭り 夏祭`、`/rtlink alias "Tokyo Shandy Rendezvous" 东京香迪` |
 | `/rtlink help` / `/rtlink 帮助` | 返回包含绑定实图、指令、评级和安全说明的完整帮助长图 | `/rtlink 帮助` |
 | `/rtlink about` | 查看插件信息 | `/rtlink about` |
 
@@ -37,6 +37,7 @@
 | `/rtlink list` | 查看全部绑定 | `/rtlink list` |
 | `/rtlink storage` | 查看存储用量（含回收空页提示） | `/rtlink storage` |
 | `/rtlink cleanup` | 回收数据库空页（VACUUM） | `/rtlink cleanup` |
+| `/rtlink library retry` | 手动重试安装或修复公共谱面分析库 | `/rtlink library retry` |
 
 ---
 
@@ -44,7 +45,7 @@
 
 v0.22.0 的五个玩家查询入口（除公共 `query_dan_course` 外）均支持 `target="caller" | "bot"`：默认查询当前发言者；`bot` 查询管理页设置的可可子独立账号。用户说「我的」用 `caller`，说「你的/可可子的」用 `bot`；比较双方分两次调用。不能传入任意用户 ID。操作与返回对象说明见 [账号管理](account-management.md)。
 
-v0.21.2 撤回 v0.20–v0.21.1 的临时子 Agent 和自定义工具，恢复主 AI 直接查询。查询结果直接返回主 AI，不再额外调用模型或自动生成总结图片。旧 `query_agent_*` 配置不再使用；更新后重载插件，若当前聊天仍沿用旧 `question` 参数，请刷新工具列表或开启新会话。
+主 AI 直接收取查询结果。升级自 v0.21.1 或更早版本后，可重载插件或开启新会话，使用 `query_rtlink(queries=…)` 刷新旧的 `question` 用法。
 
 `query_dan_course` 只读公共课题目录，不能用它判断个人成绩是否同步。查询个人判定应使用 `query_song_brief` / `query_taiko_score`，评估课题曲条件使用 `evaluate_player_dan`。当前未接入实际段位参战次数和逐次过段历史，三首单曲最佳记录也不能代替这些记录。
 
@@ -90,7 +91,7 @@ v0.21.2 撤回 v0.20–v0.21.1 的临时子 Agent 和自定义工具，恢复主
 
 以上子查询在统一入口内均开启；原来关闭的独立工具名不额外注册。`set_song_alias` 和 `generate_rating_image` 不属于只读查询，未接入统一入口。
 
-玩家查询固定使用批次开始时的来源，并复用一次分析结果（可能按原 TTL 规则同步并更新缓存）。子查询的 `completed` 表示方法已执行，仍须阅读 `data` 中的错误、缺数据提示或谱面 `status`；`invalid_argument`、`error` 项不影响其余项。结果中 `complete` 仅表示返回文本是否保留了本次方法返回的全部材料，不表示账户或全库资料齐全。失去绑定不会阻止公共段位/谱面查询。不能指定别的 QQ、凭据、文件路径或写入方法。
+玩家查询固定使用批次开始时的来源，并按缓存规则复用一份分析结果。每项独立返回状态。`completed` 表示方法已执行，具体成绩、缺失原因和谱面状态见 `data`。`complete` 表示文本是否保留本次查询返回的全部材料。发言者或可可子的当前来源未绑定时，公共段位、谱面、库状态和来源状态仍可查询，单曲摘要会标注成绩缺失的原因。
 
 谱面 `detail` 支持 `summary`、`segments`、`features`，`route` 支持 N/E/M/single。`segments` 可指定小节范围，`limit` 上限 20；检索 `limit` 上限 200。附件保留本次 `limit/offset` 范围，不会自动抓取剩余分页；若 `nextOffset` 非空，可在第二次调用中补查。附件保存在插件数据目录 `query_exports/`；部分消息平台可能不支持文件发送，失败时会返回 `attachment.status=failed`，不能声称附件已送达。
 
@@ -159,7 +160,7 @@ v0.21.2 撤回 v0.20–v0.21.1 的临时子 Agent 和自定义工具，恢复主
 
 ## 检索子查询 `search_scores` 参数表（通过 `query_rtlink` 使用）
 
-以下保留内部服务的开发参考；模型不能调用这个入口。所有条件都是「且」的关系，全部可省略、可自由组合。
+将筛选条件放在 `query_rtlink` 的 `search_scores` 子项中，多项条件同时生效。
 
 ### 匹配
 
@@ -174,7 +175,7 @@ v0.21.2 撤回 v0.20–v0.21.1 的临时子 Agent 和自定义工具，恢复主
 
 | 参数 | 说明 |
 | --- | --- |
-| `level` | `4`/`鬼`/`魔王`、`5`/`里`/`里魔王`；多个用逗号，如 `4,5` |
+| `level` | `4` / `鬼` / `魔王`、`5` / `里` / `里魔王`；多个用逗号或斜杠。省略或传 `0` 查询鬼和里魔王 |
 | `genre` | 曲风分区关键词（`ナムコ`、`アニメ`、`J-POP`…） |
 | `song_no` | 精确曲目 ID |
 | `constant_min` / `constant_max` | 定数范围 |
@@ -187,14 +188,14 @@ v0.21.2 撤回 v0.20–v0.21.1 的临时子 Agent 和自定义工具，恢复主
 | `ng_min` / `ng_max` | 「不可」数量范围；`ng_max=0` = 零「不可」 |
 | `combo` | `full`（已全连）/ `no-fc`（未全连）/ `dondaful`（已全良）/ `no-miss`（零不可）/ `miss`（有不可） |
 | `target_rank` | 目标评价；填了会给每条结果附上门槛、缺口、判定路线（转几个「可」「不可」，是否必须全良）与连打路线（还差几打 / 总打数 / 秒速 / 是否打得出来；无黄条会明确标注） |
-| `reached` | `no`（只看未达成）/ `yes`（只看已达成） |
-| `gap_max` | 距 `target_rank` 的最大分数缺口（填了会自动排除已达成） |
+| `reached` | `no`（未达成）/ `yes`（已达成）/ `all`（任意状态）。按达成状态筛选时需填写 `target_rank` |
+| `gap_max` | 距 `target_rank` 的最大分数缺口。单独填写时默认查询未达成项 |
 
 ### 输出
 
 | 参数 | 说明 |
 | --- | --- |
-| `sort` | `rating`（默认）/ `score` / `accuracy` / `constant` / `notes` / `gap` / `rank` / `updated` / `title` / `id`，也接受中文（`精度`、`分数`、`定数`…） |
+| `sort` | `rating`（默认）/ `score` / `accuracy` / `constant` / `notes` / `gap` / `rank` / `updated` / `title` / `id`，也接受中文（如 `精度`）。按 `gap` 排序时需填写 `target_rank` |
 | `order` | `desc`（默认）/ `asc` |
 | `detail` | `brief`（默认，一行）/ `full`（附良/可/不可/连打/全连/全良与更新时间） |
 | `limit` | 返回条数，默认 20，上限 200 |
@@ -206,7 +207,7 @@ v0.21.2 撤回 v0.20–v0.21.1 的临时子 Agent 和自定义工具，恢复主
 **示例**
 
 ```
-query=夏, match_mode=all, levels=(5,)                     → 里谱面里同时含「夏」的曲目
+query=夏, match_mode=all, level=里                        → 里谱面里含「夏」的曲目
 ng_max=0, sort=accuracy, order=asc                        → 零不可里精度最低的
 constant_min=10.5, constant_max=10.7, sort=accuracy       → 该定数段最需要提精度的
 target_rank=紫雅, gap_max=3000, sort=gap, order=asc        → 差一点就能升到紫雅的

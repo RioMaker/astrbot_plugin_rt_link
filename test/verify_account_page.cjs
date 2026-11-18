@@ -5,7 +5,7 @@ const path = require("node:path");
 const http = require("node:http");
 const { chromium } = require(process.argv[2] || "playwright");
 const root = path.resolve(__dirname, "../pages/manage");
-const output = path.resolve(__dirname, "tmp/account-admin-ui");
+const output = path.resolve(process.env.RTLINK_UI_TEST_OUTPUT || path.join(__dirname, "tmp/account-admin-ui"));
 
 async function main() {
   fs.mkdirSync(output, { recursive: true });
@@ -29,6 +29,8 @@ async function main() {
         return { ...row, bound_sources: row.sources.filter((s) => s.bound).map((s) => s.source), last_sync_at: row.sources.find((s) => s.last_sync_at)?.last_sync_at || null, rating: active.rating, rating_at: active.rating_at, rating_state: active.rating_state };
       };
       const rows = Array.from({ length: 26 }, (_, i) => derive({ owner_id: String(33000001 + i), name: String(33000001 + i), is_bot: false, current_source: i % 2 ? "sakura" : "kinoko", sources: [source("kinoko", i % 3 !== 0, 9.31), source("sakura", i % 3 !== 2, i === 1 ? 0 : 8.72)] }));
+      Object.assign(rows[3].sources[1], { rating: null, rating_at: null, rating_state: "no_ratable_scores" });
+      rows[3] = derive(rows[3]);
       rows[25].name = '<img src="x" onerror="window.injected=true">';
       let bot = derive({ owner_id: BOT, name: "可可子", is_bot: true, current_source: "kinoko", sources: [source("kinoko", false, null), source("sakura", false, null)] });
       window.audit = []; window.failNext = false;
@@ -37,14 +39,25 @@ async function main() {
         ready: async () => ({ isDark: false }),
         onContext: (handler) => { window.setTestTheme = handler; },
         apiGet: async (endpoint, query = {}) => {
-          if (endpoint === "admin/account") return clone(query.owner_id ? rows.find((r) => r.owner_id === query.owner_id) : bot);
+          if (endpoint === "admin/account") {
+            const account = clone(query.owner_id ? rows.find((r) => r.owner_id === query.owner_id) : bot);
+            if (window.holdNextAccountRead) {
+              window.holdNextAccountRead = false;
+              await new Promise((resolve) => { window.finishAccountRead = resolve; });
+            }
+            return account;
+          }
+          if (window.failNextUsers) {
+            window.failNextUsers = false;
+            throw new Error("读取用户记录失败，请重试。");
+          }
           let filtered = rows.filter((row) => (!query.q || [row.owner_id, row.name, "001234"].some((v) => v.includes(query.q))) && (!query.source || row.bound_sources.includes(query.source)) && (query.status !== "bound" || row.bound_sources.length) && (query.status !== "unbound" || !row.bound_sources.length));
           const size = Number(query.page_size || 20), p = Math.min(Number(query.page || 1), Math.max(1, Math.ceil(filtered.length / size)));
           return clone({ items: filtered.slice((p - 1) * size, p * size), total: filtered.length, page: p, page_size: size, stats: { total: 26, bound: 26, unbound: 0 } });
         },
         apiPost: async (endpoint, data) => {
           window.audit.push({ endpoint, ...data });
-          if (window.failNext) { window.failNext = false; throw new Error("绑定验证失败，请检查凭据。"); }
+          if (window.failNext) { window.failNext = false; throw new Error(`绑定验证失败：${data.token}`); }
           const row = data.owner_id === BOT ? bot : rows.find((r) => r.owner_id === data.owner_id);
           const item = row.sources.find((s) => s.source === data.source);
           if (data.action === "bind") { Object.assign(item, source(item.source, true, null), { player_id: data.player_id || "001234" }); row.current_source = item.source; }
@@ -62,56 +75,89 @@ async function main() {
     await page.waitForFunction(() => document.getElementById("stat-total").textContent === "26");
     assert.equal(await page.locator("tbody tr").count(), 20);
     assert((await page.locator("tbody .rating").allTextContents()).includes("0.00"));
+    assert.match(await page.locator("tbody").innerText(), /暂无可评级成绩/);
     assert.match(await page.locator("tbody").innerText(), /2026\/10\/30 10:32/);
     await page.screenshot({ path: path.join(output, "users.png"), fullPage: true });
+    await page.evaluate(() => { window.failNextUsers = true; });
+    await page.getByRole("button", { name: "下一页", exact: true }).click();
+    await page.locator("#users-notice").waitFor();
+    assert.match(await page.locator("#page-info").innerText(), /第 1 \/ 2 页/);
+    assert.equal(await page.locator("tbody tr").count(), 20);
     await page.getByRole("button", { name: "下一页", exact: true }).click();
     await page.waitForFunction(() => document.querySelectorAll("tbody tr").length === 6);
     assert.equal(await page.locator("tbody img").count(), 0);
     assert.equal(await page.evaluate(() => window.injected), undefined);
     await page.locator("#search").fill("33000001");
+    await page.getByRole("button", { name: "上一页", exact: true }).click();
+    await page.waitForFunction(() => document.querySelectorAll("tbody tr").length === 20);
     await page.getByRole("button", { name: "搜索", exact: true }).click();
     await page.waitForFunction(() => document.querySelectorAll("tbody tr").length === 1);
     await page.getByRole("button", { name: "管理", exact: true }).click();
     assert.equal(await page.locator("dialog[open] .source-card").count(), 2);
+    await page.evaluate(() => { window.failNextUsers = true; });
+    await page.getByRole("button", { name: "设为当前来源", exact: true }).click();
+    await page.waitForFunction(() => document.getElementById("dialog-notice").textContent === "操作完成");
+    await page.locator("#users-notice").waitFor();
     await page.getByRole("button", { name: "关闭", exact: true }).click();
+    await page.waitForFunction(() => document.getElementById("dialog-content").childElementCount === 0);
+
+    await page.evaluate(() => { window.holdNextAccountRead = true; });
+    await page.getByRole("button", { name: "管理", exact: true }).click();
+    await page.waitForFunction(() => typeof window.finishAccountRead === "function");
 
     await page.getByRole("button", { name: "可可子账号", exact: true }).click();
     const kinoko = page.locator("#bot-account .source-card").filter({ has: page.getByRole("heading", { name: "菌菌", exact: true }) });
-    const sakura = page.locator("#bot-account .source-card").filter({ has: page.getByRole("heading", { name: "SakuraBot", exact: true }) });
+    const sakura = page.locator("#bot-account .source-card").filter({ has: page.getByRole("heading", { name: "Sakura", exact: true }) });
+    await kinoko.waitFor();
+    await page.evaluate(() => { window.finishAccountRead(); });
+    assert.equal(await page.locator("dialog[open]").count(), 0);
     await kinoko.getByLabel("菌菌 API Key", { exact: true }).fill("tk_synthetic_browser");
-    await kinoko.getByLabel("玩家 ID", { exact: true }).fill("001234");
+    const playerId = kinoko.getByLabel("玩家 ID", { exact: true });
+    await playerId.fill("bad/id");
+    assert.equal(await playerId.evaluate((input) => input.checkValidity()), false);
+    await playerId.fill("001234_-id");
+    assert.equal(await playerId.evaluate((input) => input.checkValidity()), true);
     await kinoko.getByRole("button", { name: "验证并保存" }).click();
     await kinoko.getByRole("button", { name: "同步成绩" }).waitFor();
     assert.equal(await kinoko.locator("input[type=password]").inputValue(), "");
     assert(!((await page.locator("body").innerText()).includes("tk_synthetic_browser")));
     await kinoko.getByRole("button", { name: "同步成绩" }).click();
     await page.waitForFunction(() => document.querySelector("#bot-account .account-summary strong").textContent === "9.38");
-    await sakura.getByLabel("SakuraBot Token", { exact: true }).fill("b".repeat(48));
+    await page.evaluate(() => { window.finishAccountRead = null; window.holdNextAccountRead = true; });
+    await page.getByRole("button", { name: "刷新记录", exact: true }).click();
+    await page.waitForFunction(() => typeof window.finishAccountRead === "function");
+    await sakura.getByLabel("Sakura Token", { exact: true }).fill("b".repeat(48));
     await sakura.getByRole("button", { name: "验证并保存" }).click();
     await sakura.getByRole("button", { name: "同步成绩" }).waitFor();
+    await page.evaluate(() => { window.finishAccountRead(); });
+    await page.waitForFunction(() => !document.getElementById("refresh").disabled);
+    assert.match(await page.locator("#bot-account .account-summary").innerText(), /Sakura · 当前来源/);
     await sakura.getByRole("button", { name: "同步成绩" }).click();
     await page.waitForFunction(() => document.querySelector("#bot-account .account-summary strong").textContent === "9.38");
     await page.screenshot({ path: path.join(output, "bot.png"), fullPage: true });
     await kinoko.getByRole("button", { name: "设为当前来源" }).click();
     await page.waitForFunction(() => document.querySelector("#bot-account .account-summary").textContent.includes("菌菌 · 当前来源"));
     await sakura.locator("summary").click();
-    await sakura.getByLabel("SakuraBot Token", { exact: true }).fill("c".repeat(48));
+    await sakura.getByLabel("Sakura Token", { exact: true }).fill("c".repeat(48));
     await page.evaluate(() => { window.failNext = true; });
     await sakura.getByRole("button", { name: "验证并保存" }).click();
     await page.locator("#notice.error").waitFor();
+    assert(!(await page.locator("#notice").innerText()).includes("c".repeat(48)));
     assert.equal(await sakura.locator("input[type=password]").inputValue(), "");
     assert.equal(await sakura.getByRole("button", { name: "验证并保存" }).isEnabled(), true);
     page.once("dialog", (dialog) => dialog.accept());
     await kinoko.getByRole("button", { name: "解绑", exact: true }).click();
     await page.waitForFunction(() => document.querySelector("#bot-account .account-summary strong").textContent === "当前来源未绑定");
     assert.equal(await sakura.getByRole("button", { name: "同步成绩" }).count(), 1);
-    assert((await page.evaluate(() => window.audit)).every((entry) => entry.owner_id === "__rtlink_ai__"));
+    const [playerAction, ...botActions] = await page.evaluate(() => window.audit);
+    assert.equal(playerAction.owner_id, "33000001");
+    assert(botActions.every((entry) => entry.owner_id === "__rtlink_ai__"));
     await page.evaluate(() => window.setTestTheme({ isDark: true }));
     await page.setViewportSize({ width: 390, height: 844 });
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
     await page.screenshot({ path: path.join(output, "bot-mobile-dark.png"), fullPage: true });
     assert.deepEqual(errors, []);
-    console.log("PASS: pagination, search, dialog, bot bind/sync/switch/unbind, credential clearing, failed save, XSS, mobile and dark theme.");
+    console.log("PASS: pagination recovery, search, dialog request ordering, bind/sync/switch/unbind, credential clearing, failed save, XSS, mobile and dark theme.");
     console.log(`Screenshots: ${output}`);
   } finally { await browser.close(); await new Promise((resolve) => server.close(resolve)); }
 }

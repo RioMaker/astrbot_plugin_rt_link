@@ -158,6 +158,8 @@ def test_unbound_inventory_includes_legacy_syncs_and_never_synced_bindings(syste
         rows = {row["owner_id"]: row for row in result["items"]}
         assert rows["legacy"]["last_sync_at"] == "2026-10-01T00:00:00+00:00"
         assert rows["legacy"]["sources"][0]["player_id"] == "legacy-player"
+        historical_search = await admin.users({"q": "LEGACY-PLAYER"})
+        assert [row["owner_id"] for row in historical_search["items"]] == ["legacy"]
         assert rows["never-synced"]["sources"][0]["ever_bound"]
         assert rows["never-synced"]["last_sync_at"] is None
         assert rows["never-synced"]["rating"] is None
@@ -190,7 +192,40 @@ def test_filters_and_pagination_exclude_bot_and_credentials(system):
     asyncio.run(run())
 
 
-@pytest.mark.parametrize("problem", ["identity", "algorithm", "schema", "nan"])
+def test_latest_sync_compares_timezones_and_uses_bound_server_default(system):
+    async def run():
+        router, admin, _, _ = system
+        kinoko, sakura = router.services.values()
+        bindings = await kinoko.store.load()
+        del bindings["qq"]["server"]
+        await kinoko.store.save(bindings)
+        await router.bind_sakura("qq", "s" * 48)
+        sakura_identity = await sakura._binding("qq")
+        newer, older = "2026-10-01T05:00:00+00:00", "2026-10-01T12:00:00+08:00"
+        kinoko.db.replace_scores(
+            "qq", "hiroba", [], fetched_at=newer, game_player_id="001234", server="cn"
+        )
+        sakura.db.replace_scores(
+            "qq",
+            "sakura",
+            [],
+            fetched_at=older,
+            game_player_id=sakura_identity["player_id"],
+            server=sakura_identity["server"],
+        )
+        row = await admin.account("qq")
+        assert row["last_sync_at"] == newer
+        by_source = {entry["source"]: entry for entry in row["sources"]}
+        assert by_source["kinoko"]["server"] == "cn"
+        assert by_source["kinoko"]["last_sync_at"] == newer
+        assert by_source["sakura"]["last_sync_at"] == older
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize(
+    "problem", ["identity", "algorithm", "schema", "nan", "cache", "meta", "summary"]
+)
 def test_mismatched_or_obsolete_rating_is_never_current(system, problem):
     async def run():
         router, admin, _, _ = system
@@ -207,8 +242,12 @@ def test_mismatched_or_obsolete_rating_is_never_current(system, problem):
             cache["ratingAlgorithmVersion"] = "obsolete"
         elif problem == "schema":
             cache["_cacheSchema"] = -1
-        else:
+        elif problem == "nan":
             cache["summary"]["rating"] = float("nan")
+        elif problem == "cache":
+            cache = ["invalid"]
+        else:
+            cache[problem] = ["invalid"]
         router.services["kinoko"].db.put_rating_cache("qq", cache)
         row = await admin.account("qq")
         assert row["rating"] is None and row["rating_state"] == "needs_sync"
@@ -248,6 +287,28 @@ def test_failure_retains_sync_date_rating_binding_and_never_echoes_credentials(s
     asyncio.run(run())
 
 
+def test_completed_sync_without_rating_has_its_own_display_state(system):
+    async def run():
+        router, admin, _, _ = system
+        synced_at = "2026-10-01T00:00:00+00:00"
+        router.services["kinoko"].db.put_rating_cache(
+            "qq",
+            {
+                "meta": {"playerId": "001234", "server": "cn"},
+                "ratingAlgorithmVersion": RATING_ALGORITHM_VERSION,
+                "_cacheSchema": RATING_CACHE_SCHEMA,
+                "profileSyncedAt": synced_at,
+                "ratingUnavailable": True,
+            },
+        )
+        row = await admin.account("qq")
+        assert row["rating_state"] == "no_ratable_scores"
+        assert row["last_sync_at"] == synced_at
+        assert row["rating"] is None and row["rating_at"] is None
+
+    asyncio.run(run())
+
+
 def test_syncing_noncurrent_source_does_not_switch_current_and_serializes(system):
     async def run():
         router, admin, _, _ = system
@@ -269,7 +330,8 @@ def test_syncing_noncurrent_source_does_not_switch_current_and_serializes(system
         await asyncio.sleep(0)
         assert not unbind_task.done()
         release.set()
-        await asyncio.wait_for(asyncio.gather(sync_task, unbind_task), 3)
+        updated, _ = await asyncio.wait_for(asyncio.gather(sync_task, unbind_task), 3)
+        assert updated["message"] == "done"
         assert await router.current_source("qq") == "sakura"
         assert await router.services["kinoko"]._binding("qq")
         assert not await router.services["sakura"]._binding("qq")

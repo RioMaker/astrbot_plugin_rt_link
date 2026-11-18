@@ -9,12 +9,15 @@ from pathlib import Path
 from PIL import Image, ImageDraw
 
 if __package__:
+    from .command_catalog import BIND_SAKURA_USAGE, COMMAND_BY_NAME, user_command_rows
     from .report_image import _box, _text, _wrapped
 else:
+    from command_catalog import BIND_SAKURA_USAGE, COMMAND_BY_NAME, user_command_rows
     from report_image import _box, _text, _wrapped
 
 WIDTH, HEIGHT = 1440, 9000
-ASSET_DIR = Path(__file__).resolve().parent / "resource" / "help"
+PLUGIN_DIR = Path(__file__).resolve().parent
+ASSET_DIR = PLUGIN_DIR / "resource" / "help"
 
 # kkz-web docs/.vitepress/theme/custom.css + VitePress light theme tokens.
 BG = "#ffffff"
@@ -24,8 +27,7 @@ TEXT_2 = "#67676c"
 TEXT_3 = "#929295"
 DIVIDER = "#e2e2e3"
 BORDER = "#c2c2c4"
-BRAND = "#6f54d5"
-BRAND_2 = "#8066e3"
+BRAND = "#684bd4"
 BRAND_3 = "#5f43c7"
 BRAND_SOFT = "#f0edf9"
 TIP_SOFT = "#f2effa"
@@ -58,12 +60,11 @@ def _custom_block(draw, y, title, body, kind="tip", height=126):
 
 def _code_block(draw, y, code, height=74):
     _box(draw, CONTENT_X, y, CONTENT_W, height, BG_ALT, radius=12)
-    _text(draw, "TEXT", CONTENT_X + CONTENT_W - 24, y + 16, 11, TEXT_3, True, "right")
     _text(draw, code, CONTENT_X + 26, y + 24, 18, BRAND_3, True)
 
 
 def _step(draw, index, title, y):
-    _text(draw, f"步骤 {index}/4：{title}", CONTENT_X, y, 25, TEXT, True)
+    _text(draw, title, CONTENT_X, y, 25, TEXT, True)
     _box(draw, CONTENT_X - 48, y + 2, 32, 32, BRAND, radius=16)
     _text(draw, str(index), CONTENT_X - 32, y + 8, 13, "#ffffff", True, "center")
 
@@ -104,32 +105,24 @@ def _table(draw, y, rows):
         fill=BG_ALT,
     )
     draw.rectangle((CONTENT_X + 1, y + row_h - 12, CONTENT_X + CONTENT_W - 1, y + row_h), fill=BG_ALT)
-    _text(draw, "指令", CONTENT_X + 24, y + 22, 16, TEXT, True)
-    _text(draw, "用途", CONTENT_X + command_w + 24, y + 22, 16, TEXT, True)
+    _text(draw, "指令", CONTENT_X + 24, y + 22, 21, TEXT, True)
+    _text(draw, "用途", CONTENT_X + command_w + 24, y + 22, 21, TEXT, True)
     for index, (command, description) in enumerate(rows):
         row_y = y + row_h * (index + 1)
         draw.line((CONTENT_X, row_y, CONTENT_X + CONTENT_W, row_y), fill=DIVIDER, width=1)
-        _box(draw, CONTENT_X + 20, row_y + 17, command_w - 40, 36, BRAND_SOFT, radius=7)
-        _text(draw, command, CONTENT_X + 34, row_y + 24, 14, BRAND_3, True)
-        _text(draw, description, CONTENT_X + command_w + 24, row_y + 23, 15, TEXT_2)
+        _box(draw, CONTENT_X + 20, row_y + 14, command_w - 40, 42, BRAND_SOFT, radius=7)
+        _text(draw, command, CONTENT_X + 34, row_y + 22, 21, BRAND_3, True)
+        _text(draw, description, CONTENT_X + command_w + 24, row_y + 22, 20, TEXT_2)
     return y + total_h
 
 
 def _nav(image, draw):
     draw.rectangle((0, 0, WIDTH, 96), fill=BG)
     draw.line((0, 95, WIDTH, 95), fill=DIVIDER, width=1)
-    with Image.open(ASSET_DIR / "kkz-logo.png") as source:
+    with Image.open(PLUGIN_DIR / "logo.png") as source:
         logo = source.convert("RGBA").resize((52, 52), Image.Resampling.LANCZOS)
-    mask = Image.new("L", (52, 52), 0)
-    ImageDraw.Draw(mask).rounded_rectangle((0, 0, 51, 51), radius=10, fill=255)
-    image.paste(logo, (54, 22), mask)
-    _text(draw, "可可子说明", 124, 31, 21, TEXT, True)
-    nav = ["首页", "认识可可子", "插件说明", "指令速查", "更新记录"]
-    x = 720
-    for label in nav:
-        color = BRAND if label == "插件说明" else TEXT_2
-        _text(draw, label, x, 36, 15, color, label == "插件说明")
-        x += 128
+    image.paste(logo, (54, 22), logo)
+    _text(draw, "RTLink · 可可子", 124, 31, 21, TEXT, True)
 
 
 def render_help_image(out_path: str) -> str:
@@ -137,7 +130,7 @@ def render_help_image(out_path: str) -> str:
     draw = ImageDraw.Draw(image)
     _nav(image, draw)
 
-    _text(draw, "插件说明  /  太鼓成绩评级", CONTENT_X, 142, 14, BRAND, True)
+    _text(draw, "插件说明", CONTENT_X, 142, 14, BRAND, True)
     _text(draw, "太鼓成绩评级（rt_link）", CONTENT_X, 190, 48, TEXT, True)
     _wrapped(
         draw,
@@ -151,29 +144,33 @@ def render_help_image(out_path: str) -> str:
         False,
         2,
     )
+    commands_y = 360
+    _heading(draw, "指令速查", commands_y)
+    table_end = _table(draw, commands_y + 92, user_command_rows())
     _custom_block(
         draw,
-        360,
-        "两种帮助入口",
-        "发送 /rtlink help 或 /rtlink 帮助，都会返回这一张完整说明长图。裸 /rtlink 先同步，再生成个人 Profile。",
+        table_end + 34,
+        "用自然语言查询",
+        "查自己的成绩可以问「可可子，我的实力怎么样」「可可子，我该练什么」「可可子，我的夏祭成绩是多少」。\n"
+        "查可可子自有成绩可以问「可可子，你的夏祭成绩是多少」。该账号由管理员在 AstrBot WebUI 设置。",
         "tip",
-        132,
+        146,
     )
 
-    _heading(draw, "从菌菌控制台获取 apikey 并完成绑定", 550)
-    _text(draw, "完整绑定共 4 步：进入 API 密钥页面、创建并命名密钥、复制 apikey、在 QQ 私聊中完成绑定。", CONTENT_X, 638, 17, TEXT_2)
+    kinoko_y = table_end + 224
+    _heading(draw, "绑定菌菌账号", kinoko_y)
     _custom_block(
         draw,
-        690,
+        kinoko_y + 92,
         "绑定前请注意",
-        "apikey 相当于账号访问凭证。不要把完整 apikey 发到群聊、公开页面或交给其他人；绑定指令只能在与可可子的私聊中发送。",
+        "请在与可可子的 QQ 私聊中发送绑定指令，留存凭据时注意遮挡。菌菌和 Sakura 的绑定、缓存、成绩与历史独立保存。",
         "warning",
-        138,
+        126,
     )
 
-    _step(draw, 1, "进入个人 API 密钥页面", 886)
-    _text(draw, "① 左侧选择「账号信息」　② 进入「第三方访问」　③ 点击「新建密钥」", CONTENT_X, 938, 17, TEXT_2)
-    end = _screenshot(image, draw, "apikey-create-entry.png", 990)
+    _step(draw, 1, "进入个人 API 密钥页面", kinoko_y + 264)
+    _text(draw, "① 左侧选择「账号信息」　② 进入「第三方访问」　③ 点击「新建密钥」", CONTENT_X, kinoko_y + 316, 17, TEXT_2)
+    end = _screenshot(image, draw, "apikey-create-entry.png", kinoko_y + 368)
 
     _step(draw, 2, "给密钥命名", end + 72)
     _wrapped(draw, "名称可以自定义，建议使用容易辨认用途的名字，例如「可可子-rtlink」，然后点击「创建」。", CONTENT_X, end + 126, CONTENT_W, 17, 28, TEXT_2, False, 2)
@@ -185,60 +182,41 @@ def render_help_image(out_path: str) -> str:
     _custom_block(
         draw,
         end + 42,
-        "不要公开 apikey",
-        "文档截图中的敏感内容已经遮挡。截图求助时也应遮住完整密钥；如果密钥泄露，请立即删除旧密钥并重新创建。",
+        "保护 API 密钥",
+        "截图求助时请完整遮挡密钥。如果密钥泄露，请删除旧密钥并重新创建。",
         "danger",
         132,
     )
 
     step4_y = end + 232
     _step(draw, 4, "在 QQ 私聊中绑定 RTLink", step4_y)
-    _text(draw, "打开与可可子的 QQ 私聊，发送以下指令：", CONTENT_X, step4_y + 56, 17, TEXT_2)
-    _code_block(draw, step4_y + 100, "/rtlink bind <apikey> <player_id> [server]")
-    _text(draw, "apikey：完整 tk_ 密钥　　player_id：太鼓玩家 ID　　server：可省略，默认 cn", CONTENT_X, step4_y + 198, 16, TEXT_2)
+    _text(draw, "打开与可可子的 QQ 私聊，填写密钥和玩家 ID。", CONTENT_X, step4_y + 56, 17, TEXT_2)
+    _code_block(draw, step4_y + 100, COMMAND_BY_NAME["bind"].usage)
+    _text(draw, "用完整的 tk_ 密钥和太鼓玩家 ID。省略 server 时读取插件配置，出厂值为 cn。", CONTENT_X, step4_y + 198, 16, TEXT_2)
     _code_block(draw, step4_y + 246, "/rtlink bind tk_xxx 30053354 cn")
     end = _screenshot(image, draw, "qq-bind.png", step4_y + 356)
     _custom_block(
         draw,
         end + 40,
         "绑定完成",
-        "收到绑定成功提示后，可发送 /rtlink 检查成绩读取。需要解绑时发送 /rtlink unbind。",
+        "绑定成功后自动选择菌菌。发送 /rtlink 立即同步并生成个人画像。",
         "tip",
         112,
     )
 
     sakura_y = end + 214
-    _heading(draw, "Sakura 绑定与数据源切换", sakura_y)
-    _wrapped(draw, "登录 viewer.sakura-bot.cn，在个人账户 > 多端同步生成 48 位 token，然后私聊发送：", CONTENT_X, sakura_y + 86, CONTENT_W, 18, 30, TEXT_2)
-    _code_block(draw, sakura_y + 140, "/rtlink bind sakura <token>")
-    _wrapped(draw, "绑定成功后切换到 Sakura。用 /rtlink source 查看当前来源，用 /rtlink source kinoko 或 /rtlink source sakura 切换。各源绑定、成绩、缓存和历史独立；解绑仅影响当前来源，历史保留。", CONTENT_X, sakura_y + 238, CONTENT_W, 18, 30, TEXT_2, False, 4)
-    commands_y = sakura_y + 385
-    _heading(draw, "常用指令", commands_y)
-    rows = [
-        ("/rtlink", "先同步，再生成个人 Profile 与 BEST 20"),
-        ("/rtlink score <曲名>", "查询指定曲目成绩"),
-        ("/rtlink rating", "Rating、七维、强弱项与冷门配置"),
-        ("/rtlink profile", "使用有效缓存生成 Profile，含成绩概况与提升建议"),
-        ("/rtlink progress", "全部配置评分、理论满分、样本与同步历史"),
-        ("/rtlink weakness", "生成节奏型弱项与练习建议"),
-        ("/rtlink improve [评价]", "找最接近目标评价的谱面：判定 / 连打两条路线"),
-        ("/rtlink dan [年份] [段位]", "查段位道场课题曲与合格条件（支持别名）"),
-        ("/rtlink update", "重新拉取成绩并记录历史快照"),
-        ("/rtlink alias <曲名> <别名>", "申请歌曲别名，等待管理员审核"),
-        ("/rtlink help / 帮助", "查看本说明长图"),
-        ("/rtlink about", "查看插件版本与简介"),
-    ]
-    table_end = _table(draw, commands_y + 92, rows)
-    _custom_block(
+    _heading(draw, "绑定 Sakura 账号与切换数据源", sakura_y)
+    _wrapped(draw, "登录 viewer.sakura-bot.cn，在个人账户的「多端同步」中生成 48 位 token，再私聊发送给可可子。", CONTENT_X, sakura_y + 86, CONTENT_W, 18, 30, TEXT_2)
+    _code_block(draw, sakura_y + 140, BIND_SAKURA_USAGE)
+    _wrapped(
         draw,
-        table_end + 34,
-        "也可以自然语言询问",
-        "例如：“可可子，我的实力怎么样”“可可子，我该练什么”“可可子，我的夏祭成绩是多少”。查分支持「鬼夏祭」「里夏祭」这类难度前缀组合名。",
-        "tip",
-        126,
+        "绑定成功后自动选择 Sakura。发送 /rtlink source 查看当前数据源。\n"
+        "发送 /rtlink source kinoko 或 /rtlink source sakura 切换到已绑定的来源。\n"
+        "发送 /rtlink unbind 解绑当前来源，历史成绩保留。",
+        CONTENT_X, sakura_y + 238, CONTENT_W, 18, 30, TEXT_2,
     )
 
-    reference_y = table_end + 224
+    reference_y = sakura_y + 385
     _heading(draw, "难度别名与评级说明", reference_y)
     card_y = reference_y + 94
     _box(draw, CONTENT_X, card_y, 535, 380, BG_ALT, radius=16)

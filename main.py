@@ -1,17 +1,15 @@
 # -*- coding: utf-8 -*-
 """
-rt_link 插件：将 QQ 号绑定到「菌菌控制台」apikey，查询太鼓达人成绩并评估玩家实力。
+RTLink 插件入口，注册 QQ 指令、只读 AI 查询和 AstrBot 账号管理页。
 
-- 主 Rating：AI v2（Taiko Signal Rhythm v2），参考 OurTaiko-v1 公式（rating.py）
-- 本地存储：SQLite（storage.py），菌菌 hiroba/kinoko 同步数据转义后落库
-- 空间监管：/rtlink storage（管理员）查询用量，接近配额自动提醒
-- 交互：命令（/rtlink ...）+ LLM 工具（模型可自动调用）
+菌菌与 Sakura 分别保存绑定、成绩和历史。实力评估采用 AI v2 Rating。
 """
 
 import asyncio
 import hashlib
 import re
 import time
+import unicodedata
 import uuid
 from pathlib import Path
 
@@ -24,10 +22,17 @@ from astrbot.api.star import Context, Star, StarTools, register
 if __package__:
     from . import query_gateway
     from .account_admin import register_admin_api
-    from .account_identity import BOT_NAME, BOT_UNBOUND, query_owner
+    from .account_identity import BOT_NAME, query_owner
     from .api_client import KinokoClient
     from .chart_library import ChartLibrary
     from .chart_library_installer import ChartLibraryInstaller
+    from .command_catalog import (
+        BIND_SAKURA_USAGE,
+        COMMAND_BY_NAME,
+        COMMAND_NAME,
+        IMPROVE_SHORT_USAGE,
+        LIBRARY_RETRY_USAGE,
+    )
     from .dan_query import match_rank, match_region, query_dan_courses_text
     from .sakura_client import SakuraClient
     from .score_rank import (
@@ -44,10 +49,17 @@ if __package__:
 else:
     import query_gateway
     from account_admin import register_admin_api
-    from account_identity import BOT_NAME, BOT_UNBOUND, query_owner
+    from account_identity import BOT_NAME, query_owner
     from api_client import KinokoClient
     from chart_library import ChartLibrary
     from chart_library_installer import ChartLibraryInstaller
+    from command_catalog import (
+        BIND_SAKURA_USAGE,
+        COMMAND_BY_NAME,
+        COMMAND_NAME,
+        IMPROVE_SHORT_USAGE,
+        LIBRARY_RETRY_USAGE,
+    )
     from dan_query import match_rank, match_region, query_dan_courses_text
     from sakura_client import SakuraClient
     from score_rank import (
@@ -64,11 +76,11 @@ else:
 
 PLUGIN_NAME = "rt_link"
 PLUGIN_AUTHOR = "Rio"
-PLUGIN_DESC = "支持菌菌与 Sakura 独立绑定、AI 自有成绩与用户管理"
-PLUGIN_VERSION = "v0.22.0"
+PLUGIN_DESC = "太鼓达人成绩查询、AI v2 Rating 与菌菌 / Sakura 账号管理"
+PLUGIN_VERSION = "v0.22.1"
 
-COMMAND_NAME = "rtlink"
 BINDINGS_KEY = "bindings"
+BIND_PRIVATE_MESSAGE = "请在私聊中发送绑定指令，避免在群聊公开凭据。"
 
 # 本评分系统只评估鬼/里（魔王/里魔王）；1–3 难度无谱面定数，不参与评级。
 RATED_LEVELS = (4, 5)
@@ -257,103 +269,76 @@ class RTLinkPlugin(Star):
             async for result in self._dispatch_command(event, rest):
                 yield result
             return
-        ok, result = await self.service.generate_profile_image(
+        outcome = await self.service.generate_profile_image(
             event.get_sender_id(), refresh=True
         )
-        if not ok:
-            yield event.plain_result(result)
-            return
-        yield event.image_result(result)
+        yield self._image_reply(event, outcome)
 
     async def _dispatch_command(self, event: AstrMessageEvent, rest: str):
-        """分发 /rtlink <子指令> ...，保证未知或参数错误时也有明确回复。"""
-        command = rest.split(None, 1)[0].lower()
-
-        if command == "source":
-            parts = rest.split()
-            if len(parts) > 2:
-                yield event.plain_result("用法：/rtlink source [kinoko|sakura]")
-                return
-            yield event.plain_result(await self.service.source_text(event.get_sender_id(), parts[1] if len(parts) == 2 else ""))
-            return
-
-        if command == "bind":
-            parts = rest.split()
-            if len(parts) >= 2 and parts[1].lower() == "sakura":
-                if not event.is_private_chat():
-                    yield event.plain_result("请在私聊中发送绑定命令，避免 token 泄露到群聊。")
-                elif len(parts) != 3:
-                    yield event.plain_result("用法：/rtlink bind sakura <token>")
-                else:
-                    _ok, message = await self.service.bind_sakura(event.get_sender_id(), parts[2])
-                    yield event.plain_result(message)
-                return
-            if len(parts) not in (3, 4):
-                yield event.plain_result(
-                    "用法：/rtlink bind <apikey> <player_id> [server] 或 /rtlink bind sakura <token>"
-                )
-                return
-            async for result in self.bind(event, *parts[1:]):
-                yield result
-            return
-
-        handlers = {
-            "help": self.help,
-            "帮助": self.help,
-            "unbind": self.unbind,
-            "list": self.list_bindings,
-            "score": self.score,
-            "rating": self.rating_cmd,
-            "update": self.update_cmd,
-            "profile": self.profile_cmd,
-            "progress": self.progress_cmd,
-            "weakness": self.weakness_cmd,
-            "improve": self.improve_cmd,
-            "提升": self.improve_cmd,
-            "dan": self.dan_cmd,
-            "段位": self.dan_cmd,
-            "storage": self.storage_cmd,
-            "library": self.library_cmd,
-            "cleanup": self.cleanup_cmd,
-            "alias": self.alias_cmd,
-            "aliaslist": self.aliaslist_cmd,
-            "aliasapprove": self.aliasapprove_cmd,
-            "about": self.about,
-        }
-        handler = handlers.get(command)
-        if handler is None:
-            # 简写：`/rtlink 金雅`、`/rtlink 紫雅 鬼` 直接等价于 `/rtlink improve …`。
-            target, level = self._parse_improve_args("improve " + rest)
-            if target is not None or level is not None:
-                async for result in self.improve_cmd(event, target, level):
+        name, args = self._split_command(rest)
+        command = COMMAND_BY_NAME.get(name)
+        if command is None:
+            if self._parse_improve_args(name) is not None:
+                async for result in self.improve_cmd(event, args=rest):
                     yield result
-                return
-            yield event.plain_result(
-                f"未知子指令：{command}。发送 /rtlink help 查看可用指令。"
-            )
+            else:
+                yield event.plain_result("未知子指令。发送 /rtlink help 查看可用指令。")
             return
-        async for result in handler(event):
+        if args and not command.accepts_args:
+            yield event.plain_result(f"用法：{command.usage}")
+            return
+        handler = getattr(self, command.handler)
+        replies = handler(event, args=args) if command.accepts_args else handler(event)
+        async for result in replies:
             yield result
 
     async def help(self, event: AstrMessageEvent):
         reminder = await self.service.score_sync_reminder_text(event.get_sender_id())
         if reminder:
             yield event.plain_result(reminder)
-        ok, result = await self.service.generate_help_image(event.get_sender_id())
-        if not ok:
-            yield event.plain_result(result)
+        outcome = await self.service.generate_help_image(event.get_sender_id())
+        yield self._image_reply(event, outcome)
+
+    async def bind_cmd(self, event: AstrMessageEvent, *, args: str):
+        if not event.is_private_chat():
+            yield event.plain_result(BIND_PRIVATE_MESSAGE)
             return
-        yield event.image_result(result)
+        provider, payload = self._split_command(args)
+        if provider == "sakura":
+            tokens = payload.split()
+            if len(tokens) != 1:
+                yield event.plain_result(f"用法：{BIND_SAKURA_USAGE}")
+                return
+            _, message = await self.service.bind_sakura(event.get_sender_id(), tokens[0])
+            yield event.plain_result(message)
+            return
+        parts = args.split()
+        if len(parts) not in (2, 3):
+            yield event.plain_result(
+                f"用法：{COMMAND_BY_NAME['bind'].usage}\nSakura：{BIND_SAKURA_USAGE}"
+            )
+            return
+        apikey, player_id = parts[:2]
+        server = self._keyword(parts[2]) if len(parts) == 3 else ""
+        async for result in self.bind(event, apikey, player_id, server):
+            yield result
 
     async def bind(self, event: AstrMessageEvent, apikey: str, player_id: str, server: str = ""):
         if not event.is_private_chat():
-            yield event.plain_result("请在私聊中发送绑定命令，避免 apikey 泄露到群聊。")
+            yield event.plain_result(BIND_PRIVATE_MESSAGE)
             return
-        ok, msg = await self.service.bind(event.get_sender_id(), apikey, player_id, server)
+        _, msg = await self.service.bind(event.get_sender_id(), apikey, player_id, server)
         yield event.plain_result(msg)
 
+    async def source_cmd(self, event: AstrMessageEvent, *, args: str):
+        source = self._keyword(args)
+        if source and source not in ("kinoko", "sakura"):
+            yield event.plain_result(f"用法：{COMMAND_BY_NAME['source'].usage}")
+            return
+        yield event.plain_result(await self.service.source_text(event.get_sender_id(), source))
+
     async def unbind(self, event: AstrMessageEvent):
-        ok, msg = await self.service.unbind(event.get_sender_id())
+        _, msg = await self.service.unbind(event.get_sender_id())
         yield event.plain_result(msg)
 
     async def list_bindings(self, event: AstrMessageEvent):
@@ -363,85 +348,70 @@ class RTLinkPlugin(Star):
         warning = await self.service.low_space_warning_text()
         yield event.plain_result(warning + await self.service.list_bindings())
 
-    async def score(self, event: AstrMessageEvent):
-        song_name = self._parse_score_query(event.get_message_str())
+    async def score(self, event: AstrMessageEvent, *, args: str | None = None):
+        song_name = self._command_args(event, "score") if args is None else args
         if not song_name:
-            yield event.plain_result("用法：/rtlink score <曲名>")
+            yield event.plain_result(f"用法：{COMMAND_BY_NAME['score'].usage}")
             return
         yield event.plain_result(await self.service.query_score_text(event.get_sender_id(), song_name))
 
     async def rating_cmd(self, event: AstrMessageEvent):
-        ok, result = await self.service.generate_report_image(event.get_sender_id())
-        if not ok:
-            yield event.plain_result(result)
-            return
-        yield event.image_result(result)
+        outcome = await self.service.generate_report_image(event.get_sender_id())
+        yield self._image_reply(event, outcome)
 
     async def profile_cmd(self, event: AstrMessageEvent):
-        ok, result = await self.service.generate_profile_image(event.get_sender_id())
-        if not ok:
-            yield event.plain_result(result)
-            return
-        yield event.image_result(result)
+        outcome = await self.service.generate_profile_image(event.get_sender_id())
+        yield self._image_reply(event, outcome)
 
     async def update_cmd(self, event: AstrMessageEvent):
         _ok, result = await self.service.force_update(event.get_sender_id())
         yield event.plain_result(result)
 
     async def progress_cmd(self, event: AstrMessageEvent):
-        ok, result = await self.service.generate_configuration_image(event.get_sender_id())
-        if not ok:
-            yield event.plain_result(result)
-            return
-        yield event.image_result(result)
+        outcome = await self.service.generate_configuration_image(event.get_sender_id())
+        yield self._image_reply(event, outcome)
 
     async def weakness_cmd(self, event: AstrMessageEvent):
-        ok, result = await self.service.generate_weakness_image(event.get_sender_id())
-        if not ok:
-            yield event.plain_result(result)
+        outcome = await self.service.generate_weakness_image(event.get_sender_id())
+        yield self._image_reply(event, outcome)
+
+    async def improve_cmd(self, event: AstrMessageEvent, *, args: str | None = None):
+        text = self._command_args(event, "improve") if args is None else args
+        selection = self._parse_improve_args(text)
+        if selection is None:
+            yield event.plain_result(
+                f"用法：{COMMAND_BY_NAME['improve'].usage} 或 {IMPROVE_SHORT_USAGE}。"
+                "难度可选鬼（4）或里（5），两个数字依次为评价和难度。"
+            )
             return
-        yield event.image_result(result)
+        outcome = await self.service.generate_rank_improve_image(event.get_sender_id(), *selection)
+        yield self._image_reply(event, outcome)
 
-    async def improve_cmd(self, event: AstrMessageEvent, target=None, level=None):
-        """提升评价候选曲目：按分区列出离目标评价最近的谱面与判定/连打两条补分路线。
-
-        作为子指令调用时参数从消息里解析；作为 `/rtlink <评价>` 简写调用时由分发层直接传入。
-        """
-        if target is None and level is None:
-            target, level = self._parse_improve_args(event.get_message_str())
-        ok, result = await self.service.generate_rank_improve_image(
-            event.get_sender_id(), target, level
-        )
-        if not ok:
-            yield event.plain_result(result)
-            return
-        yield event.image_result(result)
-
-    async def dan_cmd(self, event: AstrMessageEvent):
+    async def dan_cmd(self, event: AstrMessageEvent, *, args: str | None = None):
         """段位道场课题曲查询：`/rtlink dan [年份] [区域] [段位] [曲名]`，参数顺序不限。
 
         曲名支持国服名、日文名、罗马字与常用别名；不带参数时列出可查询的年份与段位。
         """
-        match = re.search(r"(?:dan|段位)\s+(.+)$", event.get_message_str() or "", re.IGNORECASE)
-        args = self._parse_dan_args(match.group(1) if match else "")
+        text = self._command_args(event, "dan") if args is None else args
         yield event.plain_result(
             query_dan_courses_text(
                 self.dan_courses,
                 alias_data=getattr(self, "aliases", None),
-                **args,
+                **self._parse_dan_args(text),
             )
         )
 
-    @staticmethod
-    def _parse_dan_args(text: str) -> dict:
+    @classmethod
+    def _parse_dan_args(cls, text: str) -> dict:
         """解析段位查询参数：年份、区域、段位、曲名，顺序不限。"""
         args = {"year": 0, "region": "", "rank": "", "song_name": ""}
         song_parts = []
         for token in re.split(r"[\s,，、]+", str(text or "").strip()):
             if not token:
                 continue
-            if re.fullmatch(r"20\d{2}", token) and not args["year"]:
-                args["year"] = int(token)
+            keyword = cls._keyword(token)
+            if re.fullmatch(r"20[0-9]{2}", keyword) and not args["year"]:
+                args["year"] = int(keyword)
                 continue
             if not args["rank"]:
                 rank = match_rank(token)
@@ -455,14 +425,18 @@ class RTLinkPlugin(Star):
         args["song_name"] = " ".join(song_parts).strip()
         return args
 
-    async def library_cmd(self, event: AstrMessageEvent):
-        args = (self._bare_rest(event.get_message_str()) or "library").split()[1:]
-        if args and args != ["retry"]:
-            yield event.plain_result("用法：/rtlink library [retry]")
+    async def library_cmd(self, event: AstrMessageEvent, *, args: str | None = None):
+        action = self._command_args(event, "library") if args is None else args
+        action = self._keyword(action)
+        if action and action != "retry":
+            usage = COMMAND_BY_NAME["library"].usage
+            if event.is_admin():
+                usage += f" 或 {LIBRARY_RETRY_USAGE}"
+            yield event.plain_result(f"用法：{usage}")
             return
-        if args:
+        if action:
             if not event.is_admin():
-                yield event.plain_result("仅管理员可重试安装分析库。")
+                yield event.plain_result("无权限：仅管理员可重试安装公共谱面分析库。")
                 return
             self.chart_installer.start(force=True)
         yield event.plain_result(await self.service.chart_library_status_text())
@@ -479,14 +453,16 @@ class RTLinkPlugin(Star):
             return
         yield event.plain_result(await self.service.cleanup())
 
-    async def alias_cmd(self, event: AstrMessageEvent):
-        args = self._parse_alias_args(event.get_message_str())
-        if not args:
-            yield event.plain_result("用法：/rtlink alias <精准ID或曲名> <别名>")
+    async def alias_cmd(self, event: AstrMessageEvent, *, args: str | None = None):
+        text = self._command_args(event, "alias") if args is None else args
+        pair = self._parse_alias_args(text)
+        if pair is None:
+            yield event.plain_result(
+                f"用法：{COMMAND_BY_NAME['alias'].usage}。含空格的曲名请加引号。"
+            )
             return
-        target, alias = args
         yield event.plain_result(
-            await self.service.request_alias(event.get_sender_id(), target, alias)
+            await self.service.request_alias(event.get_sender_id(), *pair)
         )
 
     async def aliaslist_cmd(self, event: AstrMessageEvent):
@@ -495,48 +471,61 @@ class RTLinkPlugin(Star):
             return
         yield event.plain_result(await self.service.list_pending_aliases_text())
 
-    async def aliasapprove_cmd(self, event: AstrMessageEvent):
+    async def aliasapprove_cmd(self, event: AstrMessageEvent, *, args: str | None = None):
         if not event.is_admin():
             yield event.plain_result("无权限：仅管理员可审批别名。")
             return
-        args = self._parse_rest(event.get_message_str(), "aliasapprove")
-        yield event.plain_result(await self.service.approve_aliases_text(args))
+        text = self._command_args(event, "aliasapprove") if args is None else args
+        if not text:
+            yield event.plain_result(f"用法：{COMMAND_BY_NAME['aliasapprove'].usage}")
+            return
+        yield event.plain_result(await self.service.approve_aliases_text(text))
 
     async def about(self, event: AstrMessageEvent):
         yield event.plain_result(f"{PLUGIN_NAME} {PLUGIN_VERSION}\n{PLUGIN_DESC}")
 
     @staticmethod
-    def _bare_rest(msg: str) -> str:
-        """裸命令判定：返回 rtlink 之后的内容；空串表示裸 /rtlink。"""
-        s = (msg or "").strip()
-        if s.startswith("/"):
-            s = s[1:].lstrip()
-        if s == COMMAND_NAME:
-            return ""
-        if s.startswith(COMMAND_NAME + " "):
-            return s[len(COMMAND_NAME) + 1:].strip()
-        return s
+    def _keyword(text: str) -> str:
+        return unicodedata.normalize("NFKC", text).casefold()
 
     @staticmethod
-    def _parse_score_query(msg: str) -> str:
-        m = re.search(r"score\s+(.+)$", msg or "", re.IGNORECASE)
-        return m.group(1).strip() if m else ""
+    def _image_reply(event, outcome):
+        ok, result = outcome
+        return event.image_result(result) if ok else event.plain_result(result)
+
+    @classmethod
+    def _split_command(cls, text: str) -> tuple[str, str]:
+        parts = text.split(maxsplit=1)
+        if not parts:
+            return "", ""
+        return cls._keyword(parts[0]), parts[1] if len(parts) == 2 else ""
+
+    @classmethod
+    def _bare_rest(cls, msg: str) -> str:
+        text = (msg or "").strip()
+        if text.startswith(("/", "／")):
+            text = text[1:].lstrip()
+        name, args = cls._split_command(text)
+        return args if name == COMMAND_NAME else text
+
+    @classmethod
+    def _command_args(cls, event: AstrMessageEvent, expected: str) -> str:
+        name, args = cls._split_command(cls._bare_rest(event.get_message_str()))
+        return args if COMMAND_BY_NAME.get(name) == COMMAND_BY_NAME[expected] else ""
 
     @staticmethod
-    def _parse_alias_args(msg: str):
-        """解析「alias <target> <别名>」，别名可含空格；返回 (target, alias) 或 None。"""
-        m = re.search(r"alias\s+(.+)$", msg or "", re.IGNORECASE)
-        if not m:
+    def _parse_alias_args(text: str) -> tuple[str, str] | None:
+        """曲名可以加引号，别名取剩余全文。"""
+        if not text:
             return None
-        parts = m.group(1).strip().split(None, 1)
-        if len(parts) != 2 or not parts[0].strip() or not parts[1].strip():
+        end_quote = {'"': '"', "＂": "＂", "“": "”", "「": "」"}.get(text[0])
+        if end_quote:
+            target, _, remainder = text[1:].partition(end_quote)
+            if target.strip() and remainder and remainder[0].isspace() and remainder.strip():
+                return target.strip(), remainder.strip()
             return None
-        return parts[0].strip(), parts[1].strip()
-
-    @staticmethod
-    def _parse_rest(msg: str, command: str) -> str:
-        m = re.search(re.escape(command) + r"\s+(.+)$", msg or "", re.IGNORECASE)
-        return m.group(1).strip() if m else ""
+        parts = text.split(maxsplit=1)
+        return (parts[0], parts[1]) if len(parts) == 2 else None
 
     @staticmethod
     def _parse_levels(text: str):
@@ -559,35 +548,24 @@ class RTLinkPlugin(Star):
                 levels.append(level)
         return tuple(sorted(levels)) or None
 
-    @staticmethod
-    def _parse_improve_args(msg: str):
-        """解析「improve [目标评价] [难度]」，顺序不限、均可省略。
-
-        纯数字按「先目标评价、后难度」的顺序赋值：`improve 4` 指评价 4（金雅），
-        `improve 金雅 5` 指评价金雅 + 里谱面。中文/日文评价名与难度名互不冲突。
-        """
-        m = re.search(r"(?:improve|提升)\s+(.+)$", msg or "", re.IGNORECASE)
+    @classmethod
+    def _parse_improve_args(cls, text: str) -> tuple[int | None, int | None] | None:
+        """目标评价和难度均可省略。数字优先用作目标评价，其次用作难度。"""
         target = level = None
-        if not m:
-            return None, None
-        for token in m.group(1).split():
-            token = token.strip()
-            if not token:
-                continue
-            if token.isdigit():
-                number = int(token)
-                if target is None and 1 <= number <= 8:
-                    target = number
-                elif level is None and number in RATED_LEVELS:
-                    level = number
-                continue
-            rank = parse_score_rank(token)
+        for token in text.split():
+            token = cls._keyword(token)
+            try:
+                rank = parse_score_rank(token)
+                difficulty = parse_difficulty(token)
+            except ValueError:
+                return None
             if rank is not None and target is None:
                 target = rank
                 continue
-            difficulty = parse_difficulty(token)
             if difficulty in RATED_LEVELS and level is None:
                 level = difficulty
+                continue
+            return None
         return target, level
 
     @staticmethod
@@ -604,8 +582,6 @@ class RTLinkPlugin(Star):
             return str(error)
 
         async def query():
-            if target == "bot" and not await self.service.has_current_binding(owner):
-                return BOT_UNBOUND
             result = await producer(owner)
             return (
                 f"查询对象：{BOT_NAME}（AI 自己）\n{result}"
@@ -695,14 +671,6 @@ class RTLinkPlugin(Star):
             )
 
         async def query():
-            if target == "bot" and not await self.service.has_current_binding(owner):
-                return query_gateway.dumps(
-                    {
-                        "status": "not_bound",
-                        "subject": {"target": "bot", "name": BOT_NAME},
-                        "message": BOT_UNBOUND,
-                    }
-                )
             batch = await self.service.get_readonly_queries_text(
                 owner,
                 queries,

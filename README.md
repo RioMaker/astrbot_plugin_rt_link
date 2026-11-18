@@ -1,314 +1,95 @@
-# astrbot_plugin_rt_link
+# RTLink
 
-<p><img src="logo.png" alt="RT Link 太鼓达人双鼓角色标志" width="128" height="128"></p>
+<p><img src="logo.png" alt="RTLink 太鼓达人双鼓标志" width="128" height="128"></p>
 
-将 NapCat 对话中的 QQ 号绑定到「菌菌控制台」的 apikey，据此查询太鼓达人指定曲目的成绩，并以 **AI v2 Rating**（Taiko Signal Rhythm v2）评估玩家实力，结合 AI 识别的节奏型画像给出「该练什么 + 参考曲目」建议。
+RTLink 是 AstrBot 的太鼓达人成绩插件。支持菌菌和 Sakura 账号、单曲查分、个人画像、AI v2 Rating、练习推荐与段位道场查询。可可子可以在管理页绑定自己的独立游戏账号。
 
-## v0.22.0 可可子账号与用户管理页
+## 开始使用
 
-更新并重载插件后，在 **AstrBot WebUI → 插件 → rt_link → 用户与可可子账号管理** 打开页面。使用 AstrBot 的 [Plugin Pages / 可视化视图](https://docs.astrbot.app/dev/star/guides/plugin-pages.html) 和登录态 Bridge；需要宿主支持 `register_web_api`、`astrbot.api.web` 及插件页面。
+在 AstrBot 插件管理中安装或更新 RTLink，重载插件。管理页需要支持 Plugin Pages 的宿主，最低版本见 [插件元数据](metadata.yaml)。
 
-- **可可子账号**：分别管理菌菌 API Key（含玩家 ID / 服务器）和 SakuraBot Token，支持验证保存、同步、切换当前来源及解绑。可可子使用独立身份保存绑定、成绩、Rating 和历史，不依赖当前发言者的账号。
-- **绑定用户**：按用户汇总全部现有绑定和可恢复的历史用户，展示绑定来源、最后同步日期（北京时间）与当前来源最近一次计算的 Rating。支持搜索、分页、来源/状态筛选，以及各来源的换绑、同步和解绑。
-- **AI 查询**：`query_rtlink` 及四个玩家快捷工具新增 `target="caller" | "bot"`。默认查发言者；问「可可子你的成绩」时查 `bot`，结果明确标注对象；比较双方分别调用两次。Token 仅在管理页保存，不进入模型参数或查询结果。
+1. 在 QQ 私聊使用以下任一种绑定方式。菌菌的 `server` 可选 `cn`、`jp` 或 `custom`，省略时使用配置中的默认服务器。Sakura 由接口识别玩家。
+2. 发送 `/rtlink` 强制同步当前来源，成功后生成个人画像。只想同步成绩时发送 `/rtlink update`。
+3. 发送 `/rtlink score 鬼夏祭` 查单曲，或发送 `/rtlink help` 查看完整帮助长图。
 
-页面读取本地记录，不自动批量拉取远端成绩。未同步、已解绑、账号不匹配或旧版评级缓存会明确显示待同步/未绑定，不混用另一个来源的 Rating。完整操作与数据保留规则见 [账号管理说明](docs/account-management.md)。
-
-## v0.18.0 评分规则
-
-单谱 Rating 以该谱固定 AI 定数为上限，只有全良精度能达到定数。精度到 Rating 沿用按难度变化的非线性曲线，经过全良归一化与难度单调修正；没有重新训练或修改谱面定数。综合 Rating 量表上限同步改为 11.6，七维与配置评分重新计算。旧模型与新模型的 Rating 不直接判定涨跌，首次同步重建基线，最高分比较和历史原始成绩保留。OurTaiko-v1 参考算法保持原值。详见 [R2 评分规则与迁移](docs/rating-r2-constant-cap.md)。
-
-## 功能
-
-- 绑定管理：`bind` / `unbind` / `list`（管理员）
-- 成绩查询：按曲名/别名模糊匹配（中文/日文/英文）
-- **曲名别名索引**：内置别名表收「国服曲名 + 日文曲名 + 罗马字（ESE 谱面）+ 人工整理简称/黑话」，段位查询、查分、别名申请共用同一套匹配；`北埼玉`、`六天`、`罗特`、`顿卡马`、`天狗囃子` 这类叫法都能直接查到
-- **难度筛选**：支持难度别名（鬼/魔王/里/里魔王/松/困难/竹/一般/梅/简单）与组合名（如「鬼夏祭」「里夏祭」）
-- **歌曲别名**：两步确认（发起 → 管理员审核），审核通过后可用别名查询
-- **玩家实力评级**：综合 Rating + 七维能力（谱面底力/持续耐力/爆发手速/击打精度/配置处理/节奏适应/读谱）+ 强项/弱项
-- **单人分支成绩**：已核对的分支按实际音符数选择对应 AI 画像；同音符数存在不同路径时继续拒绝评级，不套用达人分支定数。详见[分支音符数核验与修正](docs/branch-note-audit-2026-10-16.md)。
-- **实力画像图片**：`/rtlink rating` 在插件本地生成 `1440 × 2720` PNG 报告（Rating 环 + 能力星系 + 强弱项 + 表现证据 + 冷门配置观察）
-- **个人画像图片**：`/rtlink` 或 `/rtlink profile` 输出宽 1440 的自适应长图：分段配色 Rating 环、互斥评价/皇冠统计、能力行星、配置评分概览、带皇冠和实际评价图标的 BEST 20、最多 8 首提升建议。表/里按独立谱面排序；BEST 20 的里谱保留淡色水印。提升建议采用双列卡片，区分当前与目标评价、最高分与目标分，以及判定/黄条连打补分参考；魔王和里魔王分别显示粉色与紫色难度图标。
-- **配置评分详情**：`/rtlink progress` 展示 18 种配置 × 7 个 BPM 档的评分、理论满分与样本。满分由全曲库全良按同一算法计算；不足 3 个计分样本保留空值。积累至少两次有效同步后显示同版本历史曲线。
-- **节奏型弱项图片**：`/rtlink weakness` 输出 `1440 × 2200` PNG；按「节奏型 × BPM 档」给出核心短板、练习路径和参考曲目
-- **提升评价候选**：`/rtlink improve [评价] [难度]` 输出 `1440 × 2020` PNG，按曲风分区列出「离目标评价最近」的谱面，并给出两条路线：判定（把几个「可」「不可」打成「良」，必要时标注「必须全良」）与连打（还差几打、补完这局黄条共几打、对应秒速，以及是否超出该谱連打理論値）；没有黄条的曲目会直接写明「只能靠判定」。AI 使用 `recommend_practice(goal="score_rank")` 获取精简候选与补分路线
-- **冷门配置分组**：内置谱面库覆盖率低于 3% 的节奏配置单列观察，不进入核心弱项排行
-- **成长记录**：仅在成功同步且评分输入变化时保存，查看图片/文本不会重复记点。新配置历史按玩家、服务器、数据源、算法和资源版本隔离，压缩保存计算输入与全部配置状态；谱面资源按哈希共享归档。
-- **完整帮助长图**：`/rtlink help` 或 `/rtlink 帮助` 返回同一张说明图片，包含菌菌 apikey 四步绑定实图、常用指令、评级与安全说明
-- LLM 工具：注册统一只读查询、玩家概览、练习推荐、单曲摘要、段位资料查询、段位评估六个任务入口；统一入口一次可组合最多 24 项查询
-- **段位道场查询**：`/rtlink dan [年份] [区域] [段位] [曲名]`（或 `/rtlink 段位 …`）查 2022–2026 日版/国际版与国服课题曲、普通/金合格条件、开放时间与来源；按曲名反查时同时给出国服名、日文名与 RTLink 曲目 ID，支持「鬼 天竺2000」这样带难度前缀
-- **公开段位资料查询**：AI 可调用 `query_dan_course`，按曲名、别名或歌曲 ID 反查各届段位出现记录，也可查询指定段位的课题曲与条件；无需绑定账号，与 `/rtlink dan` 使用同一套资料
-- **AI 过段能力参考**：LLM 工具 `evaluate_player_dan` 将三首课题曲的实际良/可/不可/连打与普通、金合格条件逐项对照，并明确标注魂槽及连续演奏无法验证
-- 本地存储：SQLite 持久化全部 1–5 难度成绩；当前最佳、同步批次、去重变化历史分表保存，原始字段完整保留
-- 空间监管：`/rtlink storage` 查询用量，接近配额自动提醒管理员
-
-## 命令
-
-支持菌菌与 Sakura 分别绑定、独立保存成绩和历史。私聊发送 `/rtlink bind sakura <token>` 绑定 Sakura；`/rtlink source` 查看当前来源，`/rtlink source kinoko` 或 `/rtlink source sakura` 切换。绑定成功后自动选择该来源；`unbind` 只解绑当前来源。旧菌菌绑定与数据库原样沿用。详见 [多来源成绩与独立存储](docs/data-sources.md)。
-
-```
-/rtlink bind <apikey> <player_id> [server]  绑定当前 QQ（server 默认 cn，仅私聊）
-/rtlink unbind                              解绑当前 QQ
-/rtlink score <曲名|别名|鬼夏祭>             查询指定曲目成绩（支持难度前缀组合名）
-/rtlink rating                              生成实力画像图片
-/rtlink update                              跳过缓存，从当前来源拉取并记录历史快照
-/rtlink profile                             生成个人 Profile（使用有效缓存）
-/rtlink progress                            查看全部配置评分、理论满分、样本与历史曲线
-/rtlink weakness                            生成节奏型弱项与练习建议图片（冷门配置单列）
-/rtlink improve [评价] [难度]                生成「提升评价」图片（分区列出最接近目标的谱面）
-/rtlink <评价> [难度]                        等价于 /rtlink improve，省略 improve 的简写
-/rtlink dan [年份] [区域] [段位] [曲名]       查段位道场课题曲、合格条件与来源（支持曲名别名）
-/rtlink alias <ID或曲名> <别名>              申请歌曲别名（待管理员审核）
-/rtlink help                                查看帮助
-/rtlink 帮助                                查看同一张完整帮助长图
-/rtlink about                               查看插件信息
-
-裸 `/rtlink`（不带子命令）先执行与 `/rtlink update` 相同的强制同步，成功后返回个人画像；同步失败时返回错误提示。`/rtlink profile` 保留有效缓存读取行为。原详细实力报告保留在 `/rtlink rating`。
-评价简写示例：`/rtlink 金雅`、`/rtlink 紫雅 鬼`、`/rtlink 极`。
-国服段位资料已更新至 2026-10-14 开放的五级～十段；人字段尚未确认。资料来源与重算记录见 [本次维护说明](docs/data-refresh-2026-10-14.md)。
-
-段位查询示例：`/rtlink dan 2025 十段`、`/rtlink dan 十段 国服`、`/rtlink dan 六天`、`/rtlink dan 鬼 天狗囃子`。
-
-管理员指令不在此列出，完整指令（含管理员）见 [docs/commands.md](docs/commands.md)。
+```text
+/rtlink bind <apikey> <player_id> [server]
+/rtlink bind sakura <token>
 ```
 
-也可以直接自然语言询问，例如：「可可子，我的实力怎么样」「可可子，推荐 5 首练精度的歌」「可可子，推荐我没玩过的练习曲」「可可子，夏祭的成绩和配置怎么样」「可可子，评估我过 2025 国服十段的条件」。
+两种来源可以同时绑定。绑定成功即选择该来源。`/rtlink source` 查看状态，`/rtlink source kinoko` 或 `/rtlink source sakura` 切换。`/rtlink unbind` 解绑当前来源并保留该来源的历史。请在私聊输入凭据；账号绑定与 AI 查询各用独立入口。详见 [多来源使用与存储](docs/data-sources.md)。
 
-## AI 检索能力
+## QQ 指令
 
-v0.21.2 撤回近期的子 Agent 查询和自动创建工具，恢复主 AI 直接读取玩家数据。插件不额外调用模型，成绩、统计、数据来源及缺失原因直接返回主 AI。保留 v0.21.1 的歌曲/段位精确匹配修复。
-
-公共段位目录仅含课题曲和条件；个人良/可/不可来自玩家成绩或段位能力参考。当前未接入实际段位参战次数、逐次过段历史，这与个人单曲成绩是否同步是两件事。公共目录缺少个人记录时，不应推断同步失败。
-
-v0.21.2 向模型注册六个工具：`query_rtlink`、`get_player_overview`、`recommend_practice`、`query_song_brief`、`query_dan_course`、`evaluate_player_dan`。组合查询优先使用 `query_rtlink`：一次传入最多 24 项 `{tool, args}`，可查询玩家统计、多曲成绩对比、组合条件检索、近期成绩、成长历史、完整单曲能力、详细谱面及段位。旧查询方法通过统一入口调用，避免向模型重复注册大量工具；图片生成与别名写入继续通过原有命令使用。
-
-批次固定开始时选择的数据源，玩家查询复用同一份分析结果，失败的同步也不在批内重复尝试。一个子查询失败不会中断其他项；不允许指定其他玩家、读取凭据或调用写入方法。公开段位和谱面查询无需绑定账号。
-
-`recommend_practice` 一次返回必要玩家背景、5 首候选、逐曲依据和练习目标。支持综合练习、节奏补弱、精度、全连、评价提升和未玩曲探索。符合条件不足 5 首时明确说明，不凑数；不要求 AI 先查画像或逐曲补查。
-
-推荐使用本地成绩与预计算配置，无额外模型调用。一般练习以该难度前 20 张成绩的谱面定数中位数为锚点，筛选其 −1.5～+0.5 的谱面；这是训练启发式。未玩曲还必须有配置匹配及已玩参考曲，排除已玩但未评级、原始同步数据已有记录及路线未经确认的分支谱面。评价提升沿用现有门槛与判定/连打算法，保留估算或资料不足的标记，不把差距直接当成成功率。
-
-单条消息最多执行两次不同的 RTLink AI 查询，统一入口的整个批次计一次。重复查询提示复用已返回的材料；新消息独立计数，原命令不受限制。统一入口最多返回 32000 字符；大结果自动发送完整 JSON 附件，并为每一项保留摘要，附件发送失败会明确说明。可设 `export=true` 主动导出本次结果；导出位于插件数据目录 `query_exports/`，不含凭据。原有五个入口仍最多返回 2500 字符。日志仅记录工具名、执行次数、字符数与耗时，不记录成绩正文或凭据。此预算限制本插件取数，不能代替 AstrBot 对整个 Agent 模型轮次的限制。
-
-附件包含本次查询返回的全部材料；检索/谱面仍遵守 `limit/offset`，推荐仍最多 5 首，不代表导出了全库或全部历史。需要更多结果时可在同一批内组合不同偏移查询。普通情况下把所需项目一次列全，第二次调用用于消歧或补充。
-
-`query_song_brief` 合并该曲鬼/里的成绩、定数、音符数和主要配置摘要；未绑定时仍提供公共资料并说明无法确认是否游玩。统一入口还可查询指定小节或原始特征。完整查询清单、参数及组合示例见 [命令与 AI 工具说明](docs/commands.md)。公共 TJA 数据包见 [公共 TJA 分析库](docs/chart-library.md)。
-
-升级后在 AstrBot 重载插件，使工具列表刷新。旧 `query_agent_*` 配置不再使用；若当前聊天仍使用 `query_rtlink(question=...)`，请刷新工具列表或开启新会话，改用 `queries` 参数。账号绑定、成绩数据库和手动命令继续沿用。
-
-## 难度筛选与别名
-
-- 难度别名：`鬼/魔王/4`、`里/里鬼/里魔王/5`、`松/困难/3`、`竹/一般/2`、`梅/简单/1`（仅鬼/里参与评级）。
-- 组合名：查询时可用「鬼夏祭」「里夏祭」这类「难度前缀 + 曲名」写法。
-- 歌曲别名：`/rtlink alias <ID或曲名> <别名>` 发起（返回歌曲 ID/名称等信息供确认），管理员用 `/rtlink aliaslist` 查看、`/rtlink aliasapprove` 批量通过；通过后即可用别名查询。
-- AI 单曲入口 `query_song_brief` 支持难度参数、内置及已审核别名；别名申请继续使用 `/rtlink alias`。
-
-## 评级说明
-
-- 主 Rating 采用 **AI v2**（Taiko Signal Rhythm v2），参考 OurTaiko-v1 公式（MIT，来源 [OurTaiko/taiko-rating-analyzer](https://github.com/OurTaiko/taiko-rating-analyzer)）。
-- **仅评估鬼/里（魔王/里魔王）谱面**，1–3 难度无谱面定数，不参与评级。
-- 谱面元数据打包在 `resource/charts.v1.json.gz`（1421 张，其中 1413 张有 AI v2 定数）。2026-10-16 补算了 86 张已核对的国服单人谱；双打、需 P1 映射复核及缺 TJA 的谱面未估填，见[逐谱审计](docs/cn-constant-backfill-2026-10-16.html)。
-- Rating 历史保存在 AstrBot 的 `data/plugin_data/astrbot_plugin_rt_link/rt_link.db`，插件更新不会覆盖；快照不保存 apikey。
-- 每次菌菌同步都会记录同步批次；曲目成绩状态发生变化时追加到 `score_history`，相同状态不会重复占用空间。旧数据库启动时自动增量迁移。
-- 升级到新版后，旧 Rating 缓存不会被当作“全难度已同步”。首次发送 `/rtlink`、`/rtlink score <曲名>`、`/rtlink rating`、`/rtlink profile` 或 `/rtlink weakness` 会自动补同步；也可用 `/rtlink update` 手动强制同步。同步失败时会返回这些操作提示。
-- 每份快照记录 `algorithmVersion`、`catalogVersion` 和 `catalogSchemaVersion`；后续算法升级后可按版本区间标注曲线，避免把算法变化误判为玩家进步。
-
-## スコアランク（成绩评价）说明
-
-`/rtlink improve` 与 `/rtlink score` 里的「评价」指街机版的 **スコアランク**，共 8 档：
-
-| 档 | 名称 | 门槛（＝该谱極スコア × 比例） | 数值约 |
-| --- | --- | --- | --- |
-| 1 | 无 | < 50% | < 50 万 |
-| 2 | 白粹 | ≥ 50% | ≥ 50 万 |
-| 3 | 铜粹 | ≥ 60% | ≥ 60 万 |
-| 4 | 银粹 | ≥ 70% | ≥ 70 万 |
-| 5 | 金雅 | ≥ 80% | ≥ 80 万 |
-| 6 | 粉雅 | ≥ 90% | ≥ 90 万 |
-| 7 | 紫雅 | ≥ 95% | ≥ 95 万 |
-| 8 | 极 | ≥ 100%（即極スコア 本身） | ≥ 100 万 |
-
-> 门槛是**该谱極スコア的固定比例**，不是天井スコア的比例，也不是固定的绝对分数。
-> 極スコア ≈ 100 万，所以「数值约」那一列看起来像整数万，但各曲之间有 ±1% 浮动 ——
-> 实测 1390 条成绩：「極スコア × 比例」错判 2 条（99.86%），固定绝对值错判 22 条，
-> 「天井スコア × 比例」错判 24 条。见 [docs/score-rank.md](docs/score-rank.md)。
->
-> **「极」不要求全良**：極スコア 是分数门槛，黄条每打固定 100 分，
-> 判定上留下的「可」可以用多打连打补回来。
-
-算分公式（AC16 ニジイロ～）：
-
-```
-スコア = 良 × 基本点 + 可 × ⌊基本点 / 2⌋ + 黄色連打打数 × 100
-基本点 = 天井スコア ÷ 总音符数      （每谱固定、10 的整数倍）
-天井スコア ≈ 1,000,000              （各曲 98.4 万 ~ 100.5 万）
-極スコア = 天井スコア + 必要連打打数 × 100
-```
-
-因此「把 1 个『可』打成『良』」等价于 **+半个基本点** 的分数，`/rtlink improve` 就是据此把分数缺口换算成所需良数；连打每打固定 100 分，可作为不动判定时的补充手段。
-
-- 每曲的真实「天井スコア / 極スコア / 必要連打打数」来自 [太鼓の達人 譜面とか Wiki](https://wikiwiki.jp/taiko-fumen/作品/新AC/極スコア/おに)，打包在 `resource/score_rank.v1.json.gz`（覆盖内置谱面库 96.6%）。未覆盖的曲目按「基本点 = 100 万 ÷ 总音符数」估算，图中标注「估算」。
-- 详细推导、实测验证与已知偏差见 [docs/score-rank.md](docs/score-rank.md)。
-
-### 连打（黄色連打）与秒速
-
-把分数缺口换算成连打时，必须知道这张谱的黄条到底有多长、有没有黄条：
-
-```
-連打秒数   = 60 ÷ BPM起点 × (拍数 − 1/12)        每条黄条分别计算后求和
-連打理論値 = ⌈(連打秒数 + 0.001) × 60⌉            逐条取整后求和（即每秒最多约 60 打）
-秒速       = 黄色連打打数 ÷ 合計黄色連打秒数      風船連打不计入
-```
-
-- 每条谱面的黄条条数、合計秒数、連打理論値与风船资料打包在 `resource/rolls.v1.json.gz`
-  （由 `scripts/build_rolls.py` 从 ESE 的 TJA 谱面按上式算出，再用 wiki 公布的
-  「極スコア要求連打速度」交叉校验；覆盖 96.5% 谱面）。
-- 「极」要求的连打速度通常落在 **16.6 ~ 18 打/秒**，所以结果里超过 30 打/秒时会额外提示偏高。
-- **没有黄条的谱面**（库里 131 张只有风船、108 张连风船都没有）无法靠连打补分，只能走判定路线；
-  如果只靠判定就必须把现有「可」「不可」全部打成「良」，文案会直接写「必须全良」。
-- 连打打数超过該谱連打理論値时，说明这条路打不出来，文案会给出「理論値共 N 打，还差 M 打」。
-- 国服接口的結算連打数包含风船打数，插件按谱面资料把风船部分扣除后再算秒速（`BALLOON_NOMINAL_SPEED` 兜底封顶）。
-
-### 曲名与别名
-
-同一首歌在不同资料里叫法不同：国服（菌菌）用国服曲名，日文 wiki 与段位道场用日文曲名，
-ESE 谱面里还带一份罗马字/英文曲名，玩家口语又常简称（北埼玉、六天、罗特、顿卡马…）。
-
-```
-归一化 key = NFKC → 大小写折叠 → 片假名折平假名 → 繁简折算 → 去掉空白与标点
-匹配优先级 = 完全相等 > 前缀 > 包含（同级按难度与曲目 ID 排序）
-```
-
-- 全部写法打包在 `resource/aliases.v1.json.gz`（1524 首、1849 个鬼/里身份、6853 条写法），
-  由 `scripts/build_aliases.py` 合并「国服公开曲库 + 菌菌曲库 + ESE 谱面 + 段位资料 + 人工别名表」生成；
-  人工整理部分在 [`scripts/data/song_aliases.json`](scripts/data/song_aliases.json)，可直接编辑后重跑脚本。
-- 段位查询、`/rtlink score`、成绩检索 `search_scores`、别名申请解析共用这张表；
-  用户通过 `/rtlink alias` 提交且审核通过的别名优先级更高。
-- 详细规则、来源与维护方式见 [docs/song-aliases.md](docs/song-aliases.md)。
-- [完整可搜索审核表](docs/song-alias-audit-2026-10-14.html)包含逐名来源、全部冲突与段位映射；国服名优先显示，未评级新歌也可按真实 ID 查询。
-
-## 目录结构
-
-```
-astrbot_plugin_rt_link/
-├── main.py             # 插件入口（Star 类 + 命令 + LLM 工具）
-├── dan_query.py        # 段位资料查询与 LLM 文本格式化（曲名走别名索引）
-├── song_alias.py       # 曲名/别名归一化索引（国服名 / 日文名 / 罗马字 / 简称）
-├── rating.py           # 玩家 Rating 算法（AI v2 主 + OurTaiko-v1 参考 + 节奏型画像）
-├── score_rank.py       # スコアランク（成绩评价）门槛、「提升评价」候选分析与连打路线计算
-├── improve_text.py     # 「还差多少 / 怎么补」的文案渲染（判定路线 + 连打路线）
-├── report_image.py     # 与鼓迹网站同源版式的固定像素 Pillow 渲染器
-├── profile_image.py    # /rtlink profile 玩家画像渲染器
-├── weakness_image.py   # /rtlink weakness 弱项渲染器（冷门配置单列）
-├── improve_image.py    # /rtlink improve 提升评价候选渲染器
-├── help_image.py       # /rtlink help 完整说明长图渲染器
-├── storage.py          # SQLite 成绩、Rating 历史快照与空间计量
-├── service.py          # 核心服务（绑定/同步/评级/查询）
-├── api_client.py       # 菌菌公开 API 客户端（标准库实现）
-├── resource/           # 谱面、段位道场、评价门槛、连打与别名静态资源（压缩 JSON + manifest）
-├── scripts/            # 静态资源构建脚本（联网/读本地 TJA，仅构建期使用）
-│   └── data/           # 人工维护的数据（曲名别名表）
-├── test_api.py         # API 连通性测试（读取 apikey.key）
-├── metadata.yaml       # 插件元数据
-├── _conf_schema.json   # WebUI 配置项
-├── docs/
-│   ├── agent-tasks.md  # 开发任务清单
-│   ├── commands.md     # 完整指令清单（含管理员）
-│   ├── data-fields.md  # 菌菌成绩数据字段含义
-│   ├── score-rank.md   # スコアランク 算分公式、门槛推导、连打秒速与数据来源
-│   └── song-aliases.md # 曲名别名索引：来源、构建、匹配规则与维护
-└── test/               # mock AstrBot + 本地模拟测试
-```
-
-## 菌菌公开 API（已实测）
-
-| 项 | 值 |
+| 用途 | 指令 |
 | --- | --- |
-| Base URL | `https://kinoko.zorua.cn/api/v1` |
-| 鉴权 | `Authorization: Bearer <tk_... API Key>` |
-| 成绩端点 | `GET /scores/hiroba`、`/scores/kinoko`、`/scores/hiroba/recent`、`/scores/kinoko/recent` |
+| 同步并生成个人画像 | `/rtlink` |
+| 查看缓存可用时的个人画像 | `/rtlink profile` |
+| 查看七维能力、强弱项和表现证据 | `/rtlink rating` |
+| 查看 18 种配置在 7 个 BPM 档的评分、样本和历史 | `/rtlink progress` |
+| 查看节奏型弱项与练习参考 | `/rtlink weakness` |
+| 查看升评价的判定和连打路线 | `/rtlink improve 金雅 鬼` 或 `/rtlink 金雅 鬼` |
+| 查段位课题曲及合格条件 | `/rtlink dan 2026 十段 国服` |
+| 由歌曲反查段位 | `/rtlink dan 六天` |
+| 查看公共谱面分析库的安装状态 | `/rtlink library` |
+| 查看帮助 | `/rtlink help` 或 `/rtlink 帮助` |
 
-评级使用 `/scores/kinoko`（全历史）取每张谱面的最佳成绩；`/scores/hiroba`（最新）同步并转义落库作为快照。
+命令参数、中文子指令、歌曲别名审批、存储管理和公共谱面库安装重试均见 [完整指令](docs/commands.md)。
 
-## 配置项
+## 可可子账号与 AI 查询
 
-| 键 | 说明 | 默认 |
+在 **AstrBot WebUI → 插件 → rt_link → 用户与可可子账号管理** 启用可可子的来源，也可搜索绑定用户、查看各来源的同步状态和当前 Rating。验证并保存后可手动同步、切换或解绑。操作详见 [账号管理说明](docs/account-management.md)。
+
+- 「可可子，帮我查夏祭的成绩」「给我推荐 5 首练精度的歌」查询发言者的当前来源。
+- 「可可子，你的 Rating 是多少」查询可可子的独立账号。比较双方时，各查一次，在结果里标明对象。
+- 「六天属于哪些段位」「夏祭里谱的第 50 到 60 小节怎么配」可查公共资料。个人段位能力以课题曲最佳成绩为参考，实际参战和过段记录当前未接入。
+
+模型注册六个只读入口。统一入口 `query_rtlink` 每次可组合最多 24 项查询，包含多曲对比、成绩筛选、同账号历史、谱面小节和段位资料；按需同步成绩，并在大结果时尝试发送 JSON 附件。每条消息最多执行两次不同查询。完整工具参数和示例见 [AI 查询说明](docs/commands.md#llm-工具模型可自动调用)。
+
+## 数据与评分
+
+玩家成绩按 QQ 或可可子身份、来源、游戏账号和服务器归属。菌菌与 Sakura 分别使用独立数据库并保留全部难度。当前最佳、同步批次、变化历史和 Rating 缓存分开保存。游戏账号换绑后，单曲成长查询只展示可确认属于当前账号与服务器的记录。详见 [数据来源与本地存储](docs/data-sources.md)及[菌菌成绩字段](docs/data-fields.md)。
+
+| 内置资源 | 当前随插件提供的数据 |
+| --- | --- |
+| 评级谱面 | 1,421 张谱面，其中 1,413 张带 AI v2 特征。仅鬼和里魔王参与 Rating。已核验的单人分支按实际音符数匹配路线。 |
+| 配置评分 | 1,413 张配置画像、116 个配置组合。理论满分按当前 R2 算法用全良重算，样本不足时留空。 |
+| 段位目录 | 167 个课程、501 条课题曲引用。覆盖 2022–2026 年日版 / 国际版及已收录的国服课程，2026 国服收录五级至十段。 |
+| 曲名别名 | 1,524 首歌、1,849 个谱面身份、6,978 条写法，含国服名、日文名、罗马字与常用别名。 |
+| 成绩评价与连打 | 评价表含 1,345 张谱面的实测门槛资料。连打表覆盖 1,414 张谱面。门槛缺失时标记估算，连打数据缺失时标记资料不足。 |
+| 公共 TJA 分析库 | 数据版 `2026-10-16.1`，随插件打包。可查询整曲特征、分支路线与指定小节。 |
+
+AI v2 单谱 Rating 以固定 AI 定数为上限，全良达到该定数，综合量表上限为 11.6。成绩评价是由该谱極分数确定的八档分数门槛。「极」可以通过判定或黄条连打补分。计算细节见 [R2 Rating](docs/rating-r2-constant-cap.md)、[成绩评价与连打](docs/score-rank.md)及[单人分支核验](docs/branch-note-audit-2026-10-16.md)。
+
+字节哈希以当前资源各自的 manifest 为准。`data_refresh.manifest.json` 记录 2026-10-16 回填时的快照，配置理论满分随后重算。详见 [谱面回填说明](docs/cn-constant-backfill-2026-10-16.md)、[公共谱面库](docs/chart-library.md)及[别名维护](docs/song-aliases.md)。
+
+## 配置
+
+| 配置项 | 用途 | 默认值 |
 | --- | --- | --- |
-| `base_url` | API Base URL | `https://kinoko.zorua.cn/api/v1` |
-| `default_server` | 默认服务器 | `cn` |
-| `request_timeout` | 请求超时（秒） | `30` |
-| `sync_ttl` | 同步缓存有效期（秒） | `300` |
-| `storage_quota_mb` | 本地存储配额（MiB） | `256` |
-| `storage_warn_ratio` | 存储告警阈值（占用比例） | `0.8` |
+| `base_url` | 菌菌 API 基础地址 | `https://kinoko.zorua.cn/api/v1` |
+| `default_server` | 菌菌绑定时的默认服务器 | `cn` |
+| `request_timeout` | 成绩接口请求超时，单位为秒 | `30` |
+| `sync_ttl` | 账号成绩缓存有效期，单位为秒 | `300` |
+| `storage_quota_mb` | 每个来源的本地存储告警配额，单位为 MiB | `256` |
+| `storage_warn_ratio` | 存储告警比例 | `0.8` |
+| `chart_library_auto_install` | 后台安装公共 TJA 分析库 | `true` |
+| `chart_library_download_url` | 公共谱面库 HTTPS 镜像地址 | 留空时从插件安装 |
+| `chart_library_quota_mb` | 公共谱面库配额，单位为 MiB，包含旧版及暂存文件 | `512` |
 
-## 安全说明
+配置定义见 [_conf_schema.json](_conf_schema.json)。API Key 和 Token 保存在服务端绑定存储中；报表、AI 查询与管理页响应均使用脱敏后的玩家资料。菌菌与 Sakura 的上游协议另见 [菌菌 API 快照](docs/kinoko-api/README.md)和 [Sakura API 快照](docs/sakura-api/README.md)。
 
-- apikey 仅保存在插件服务端的 KV 存储中，**不会**发送给大模型。
-- LLM 只能通过工具查询成绩/画像文本，返回内容不含 apikey。
-- `bind` / `unbind` / `list` / `storage` / `cleanup` 是聊天命令而非 LLM 工具；且命令一旦返回结果，AstrBot 不会再调用大模型处理该条消息。
-- `bind` 命令仅允许在私聊中使用，避免 apikey 泄露到群聊。
-- 请勿在普通对话中直接粘贴 apikey。
+## 本地开发
 
-## 成绩图渲染
+插件由 `main.py` 注册，QQ 指令及帮助共用 `command_catalog.py`。`source_service.py` 按当前来源路由，`service.py` 负责同步及查询，`storage.py` 管理 SQLite。AI 批查询位于 `query_gateway.py`，管理 API 与页面位于 `account_admin.py` 和 `pages/manage/`。
 
-- 图片在 AstrBot 插件进程内生成，不访问额外的生图 API，不要求 Node.js、浏览器或独立后端。
-- 依赖为 `Pillow>=10.0`，与 AstrBot Core 的版本约束共同解析；已验证 `Pillow 12.3.0`，无需降级核心依赖。
-- 固定输出 `1440 × 2720` PNG，并使用随插件打包的 `resource/NotoSansCJKsc-Regular.otf`，避免服务器缺少中文字体时出现方框、乱码或平台间排版漂移。
-- 数据摘要、颜色、分区层级、Rating 环、能力星系、诊断卡和证据表均与「鼓迹」网站的导出报告保持一致。
-- 每次生成使用新的文件名，避免 QQ/AstrBot 复用旧图片缓存；同一用户、同一图片类型仅保留最近 3 张。
-- 推荐卡片的难度素材沿用用户已有的「鼓迹」网站原图：`resource/profile/oni.png` 对应魔王，`ura.png` 对应里魔王（与网站的 `li_oni.png` 原图一致）。图标未经重绘，不另行声明独立开源许可。
-
-## 开发
-
-1. 将本目录软链/复制到 AstrBot 的插件目录（`data/plugins/`）。
-2. 在 AstrBot 的插件管理界面中加载插件。
-3. 绑定后即可用命令或自然语言查询成绩与实力评级。
-
-### 本地测试 API
-
-```bash
-python test_api.py hiroba   # 或 kinoko
+```powershell
+python -m pip install -r requirements.txt pytest
+python -m pytest -q
 ```
 
-### 本地模拟
+自动化测试使用模拟接口。另可执行 `python test_api.py hiroba` 验证本机真实菌菌接口，需本地 `apikey.key`，会生成响应快照。请妥善保存凭据和快照。
 
-```bash
-python test/simulate.py demo                       # 跑一组完整场景
-python test/simulate.py bind <player_id> [server]  # 用 apikey.key 绑定
-python test/simulate.py score <曲名>               # 查询指定曲目
-python test/simulate.py unbind                     # 解绑
-```
+成绩图由 Pillow 在插件进程中生成，随插件提供中文字体。每次生成使用新文件名，同个用户、同种图片保留最近 3 张。实力报告为 1440 × 2720 PNG；Profile 高度随内容变化。画像内容及难度素材见 [Profile 说明](docs/profile-v7.md)。
 
-### 重新构建谱面数据
-
-谱面元数据从 `taiko-star-rating-system-cal-by-ai` 的 `public/data/charts.v1.json` 裁剪压缩而来：
-
-```bash
-python scripts/build_charts.py --src ../taiko-star-rating-system-cal-by-ai/public/data/charts.v1.json
-```
-
-段位资料由仓库内已审阅 Markdown 构建：
-
-```bash
-python scripts/build_dan_courses.py                       # 默认读取 DAN_I_DOJO_2022_2026.md
-```
-
-构建脚本会按「曲名归一化 → 难度 → 音符数」把课题曲映射到谱面库，并写出映射报告
-`resource/dan_courses.mapping.json`；曲目身份同时读取独立公开名称快照。尚无评级数据的新曲
-（如 2026 十段 ID 1502/1503）标为 `catalog_verified_unrated`，可以查名称与谱面分析，保留未评级提示。
-
-### 重新构建评价门槛数据
-
-从谱面 wiki 抓取每曲天井スコア / 極スコア / 必要連打打数，并与谱面库按曲名匹配（构建期联网，运行期只读本地压缩资源）：
-
-```bash
-python scripts/build_score_rank.py
-```
-
-## 参考
-
-- 插件开发指南：https://docs.astrbot.app/dev/star/plugin-new.html
-- AI / LLM 工具：https://docs.astrbot.app/dev/star/guides/ai.html
-- 评级公式：https://github.com/OurTaiko/taiko-rating-analyzer
-- 谱面特征：taiko-star-rating-system-cal-by-ai（AI v2 / Taiko Signal Rhythm v2）
-- 配点与天井スコア / 極スコア：[太鼓の達人 譜面とか Wiki · 配点](https://wikiwiki.jp/taiko-fumen/システム/配点)、[極スコア表(おに)](https://wikiwiki.jp/taiko-fumen/作品/新AC/極スコア/おに)
+静态数据的入口在 `resource/`，构建脚本在 `scripts/`。如维护公开资源，可分别运行 `scripts/build_charts.py`、`scripts/build_dan_courses.py` 和 `scripts/build_score_rank.py`；源文件及参数见 [数据维护记录](docs/data-refresh-2026-10-14.md)、[段位原表](DAN_I_DOJO_2022_2026.md)和[评价资料构建说明](docs/score-rank.md)。

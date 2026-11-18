@@ -77,7 +77,12 @@ async def _alias_flow(db_path=None):
     assert "待审批" in pending
     # 通过
     ids = [a["id"] for a in db.list_pending_aliases()]
-    msg = await svc.approve_aliases_text(" ".join(str(i) for i in ids))
+    for malformed in ("²", "0", "9223372036854775808", "9" * 5000):
+        msg = await svc.approve_aliases_text(f"{ids[0]} {malformed}")
+        assert "审批编号无效" in msg
+        assert [request["id"] for request in db.list_pending_aliases()] == ids
+    fullwidth_ids = " ".join(str(i) for i in ids).translate(str.maketrans("0123456789", "０１２３４５６７８９"))
+    msg = await svc.approve_aliases_text(fullwidth_ids)
     assert "已通过" in msg, msg
     print("[OK] service 别名请求/审批")
 

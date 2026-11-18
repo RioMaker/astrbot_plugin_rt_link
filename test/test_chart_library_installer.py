@@ -313,7 +313,7 @@ def test_retry_command_requires_admin(tmp_path, release):
             "test", private=True, is_admin=False, message_str="/rtlink library retry"
         )
         results = [item async for item in plugin.rtlink(event)]
-        assert results == ["仅管理员可重试安装分析库。"]
+        assert results == ["无权限：仅管理员可重试安装公共谱面分析库。"]
         assert installer._task is None
         event = mock.AstrMessageEvent(
             "test", private=True, is_admin=True, message_str="/rtlink library retry"
